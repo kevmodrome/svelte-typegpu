@@ -42,6 +42,7 @@ export function createPrimitiveInstanceCache(
         return {
           key: definition.key,
           geometry: definition.geometry,
+          floatsPerInstance: definition.floatsPerInstance,
           instances,
           instanceIds,
           instanceCount: nodes.length,
@@ -63,6 +64,7 @@ export function createPrimitiveInstanceCache(
       return {
         key: definition.key,
         geometry: definition.geometry,
+        floatsPerInstance: definition.floatsPerInstance,
         instances,
         instanceIds,
         instanceCount: nodes.length,

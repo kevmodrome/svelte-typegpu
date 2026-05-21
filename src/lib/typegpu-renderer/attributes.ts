@@ -34,6 +34,16 @@ export function colorTuple(value: unknown): RgbaTuple {
   return [1, 1, 1, 1];
 }
 
+export function scaleTuple(value: unknown, fallback: Vector3Tuple = [1, 1, 1]): Vector3Tuple {
+  const scalar = numberArg(value, Number.NaN);
+
+  if (Number.isFinite(scalar)) {
+    return [scalar, scalar, scalar];
+  }
+
+  return vectorTuple(value, fallback);
+}
+
 export function numberArg(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }

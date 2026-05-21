@@ -1,6 +1,9 @@
 export type Vector3Tuple = [number, number, number];
 export type RgbaTuple = [number, number, number, number];
 
+export type TypeGpuGeometryKind = 'box' | 'sphere';
+export type TypeGpuMaterialKind = 'standard';
+
 export interface TypeGpuCameraSettings {
   position: Vector3Tuple;
   lookAt: Vector3Tuple;
@@ -21,9 +24,38 @@ export interface TypeGpuGeometryData {
   vertexFloats: number;
 }
 
+export interface TypeGpuTransform {
+  position: Vector3Tuple;
+  rotation: Vector3Tuple;
+  scale: Vector3Tuple;
+}
+
+export interface TypeGpuGeometryDescriptor {
+  kind: TypeGpuGeometryKind;
+  size: Vector3Tuple;
+}
+
+export interface TypeGpuMaterialDescriptor {
+  kind: TypeGpuMaterialKind;
+  color: RgbaTuple;
+  roughness: number;
+  metalness: number;
+}
+
+export interface TypeGpuMeshDrawItem {
+  id: number;
+  revision: number;
+  geometry: TypeGpuGeometryDescriptor;
+  material: TypeGpuMaterialDescriptor;
+  transform: TypeGpuTransform;
+  phase: number;
+  spinSpeed: number;
+}
+
 export interface TypeGpuDrawBatch {
   key: string;
   geometry: TypeGpuGeometryData;
+  floatsPerInstance: number;
   instances: Float32Array;
   instanceIds: number[];
   instanceCount: number;
