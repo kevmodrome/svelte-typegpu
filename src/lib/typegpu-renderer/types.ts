@@ -33,5 +33,7 @@ export interface TypeGpuDrawBatch {
 
 export interface TypeGpuSceneState {
   camera: TypeGpuCameraSettings;
+  scale: number;
+  animationSpeed: number;
   drawBatches: TypeGpuDrawBatch[];
 }

@@ -13,8 +13,9 @@
   let { controls, onShapeClick = () => {} }: Props = $props();
   let boxes = $derived(createCubeField(controls.cubeCount));
   let frame = $derived(sceneCameraForCount(controls.cubeCount));
-  let baseSize = $derived(controls.cubeScale * frame.cubeSize);
-  let spinSpeed = $derived(controls.spinEnabled ? controls.spinSpeed : 0);
+  let baseSize = $derived(frame.cubeSize);
+  let animationSpeed = $derived(controls.spinEnabled ? controls.spinSpeed : 0);
+  const spinFactors = [0.35, 0.55, 0.8, 1, 1.25, 1.55, 1.85];
 
   function boxWidth(index: number) {
     return baseSize * (index % 11 === 0 ? 1.8 : 1);
@@ -35,9 +36,13 @@
   function sphereSize(index: number) {
     return baseSize * (index % 7 === 0 ? 1.45 : 1.15);
   }
+
+  function spinSpeedForIndex(index: number) {
+    return spinFactors[index % spinFactors.length];
+  }
 </script>
 
-<scene>
+<scene scale={controls.cubeScale} {animationSpeed}>
   <perspectiveCamera
     position={controls.camera.position}
     lookAt={cameraLookAt(controls.camera)}
@@ -55,7 +60,7 @@
         width={sphereSize(index)}
         height={sphereSize(index)}
         depth={sphereSize(index)}
-        {spinSpeed}
+        spinSpeed={spinSpeedForIndex(index + 3)}
         onclick={onShapeClick}
       />
     {:else}
@@ -66,7 +71,7 @@
         width={boxWidth(index)}
         height={boxHeight(index)}
         depth={boxDepth(index)}
-        {spinSpeed}
+        spinSpeed={spinSpeedForIndex(index)}
         onclick={onShapeClick}
       />
     {/if}

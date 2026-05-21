@@ -173,6 +173,33 @@ describe('TypeGPU renderer core', () => {
     expect(secondBoxBatch.dirtyRanges).toEqual([]);
   });
 
+  it('keeps global scene scale and animation speed out of primitive instance data', () => {
+    const cache = createTypeGpuSceneCache();
+    const root = createFragment();
+    const scene = createElement('scene');
+    const box = createElement('box');
+
+    setAttribute(scene, 'scale', 1);
+    setAttribute(scene, 'animationSpeed', 1);
+    setAttribute(box, 'position', [1, 2, 3]);
+    setAttribute(box, 'width', 2);
+    insert(scene, box, null);
+    insert(root, scene, null);
+
+    const firstState = createSceneState(root, cache);
+    const firstBoxBatch = drawBatch(firstState, 'primitive:box');
+    setAttribute(scene, 'scale', 1.5);
+    setAttribute(scene, 'animationSpeed', 0.35);
+    const secondState = createSceneState(root, cache);
+    const secondBoxBatch = drawBatch(secondState, 'primitive:box');
+
+    expect(secondState.scale).toBe(1.5);
+    expect(secondState.animationSpeed).toBe(0.35);
+    expect(secondBoxBatch.instances).toBe(firstBoxBatch.instances);
+    expect(secondBoxBatch.instancesChanged).toBe(false);
+    expect(secondBoxBatch.dirtyRanges).toEqual([]);
+  });
+
   it('re-packs only changed primitive nodes when the primitive structure is stable', () => {
     const cache = createTypeGpuSceneCache();
     const root = createFragment();

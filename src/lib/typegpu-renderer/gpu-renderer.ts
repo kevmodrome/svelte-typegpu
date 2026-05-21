@@ -75,6 +75,9 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #pipeline: GPURenderPipeline;
   #projectionDirty = true;
   #renderSize = { width: 0, height: 0 };
+  #scale = 1;
+  #animationSpeed = 1;
+  #animationOffset = 0;
   #time = 0;
   #uniformData = new Float32Array(SCENE_UNIFORM_FLOATS);
   #uniformBuffer: GPUBuffer;
@@ -103,6 +106,8 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#pipeline = pipelineResources.pipeline;
     this.setScene({
       camera: DEFAULT_TYPEGPU_CAMERA,
+      scale: 1,
+      animationSpeed: 1,
       drawBatches: []
     });
   }
@@ -112,6 +117,8 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
     this.#camera = scene.camera;
     this.#projectionDirty = true;
+    this.#scale = scene.scale;
+    this.#setAnimationSpeed(scene.animationSpeed);
     this.#drawBatches = scene.drawBatches;
     this.#pruneBatchBuffers(scene.drawBatches);
 
@@ -189,6 +196,13 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     }
   }
 
+  #setAnimationSpeed(nextSpeed: number): void {
+    if (this.#animationSpeed === nextSpeed) return;
+
+    this.#animationOffset += this.#time * (this.#animationSpeed - nextSpeed);
+    this.#animationSpeed = nextSpeed;
+  }
+
   #uploadInstances(
     buffers: TypeGpuBatchBuffers,
     instanceData: Float32Array,
@@ -232,10 +246,12 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       for (let index = range.start; index < end; index += 1) {
         const offset = index * PRIMITIVE_INSTANCE_FLOATS;
 
+        const animationTime = this.#time * this.#animationSpeed + this.#animationOffset;
+
         batch.instances[offset + PRIMITIVE_SPIN_OFFSET_OFFSET] = this.#continuity.offsetFor({
           key: batch.instanceIds[index],
           rate: batch.instances[offset + PRIMITIVE_SPIN_SPEED_OFFSET],
-          time: this.#time
+          time: animationTime
         });
       }
     }
@@ -322,7 +338,9 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     }
 
     this.#uniformData[16] = this.#time;
-    this.#uniformData[17] = 0;
+    this.#uniformData[17] = this.#scale;
+    this.#uniformData[18] = this.#animationSpeed;
+    this.#uniformData[19] = this.#animationOffset;
     writeFloat32Buffer(this.root.device, this.#uniformBuffer, this.#uniformData);
   }
 }
@@ -384,7 +402,9 @@ function createPipeline(
       struct SceneUniforms {
         view_projection: mat4x4<f32>,
         time: f32,
-        _padding: vec3<f32>,
+        scale: f32,
+        animation_speed: f32,
+        animation_offset: f32,
       };
 
       @group(0) @binding(0) var<uniform> scene: SceneUniforms;
@@ -419,11 +439,11 @@ function createPipeline(
 
       @vertex
       fn vertex_main(input: VertexInput) -> VertexOutput {
-        let spin = scene.time * input.shape.w + input.spin_offset;
+        let spin = (scene.time * scene.animation_speed + scene.animation_offset) * input.shape.w + input.spin_offset;
         let pulse = 0.9 + sin(spin + input.phase) * 0.05;
         let spin_y = spin + input.phase;
         let spin_x = spin * 0.65 + input.phase * 0.35;
-        let local_position = input.position * input.shape.xyz * pulse;
+        let local_position = input.position * input.shape.xyz * scene.scale * pulse;
         let rotated_position = rotate_x(rotate_y(local_position, spin_y), spin_x);
         let rotated_normal = normalize(rotate_x(rotate_y(input.normal, spin_y), spin_x));
         let world_position = rotated_position + input.instance_position;
