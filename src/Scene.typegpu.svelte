@@ -1,6 +1,4 @@
 <script lang="ts">
-  import Box from './Box.typegpu.svelte';
-  import Sphere from './Sphere.typegpu.svelte';
   import { createCubeField, sceneCameraForCount } from './lib/cube-field';
   import { demoColorForIndex } from './lib/demo-colors';
   import { cameraLookAt, type SceneControls } from './lib/scene-controls';
@@ -29,7 +27,7 @@
     return baseSize * (index % 13 === 0 ? 1.45 : 1);
   }
 
-  function isSphere(index: number) {
+  function isRoundShape(index: number) {
     return index % 10 === 5;
   }
 
@@ -39,6 +37,12 @@
 
   function spinSpeedForIndex(index: number) {
     return spinFactors[index % spinFactors.length];
+  }
+
+  function activateShapeFromKeyboard(event: KeyboardEvent) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      onShapeClick();
+    }
   }
 </script>
 
@@ -52,28 +56,51 @@
   ></perspectiveCamera>
 
   {#each boxes as box, index (box.id)}
-    {#if isSphere(index)}
-      <Sphere
+    {#if isRoundShape(index)}
+      <mesh
+        role="button"
+        tabindex="0"
+        aria-label="Change sphere color"
         position={box.position}
         phase={box.phase}
-        color={demoColorForIndex(index + 7, controls.hue + 28)}
-        width={sphereSize(index)}
-        height={sphereSize(index)}
-        depth={sphereSize(index)}
         spinSpeed={spinSpeedForIndex(index + 3)}
         onclick={onShapeClick}
-      />
+        onkeydown={activateShapeFromKeyboard}
+      >
+        <sphereGeometry
+          radius={sphereSize(index) / 2}
+          width={sphereSize(index)}
+          height={sphereSize(index)}
+          depth={sphereSize(index)}
+        ></sphereGeometry>
+        <standardMaterial
+          color={demoColorForIndex(index + 7, controls.hue + 28)}
+          roughness={0.18}
+          metalness={0.28}
+        ></standardMaterial>
+      </mesh>
     {:else}
-      <Box
+      <mesh
+        role="button"
+        tabindex="0"
+        aria-label="Change box color"
         position={box.position}
         phase={box.phase}
-        color={demoColorForIndex(index, controls.hue)}
-        width={boxWidth(index)}
-        height={boxHeight(index)}
-        depth={boxDepth(index)}
         spinSpeed={spinSpeedForIndex(index)}
         onclick={onShapeClick}
-      />
+        onkeydown={activateShapeFromKeyboard}
+      >
+        <boxGeometry
+          width={boxWidth(index)}
+          height={boxHeight(index)}
+          depth={boxDepth(index)}
+        ></boxGeometry>
+        <standardMaterial
+          color={demoColorForIndex(index, controls.hue)}
+          roughness={0.62}
+          metalness={0.04}
+        ></standardMaterial>
+      </mesh>
     {/if}
   {/each}
 </scene>
