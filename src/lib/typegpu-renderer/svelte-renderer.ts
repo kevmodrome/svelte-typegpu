@@ -1,5 +1,5 @@
 import { createRenderer } from 'svelte/renderer';
-import { findFirstInteractiveBox } from './components/box';
+import { findFirstInteractiveMesh } from './components/mesh';
 import { createTypeGpuRenderer, type TypeGpuRenderer } from './gpu-renderer';
 import {
   addEventListener,
@@ -111,10 +111,10 @@ function createRuntime(
   }
 
   function dispatchCanvasClick(event: MouseEvent) {
-    const box = findFirstInteractiveBox(root, 'click');
-    if (!box) return;
+    const mesh = findFirstInteractiveMesh(root, 'click');
+    if (!mesh) return;
 
-    dispatchNodeEvent(box, 'click', {
+    dispatchNodeEvent(mesh, 'click', {
       originalEvent: event
     });
   }

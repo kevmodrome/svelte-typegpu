@@ -32,17 +32,16 @@
   }
 </script>
 
-<sphere
+<mesh
   role="button"
   tabindex="0"
   aria-label="Change sphere color"
   {position}
   {phase}
-  {color}
-  {width}
-  {height}
-  {depth}
   {spinSpeed}
   onclick={onclick}
   onkeydown={activateFromKeyboard}
-></sphere>
+>
+  <sphereGeometry {radius} {width} {height} {depth}></sphereGeometry>
+  <standardMaterial {color}></standardMaterial>
+</mesh>

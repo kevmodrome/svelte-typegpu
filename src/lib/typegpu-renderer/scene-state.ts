@@ -1,18 +1,16 @@
-import { createBoxInstanceCache } from './components/box';
 import { readPerspectiveCamera } from './components/perspective-camera';
 import { readSceneSettings } from './components/scene';
-import { createSphereInstanceCache } from './components/sphere';
-import type { PrimitiveInstanceCache } from './primitive-cache';
+import { createDrawBatchCache, type TypeGpuDrawBatchCache } from './draw-batch-cache';
 import type { TypeGpuNode } from './core';
 import type { TypeGpuSceneState } from './types';
 
 export interface TypeGpuSceneCache {
-  primitiveCaches: PrimitiveInstanceCache[];
+  drawBatchCache: TypeGpuDrawBatchCache;
 }
 
 export function createTypeGpuSceneCache(): TypeGpuSceneCache {
   return {
-    primitiveCaches: [createBoxInstanceCache(), createSphereInstanceCache()]
+    drawBatchCache: createDrawBatchCache()
   };
 }
 
@@ -26,6 +24,6 @@ export function createSceneState(
     camera: readPerspectiveCamera(root),
     scale: scene.scale,
     animationSpeed: scene.animationSpeed,
-    drawBatches: cache.primitiveCaches.map((primitiveCache) => primitiveCache.read(root))
+    drawBatches: cache.drawBatchCache.read(root)
   };
 }

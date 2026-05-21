@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { BOX_INSTANCE_FLOATS } from './box-data';
+import { MESH_INSTANCE_FLOATS } from './instance-data';
 import {
   addEventListener,
   createElement,
@@ -15,40 +15,54 @@ import { readPerspectiveCamera } from './components/perspective-camera';
 import { createSceneState, createTypeGpuSceneCache } from './scene-state';
 
 describe('TypeGPU renderer core', () => {
-  it('turns authored primitive nodes into separate draw batches', () => {
+  it('turns authored mesh nodes into geometry/material draw batches', () => {
     const root = createFragment();
     const scene = createElement('scene');
     const camera = createElement('perspectiveCamera');
-    const first = createElement('box');
-    const second = createElement('box');
-    const sphere = createElement('sphere');
+    const first = createElement('mesh');
+    const firstGeometry = createElement('boxGeometry');
+    const firstMaterial = createElement('standardMaterial');
+    const second = createElement('mesh');
+    const secondGeometry = createElement('boxGeometry');
+    const secondMaterial = createElement('standardMaterial');
+    const sphere = createElement('mesh');
+    const sphereGeometry = createElement('sphereGeometry');
+    const sphereMaterial = createElement('standardMaterial');
 
     setAttribute(camera, 'position', [0, 2, 8]);
     setAttribute(camera, 'lookAt', [0, 0, 0]);
     setAttribute(camera, 'fov', 50);
     setAttribute(first, 'position', [1, 2, 3]);
     setAttribute(first, 'phase', 0.25);
-    setAttribute(first, 'color', [0.1, 0.2, 0.3, 1]);
-    setAttribute(first, 'width', 20);
-    setAttribute(first, 'height', 5);
-    setAttribute(first, 'depth', 10);
     setAttribute(first, 'spinSpeed', 1.4);
+    setAttribute(firstGeometry, 'width', 20);
+    setAttribute(firstGeometry, 'height', 5);
+    setAttribute(firstGeometry, 'depth', 10);
+    setAttribute(firstMaterial, 'color', [0.1, 0.2, 0.3, 1]);
+    setAttribute(firstMaterial, 'roughness', 0.7);
+    setAttribute(firstMaterial, 'metalness', 0.2);
     setAttribute(second, 'position', [-1, -2, -3]);
     setAttribute(second, 'phase', 0.5);
-    setAttribute(second, 'color', [0.4, 0.5, 0.6, 1]);
+    setAttribute(secondMaterial, 'color', [0.4, 0.5, 0.6, 1]);
     setAttribute(sphere, 'position', [7, 8, 9]);
     setAttribute(sphere, 'phase', 0.75);
-    setAttribute(sphere, 'color', [0.7, 0.8, 0.9, 1]);
+    setAttribute(sphereMaterial, 'color', [0.7, 0.8, 0.9, 1]);
 
     insert(scene, camera, null);
+    insert(first, firstGeometry, null);
+    insert(first, firstMaterial, null);
     insert(scene, first, null);
+    insert(second, secondGeometry, null);
+    insert(second, secondMaterial, null);
     insert(scene, second, null);
+    insert(sphere, sphereGeometry, null);
+    insert(sphere, sphereMaterial, null);
     insert(scene, sphere, null);
     insert(root, scene, null);
 
     const state = createSceneState(root);
-    const boxBatch = drawBatch(state, 'primitive:box');
-    const sphereBatch = drawBatch(state, 'primitive:sphere');
+    const boxBatch = drawBatch(state, 'mesh:box:standard');
+    const sphereBatch = drawBatch(state, 'mesh:sphere:standard');
 
     expect(state).toMatchObject({
       camera: {
@@ -71,13 +85,15 @@ describe('TypeGPU renderer core', () => {
     expect(Array.from(boxBatch.instances.slice(8, 11))).toEqual([20, 5, 10]);
     expect(boxBatch.instances[11]).toBeCloseTo(1.4);
     expect(boxBatch.instances[12]).toBe(0);
-    expect(Array.from(boxBatch.instances.slice(13, 17))).toEqual([-1, -2, -3, 0.5]);
-    expect(boxBatch.instances[17]).toBeCloseTo(0.4);
-    expect(boxBatch.instances[18]).toBeCloseTo(0.5);
-    expect(boxBatch.instances[19]).toBeCloseTo(0.6);
-    expect(boxBatch.instances[20]).toBe(1);
-    expect(Array.from(boxBatch.instances.slice(21, 25))).toEqual([1, 1, 1, 0]);
-    expect(boxBatch.instances[25]).toBe(0);
+    expect(Array.from(boxBatch.instances.slice(13, 16))).toEqual([0, 0, 0]);
+    expect(boxBatch.instances[16]).toBeCloseTo(0.7);
+    expect(boxBatch.instances[17]).toBeCloseTo(0.2);
+    expect(Array.from(boxBatch.instances.slice(20, 24))).toEqual([-1, -2, -3, 0.5]);
+    expect(boxBatch.instances[24]).toBeCloseTo(0.4);
+    expect(boxBatch.instances[25]).toBeCloseTo(0.5);
+    expect(boxBatch.instances[26]).toBeCloseTo(0.6);
+    expect(boxBatch.instances[27]).toBe(1);
+    expect(Array.from(boxBatch.instances.slice(28, 31))).toEqual([1, 1, 1]);
 
     expect(sphereBatch.geometry.key).toBe('sphere');
     expect(sphereBatch.instanceCount).toBe(1);
@@ -149,24 +165,28 @@ describe('TypeGPU renderer core', () => {
     expect(getNextSibling(insertedBeforeSecond)).toBe(second);
   });
 
-  it('reuses packed primitive data when only non-primitive attributes change', () => {
+  it('reuses packed mesh data when only non-mesh attributes change', () => {
     const cache = createTypeGpuSceneCache();
     const root = createFragment();
     const scene = createElement('scene');
     const camera = createElement('perspectiveCamera');
-    const box = createElement('box');
+    const mesh = createElement('mesh');
+    const geometry = createElement('boxGeometry');
+    const material = createElement('standardMaterial');
 
     setAttribute(camera, 'position', [0, 2, 8]);
-    setAttribute(box, 'position', [1, 2, 3]);
+    setAttribute(mesh, 'position', [1, 2, 3]);
     insert(scene, camera, null);
-    insert(scene, box, null);
+    insert(mesh, geometry, null);
+    insert(mesh, material, null);
+    insert(scene, mesh, null);
     insert(root, scene, null);
 
     const firstState = createSceneState(root, cache);
     setAttribute(camera, 'fov', 35);
     const secondState = createSceneState(root, cache);
-    const firstBoxBatch = drawBatch(firstState, 'primitive:box');
-    const secondBoxBatch = drawBatch(secondState, 'primitive:box');
+    const firstBoxBatch = drawBatch(firstState, 'mesh:box:standard');
+    const secondBoxBatch = drawBatch(secondState, 'mesh:box:standard');
 
     expect(firstBoxBatch.instancesChanged).toBe(true);
     expect(secondBoxBatch.instances).toBe(firstBoxBatch.instances);
@@ -174,25 +194,29 @@ describe('TypeGPU renderer core', () => {
     expect(secondBoxBatch.dirtyRanges).toEqual([]);
   });
 
-  it('keeps global scene scale and animation speed out of primitive instance data', () => {
+  it('keeps global scene scale and animation speed out of mesh instance data', () => {
     const cache = createTypeGpuSceneCache();
     const root = createFragment();
     const scene = createElement('scene');
-    const box = createElement('box');
+    const mesh = createElement('mesh');
+    const geometry = createElement('boxGeometry');
+    const material = createElement('standardMaterial');
 
     setAttribute(scene, 'scale', 1);
     setAttribute(scene, 'animationSpeed', 1);
-    setAttribute(box, 'position', [1, 2, 3]);
-    setAttribute(box, 'width', 2);
-    insert(scene, box, null);
+    setAttribute(mesh, 'position', [1, 2, 3]);
+    setAttribute(geometry, 'width', 2);
+    insert(mesh, geometry, null);
+    insert(mesh, material, null);
+    insert(scene, mesh, null);
     insert(root, scene, null);
 
     const firstState = createSceneState(root, cache);
-    const firstBoxBatch = drawBatch(firstState, 'primitive:box');
+    const firstBoxBatch = drawBatch(firstState, 'mesh:box:standard');
     setAttribute(scene, 'scale', 1.5);
     setAttribute(scene, 'animationSpeed', 0.35);
     const secondState = createSceneState(root, cache);
-    const secondBoxBatch = drawBatch(secondState, 'primitive:box');
+    const secondBoxBatch = drawBatch(secondState, 'mesh:box:standard');
 
     expect(secondState.scale).toBe(1.5);
     expect(secondState.animationSpeed).toBe(0.35);
@@ -201,32 +225,40 @@ describe('TypeGPU renderer core', () => {
     expect(secondBoxBatch.dirtyRanges).toEqual([]);
   });
 
-  it('re-packs only changed primitive nodes when the primitive structure is stable', () => {
+  it('re-packs only changed mesh nodes when the mesh structure is stable', () => {
     const cache = createTypeGpuSceneCache();
     const root = createFragment();
     const scene = createElement('scene');
-    const first = createElement('box');
-    const second = createElement('box');
+    const first = createElement('mesh');
+    const firstGeometry = createElement('boxGeometry');
+    const firstMaterial = createElement('standardMaterial');
+    const second = createElement('mesh');
+    const secondGeometry = createElement('boxGeometry');
+    const secondMaterial = createElement('standardMaterial');
 
     setAttribute(first, 'position', [1, 2, 3]);
     setAttribute(second, 'position', [4, 5, 6]);
+    insert(first, firstGeometry, null);
+    insert(first, firstMaterial, null);
     insert(scene, first, null);
+    insert(second, secondGeometry, null);
+    insert(second, secondMaterial, null);
     insert(scene, second, null);
     insert(root, scene, null);
 
     const firstState = createSceneState(root, cache);
-    setAttribute(second, 'color', [0.2, 0.3, 0.4, 1]);
+    setAttribute(secondMaterial, 'color', [0.2, 0.3, 0.4, 1]);
     const secondState = createSceneState(root, cache);
-    const firstBoxBatch = drawBatch(firstState, 'primitive:box');
-    const secondBoxBatch = drawBatch(secondState, 'primitive:box');
+    const firstBoxBatch = drawBatch(firstState, 'mesh:box:standard');
+    const secondBoxBatch = drawBatch(secondState, 'mesh:box:standard');
 
     expect(secondBoxBatch.instances).toBe(firstBoxBatch.instances);
     expect(secondBoxBatch.instancesChanged).toBe(true);
     expect(secondBoxBatch.dirtyRanges).toEqual([{ start: 1, count: 1 }]);
-    expect(secondBoxBatch.instances[BOX_INSTANCE_FLOATS + 4]).toBeCloseTo(0.2);
-    expect(secondBoxBatch.instances[BOX_INSTANCE_FLOATS + 5]).toBeCloseTo(0.3);
-    expect(secondBoxBatch.instances[BOX_INSTANCE_FLOATS + 6]).toBeCloseTo(0.4);
-    expect(secondBoxBatch.instances[BOX_INSTANCE_FLOATS + 7]).toBe(1);
+    expect(secondBoxBatch.instances[MESH_INSTANCE_FLOATS + 4]).toBeCloseTo(0.2);
+    expect(secondBoxBatch.instances[MESH_INSTANCE_FLOATS + 5]).toBeCloseTo(0.3);
+    expect(secondBoxBatch.instances[MESH_INSTANCE_FLOATS + 6]).toBeCloseTo(0.4);
+    expect(secondBoxBatch.instances[MESH_INSTANCE_FLOATS + 7]).toBe(1);
   });
 
   it('reads a mesh with box geometry and standard material into a draw item', () => {

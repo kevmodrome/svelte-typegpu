@@ -1,15 +1,15 @@
 import {
-  PRIMITIVE_INSTANCE_FLOATS,
-  PRIMITIVE_SPIN_OFFSET_OFFSET,
-  PRIMITIVE_SPIN_SPEED_OFFSET,
-  PRIMITIVE_VERTEX_FLOATS
+  MESH_INSTANCE_FLOATS,
+  MESH_SPIN_OFFSET_OFFSET,
+  MESH_SPIN_SPEED_OFFSET,
+  MESH_VERTEX_FLOATS
 } from './instance-data';
 import type { TypeGpuGeometryData } from './types';
 
-export const BOX_VERTEX_FLOATS = 6;
-export const BOX_INSTANCE_FLOATS = PRIMITIVE_INSTANCE_FLOATS;
-export const BOX_SPIN_SPEED_OFFSET = PRIMITIVE_SPIN_SPEED_OFFSET;
-export const BOX_SPIN_OFFSET_OFFSET = PRIMITIVE_SPIN_OFFSET_OFFSET;
+export const BOX_VERTEX_FLOATS = MESH_VERTEX_FLOATS;
+export const BOX_INSTANCE_FLOATS = MESH_INSTANCE_FLOATS;
+export const BOX_SPIN_SPEED_OFFSET = MESH_SPIN_SPEED_OFFSET;
+export const BOX_SPIN_OFFSET_OFFSET = MESH_SPIN_OFFSET_OFFSET;
 export const BOX_VERTEX_COUNT = 36;
 
 const BOX_FACES: Array<{
@@ -90,6 +90,6 @@ export function createBoxGeometryData(): TypeGpuGeometryData {
     key: 'box',
     vertexData: createBoxVertexData(),
     vertexCount: BOX_VERTEX_COUNT,
-    vertexFloats: PRIMITIVE_VERTEX_FLOATS
+    vertexFloats: MESH_VERTEX_FLOATS
   };
 }

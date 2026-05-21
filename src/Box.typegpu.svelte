@@ -30,17 +30,16 @@
   }
 </script>
 
-<box
+<mesh
   role="button"
   tabindex="0"
   aria-label="Change box color"
   {position}
   {phase}
-  {color}
-  {width}
-  {height}
-  {depth}
   {spinSpeed}
   onclick={onclick}
   onkeydown={activateFromKeyboard}
-></box>
+>
+  <boxGeometry {width} {height} {depth}></boxGeometry>
+  <standardMaterial {color}></standardMaterial>
+</mesh>

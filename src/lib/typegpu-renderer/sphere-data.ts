@@ -1,4 +1,4 @@
-import { PRIMITIVE_VERTEX_FLOATS } from './instance-data';
+import { MESH_VERTEX_FLOATS } from './instance-data';
 import type { TypeGpuGeometryData } from './types';
 
 export const SPHERE_SEGMENTS = 16;
@@ -41,7 +41,7 @@ export function createSphereGeometryData(): TypeGpuGeometryData {
     key: 'sphere',
     vertexData: createSphereVertexData(),
     vertexCount: SPHERE_VERTEX_COUNT,
-    vertexFloats: PRIMITIVE_VERTEX_FLOATS
+    vertexFloats: MESH_VERTEX_FLOATS
   };
 }
 

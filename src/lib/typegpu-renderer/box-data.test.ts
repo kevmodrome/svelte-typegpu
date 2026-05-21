@@ -17,8 +17,8 @@ describe('TypeGPU box data', () => {
     expect(Array.from(vertices.slice(0, 6))).toEqual([-0.5, -0.5, 0.5, 0, 0, 1]);
   });
 
-  it('reserves packed box instance fields for shape and continuity data', () => {
-    expect(BOX_INSTANCE_FLOATS).toBe(13);
+  it('aliases the packed mesh instance fields used by box batches', () => {
+    expect(BOX_INSTANCE_FLOATS).toBe(20);
     expect(BOX_SPIN_SPEED_OFFSET).toBe(11);
     expect(BOX_SPIN_OFFSET_OFFSET).toBe(12);
   });
