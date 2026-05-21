@@ -1,10 +1,12 @@
 import tgpu, { type TgpuRoot } from 'typegpu';
 import { createFpsMeter } from '../fps-meter';
 import {
-  PRIMITIVE_INSTANCE_FLOATS,
-  PRIMITIVE_SPIN_OFFSET_OFFSET,
-  PRIMITIVE_SPIN_SPEED_OFFSET,
-  PRIMITIVE_VERTEX_FLOATS
+  MESH_INSTANCE_FLOATS,
+  MESH_ROUGHNESS_OFFSET,
+  MESH_ROTATION_OFFSET,
+  MESH_SPIN_OFFSET_OFFSET,
+  MESH_SPIN_SPEED_OFFSET,
+  MESH_VERTEX_FLOATS
 } from './instance-data';
 import { createViewProjectionMatrix } from './camera-math';
 import { createContinuityTracker } from './continuity';
@@ -227,8 +229,8 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
           device,
           buffers.instanceBuffer,
           instanceData,
-          range.start * PRIMITIVE_INSTANCE_FLOATS,
-          range.count * PRIMITIVE_INSTANCE_FLOATS
+          range.start * batch.floatsPerInstance,
+          range.count * batch.floatsPerInstance
         );
       }
     }
@@ -244,13 +246,13 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       const end = Math.min(batch.instanceIds.length, range.start + range.count);
 
       for (let index = range.start; index < end; index += 1) {
-        const offset = index * PRIMITIVE_INSTANCE_FLOATS;
+        const offset = index * batch.floatsPerInstance;
 
         const animationTime = this.#time * this.#animationSpeed + this.#animationOffset;
 
-        batch.instances[offset + PRIMITIVE_SPIN_OFFSET_OFFSET] = this.#continuity.offsetFor({
+        batch.instances[offset + MESH_SPIN_OFFSET_OFFSET] = this.#continuity.offsetFor({
           key: batch.instanceIds[index],
-          rate: batch.instances[offset + PRIMITIVE_SPIN_SPEED_OFFSET],
+          rate: batch.instances[offset + MESH_SPIN_SPEED_OFFSET],
           time: animationTime
         });
       }
@@ -417,12 +419,15 @@ function createPipeline(
         @location(4) color: vec4<f32>,
         @location(5) shape: vec4<f32>,
         @location(6) spin_offset: f32,
+        @location(7) world_rotation: vec3<f32>,
+        @location(8) material: vec2<f32>,
       };
 
       struct VertexOutput {
         @builtin(position) position: vec4<f32>,
         @location(0) color: vec4<f32>,
         @location(1) normal: vec3<f32>,
+        @location(2) material: vec2<f32>,
       };
 
       fn rotate_x(position: vec3<f32>, angle: f32) -> vec3<f32> {
@@ -437,6 +442,12 @@ function createPipeline(
         return vec3(position.x * c + position.z * s, position.y, -position.x * s + position.z * c);
       }
 
+      fn rotate_z(position: vec3<f32>, angle: f32) -> vec3<f32> {
+        let c = cos(angle);
+        let s = sin(angle);
+        return vec3(position.x * c - position.y * s, position.x * s + position.y * c, position.z);
+      }
+
       @vertex
       fn vertex_main(input: VertexInput) -> VertexOutput {
         let spin = (scene.time * scene.animation_speed + scene.animation_offset) * input.shape.w + input.spin_offset;
@@ -444,25 +455,37 @@ function createPipeline(
         let spin_y = spin + input.phase;
         let spin_x = spin * 0.65 + input.phase * 0.35;
         let local_position = input.position * input.shape.xyz * scene.scale * pulse;
-        let rotated_position = rotate_x(rotate_y(local_position, spin_y), spin_x);
-        let rotated_normal = normalize(rotate_x(rotate_y(input.normal, spin_y), spin_x));
+        let animated_position = rotate_x(rotate_y(local_position, spin_y), spin_x);
+        let animated_normal = normalize(rotate_x(rotate_y(input.normal, spin_y), spin_x));
+        let rotated_position = rotate_z(
+          rotate_y(rotate_x(animated_position, input.world_rotation.x), input.world_rotation.y),
+          input.world_rotation.z
+        );
+        let rotated_normal = normalize(rotate_z(
+          rotate_y(rotate_x(animated_normal, input.world_rotation.x), input.world_rotation.y),
+          input.world_rotation.z
+        ));
         let world_position = rotated_position + input.instance_position;
         var output: VertexOutput;
 
         output.position = scene.view_projection * vec4(world_position, 1.0);
         output.color = input.color;
         output.normal = rotated_normal;
+        output.material = input.material;
 
         return output;
       }
 
       @fragment
       fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32> {
+        let roughness = clamp(input.material.x, 0.0, 1.0);
+        let metalness = clamp(input.material.y, 0.0, 1.0);
         let light = normalize(vec3(0.45, 0.78, 0.6));
         let diffuse = max(dot(normalize(input.normal), light), 0.0);
-        let shade = 0.28 + diffuse * 0.72;
+        let shade = 0.24 + diffuse * mix(0.78, 0.58, roughness);
+        let lift = metalness * 0.08;
 
-        return vec4(input.color.rgb * shade, input.color.a);
+        return vec4(input.color.rgb * shade + lift, input.color.a);
       }
     `
   });
@@ -493,21 +516,31 @@ function createPipeline(
       entryPoint: 'vertex_main',
       buffers: [
         {
-          arrayStride: PRIMITIVE_VERTEX_FLOATS * Float32Array.BYTES_PER_ELEMENT,
+          arrayStride: MESH_VERTEX_FLOATS * Float32Array.BYTES_PER_ELEMENT,
           attributes: [
             { shaderLocation: 0, offset: 0, format: 'float32x3' },
             { shaderLocation: 1, offset: 3 * Float32Array.BYTES_PER_ELEMENT, format: 'float32x3' }
           ]
         },
         {
-          arrayStride: PRIMITIVE_INSTANCE_FLOATS * Float32Array.BYTES_PER_ELEMENT,
+          arrayStride: MESH_INSTANCE_FLOATS * Float32Array.BYTES_PER_ELEMENT,
           stepMode: 'instance',
           attributes: [
             { shaderLocation: 2, offset: 0, format: 'float32x3' },
             { shaderLocation: 3, offset: 3 * Float32Array.BYTES_PER_ELEMENT, format: 'float32' },
             { shaderLocation: 4, offset: 4 * Float32Array.BYTES_PER_ELEMENT, format: 'float32x4' },
             { shaderLocation: 5, offset: 8 * Float32Array.BYTES_PER_ELEMENT, format: 'float32x4' },
-            { shaderLocation: 6, offset: 12 * Float32Array.BYTES_PER_ELEMENT, format: 'float32' }
+            { shaderLocation: 6, offset: 12 * Float32Array.BYTES_PER_ELEMENT, format: 'float32' },
+            {
+              shaderLocation: 7,
+              offset: MESH_ROTATION_OFFSET * Float32Array.BYTES_PER_ELEMENT,
+              format: 'float32x3'
+            },
+            {
+              shaderLocation: 8,
+              offset: MESH_ROUGHNESS_OFFSET * Float32Array.BYTES_PER_ELEMENT,
+              format: 'float32x2'
+            }
           ]
         }
       ]

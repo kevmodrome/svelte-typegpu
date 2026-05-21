@@ -34,9 +34,3 @@ export function packMeshInstance(
   instances[offset + 18] = 0;
   instances[offset + 19] = 0;
 }
-
-// Keep the current GPU renderer layout stable until the Task 3 renderer update.
-export const PRIMITIVE_VERTEX_FLOATS = MESH_VERTEX_FLOATS;
-export const PRIMITIVE_INSTANCE_FLOATS = 13;
-export const PRIMITIVE_SPIN_SPEED_OFFSET = 11;
-export const PRIMITIVE_SPIN_OFFSET_OFFSET = 12;
