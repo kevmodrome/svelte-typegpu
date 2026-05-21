@@ -1,14 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
+import { BOX_INSTANCE_FLOATS } from './box-data';
 import {
   addEventListener,
   createElement,
   createFragment,
   dispatchNodeEvent,
+  getNextSibling,
   insert,
+  remove,
   setAttribute
 } from './core';
 import { readPerspectiveCamera } from './components/perspective-camera';
-import { createSceneState } from './scene-state';
+import { createSceneState, createTypeGpuSceneCache } from './scene-state';
 
 describe('TypeGPU renderer core', () => {
   it('turns authored box nodes into compact instance data', () => {
@@ -104,5 +107,75 @@ describe('TypeGPU renderer core', () => {
         detail: { selected: true }
       })
     );
+  });
+
+  it('returns child snapshots without letting snapshot mutation corrupt sibling operations', () => {
+    const scene = createElement('scene');
+    const first = createElement('box');
+    const second = createElement('box');
+    const insertedBeforeSecond = createElement('box');
+
+    insert(scene, first, null);
+    insert(scene, second, null);
+
+    const snapshot = scene.children;
+    snapshot.length = 0;
+
+    expect(getNextSibling(first)).toBe(second);
+
+    insert(scene, insertedBeforeSecond, second);
+    remove(first);
+
+    expect(scene.children).toEqual([insertedBeforeSecond, second]);
+    expect(getNextSibling(insertedBeforeSecond)).toBe(second);
+  });
+
+  it('reuses packed primitive data when only non-primitive attributes change', () => {
+    const cache = createTypeGpuSceneCache();
+    const root = createFragment();
+    const scene = createElement('scene');
+    const camera = createElement('perspectiveCamera');
+    const box = createElement('box');
+
+    setAttribute(camera, 'position', [0, 2, 8]);
+    setAttribute(box, 'position', [1, 2, 3]);
+    insert(scene, camera, null);
+    insert(scene, box, null);
+    insert(root, scene, null);
+
+    const firstState = createSceneState(root, cache);
+    setAttribute(camera, 'fov', 35);
+    const secondState = createSceneState(root, cache);
+
+    expect(firstState.instancesChanged).toBe(true);
+    expect(secondState.instances).toBe(firstState.instances);
+    expect(secondState.instancesChanged).toBe(false);
+    expect(secondState.instanceDirtyRanges).toEqual([]);
+  });
+
+  it('re-packs only changed primitive nodes when the primitive structure is stable', () => {
+    const cache = createTypeGpuSceneCache();
+    const root = createFragment();
+    const scene = createElement('scene');
+    const first = createElement('box');
+    const second = createElement('box');
+
+    setAttribute(first, 'position', [1, 2, 3]);
+    setAttribute(second, 'position', [4, 5, 6]);
+    insert(scene, first, null);
+    insert(scene, second, null);
+    insert(root, scene, null);
+
+    const firstState = createSceneState(root, cache);
+    setAttribute(second, 'color', [0.2, 0.3, 0.4, 1]);
+    const secondState = createSceneState(root, cache);
+
+    expect(secondState.instances).toBe(firstState.instances);
+    expect(secondState.instancesChanged).toBe(true);
+    expect(secondState.instanceDirtyRanges).toEqual([{ start: 1, count: 1 }]);
+    expect(secondState.instances[BOX_INSTANCE_FLOATS + 4]).toBeCloseTo(0.2);
+    expect(secondState.instances[BOX_INSTANCE_FLOATS + 5]).toBeCloseTo(0.3);
+    expect(secondState.instances[BOX_INSTANCE_FLOATS + 6]).toBeCloseTo(0.4);
+    expect(secondState.instances[BOX_INSTANCE_FLOATS + 7]).toBe(1);
   });
 });

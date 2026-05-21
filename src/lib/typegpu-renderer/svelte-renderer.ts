@@ -23,7 +23,7 @@ import {
   type TypeGpuNode,
   type TypeGpuRuntime
 } from './core';
-import { createSceneState } from './scene-state';
+import { createSceneState, createTypeGpuSceneCache } from './scene-state';
 
 export interface TypeGpuRootOptions {
   target: HTMLElement;
@@ -96,6 +96,7 @@ function createRuntime(
   gpu: TypeGpuRenderer
 ): RuntimeState {
   let queued = false;
+  const sceneCache = createTypeGpuSceneCache();
 
   function scheduleSync(nextRoot: TypeGpuNode) {
     root = nextRoot;
@@ -105,7 +106,7 @@ function createRuntime(
     queued = true;
     queueMicrotask(() => {
       queued = false;
-      gpu.setScene(createSceneState(root));
+      gpu.setScene(createSceneState(root, sceneCache));
     });
   }
 

@@ -10,7 +10,11 @@ import {
 } from './box-data';
 import { createViewProjectionMatrix } from './camera-math';
 import { createContinuityTracker } from './continuity';
-import type { TypeGpuCameraSettings, TypeGpuSceneState } from './types';
+import type {
+  TypeGpuCameraSettings,
+  TypeGpuInstanceDirtyRange,
+  TypeGpuSceneState
+} from './types';
 
 // WGSL aligns the trailing vec3 padding to its own 16-byte slot, so the struct is 96 bytes.
 export const SCENE_UNIFORM_FLOATS = 24;
@@ -57,6 +61,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #disposed = false;
   #frame = 0;
   #instanceBuffer: GPUBuffer | null = null;
+  #instanceBufferByteLength = 0;
   #instanceCount = 0;
   #lastTimestamp = 0;
   #bindGroup: GPUBindGroup;
@@ -101,7 +106,9 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       camera: DEFAULT_TYPEGPU_CAMERA,
       instances: new Float32Array(0),
       instanceIds: [],
-      instanceCount: 0
+      instanceCount: 0,
+      instancesChanged: true,
+      instanceDirtyRanges: []
     });
   }
 
@@ -110,7 +117,16 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
     this.#camera = scene.camera;
     this.#projectionDirty = true;
-    this.#uploadInstances(this.#applyContinuity(scene), scene.instanceCount);
+
+    if (scene.instancesChanged || !this.#instanceBuffer) {
+      const dirtyRanges = scene.instanceDirtyRanges.length
+        ? scene.instanceDirtyRanges
+        : scene.instanceCount > 0
+          ? [{ start: 0, count: scene.instanceCount }]
+          : [];
+
+      this.#uploadInstances(this.#applyContinuity(scene, dirtyRanges), scene.instanceCount, dirtyRanges);
+    }
   }
 
   start(): void {
@@ -129,30 +145,56 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.root.destroy();
   }
 
-  #uploadInstances(instanceData: Float32Array, instanceCount: number): void {
+  #uploadInstances(
+    instanceData: Float32Array,
+    instanceCount: number,
+    dirtyRanges: TypeGpuInstanceDirtyRange[]
+  ): void {
     const device = this.root.device;
+    const byteLength = Math.max(4, instanceData.byteLength);
 
-    this.#instanceBuffer?.destroy();
-    this.#instanceBuffer = createAndUploadBuffer(
-      device,
-      'TypeGPU box instances',
-      instanceData,
-      GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
-    );
+    if (!this.#instanceBuffer || this.#instanceBufferByteLength !== byteLength) {
+      this.#instanceBuffer?.destroy();
+      this.#instanceBuffer = createAndUploadBuffer(
+        device,
+        'TypeGPU box instances',
+        instanceData,
+        GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+      );
+      this.#instanceBufferByteLength = byteLength;
+    } else {
+      for (const range of dirtyRanges) {
+        writeFloat32BufferRange(
+          device,
+          this.#instanceBuffer,
+          instanceData,
+          range.start * BOX_INSTANCE_FLOATS,
+          range.count * BOX_INSTANCE_FLOATS
+        );
+      }
+    }
+
     this.#instanceCount = instanceCount;
   }
 
-  #applyContinuity(scene: TypeGpuSceneState): Float32Array {
+  #applyContinuity(
+    scene: TypeGpuSceneState,
+    dirtyRanges: TypeGpuInstanceDirtyRange[]
+  ): Float32Array {
     this.#continuity.prune(scene.instanceIds);
 
-    for (let index = 0; index < scene.instanceIds.length; index += 1) {
-      const offset = index * BOX_INSTANCE_FLOATS;
+    for (const range of dirtyRanges) {
+      const end = Math.min(scene.instanceIds.length, range.start + range.count);
 
-      scene.instances[offset + BOX_SPIN_OFFSET_OFFSET] = this.#continuity.offsetFor({
-        key: scene.instanceIds[index],
-        rate: scene.instances[offset + BOX_SPIN_SPEED_OFFSET],
-        time: this.#time
-      });
+      for (let index = range.start; index < end; index += 1) {
+        const offset = index * BOX_INSTANCE_FLOATS;
+
+        scene.instances[offset + BOX_SPIN_OFFSET_OFFSET] = this.#continuity.offsetFor({
+          key: scene.instanceIds[index],
+          rate: scene.instances[offset + BOX_SPIN_SPEED_OFFSET],
+          time: this.#time
+        });
+      }
     }
 
     return scene.instances;
@@ -254,6 +296,26 @@ function createAndUploadBuffer(
 
 function writeFloat32Buffer(device: GPUDevice, buffer: GPUBuffer, data: Float32Array): void {
   device.queue.writeBuffer(buffer, 0, data.buffer as ArrayBuffer, data.byteOffset, data.byteLength);
+}
+
+function writeFloat32BufferRange(
+  device: GPUDevice,
+  buffer: GPUBuffer,
+  data: Float32Array,
+  startFloat: number,
+  floatCount: number
+): void {
+  if (floatCount === 0) return;
+
+  const startByte = startFloat * Float32Array.BYTES_PER_ELEMENT;
+
+  device.queue.writeBuffer(
+    buffer,
+    startByte,
+    data.buffer as ArrayBuffer,
+    data.byteOffset + startByte,
+    floatCount * Float32Array.BYTES_PER_ELEMENT
+  );
 }
 
 interface PipelineResources {

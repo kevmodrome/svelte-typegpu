@@ -9,9 +9,16 @@ export interface TypeGpuCameraSettings {
   far: number;
 }
 
+export interface TypeGpuInstanceDirtyRange {
+  start: number;
+  count: number;
+}
+
 export interface TypeGpuSceneState {
   camera: TypeGpuCameraSettings;
   instances: Float32Array;
   instanceIds: number[];
   instanceCount: number;
+  instancesChanged: boolean;
+  instanceDirtyRanges: TypeGpuInstanceDirtyRange[];
 }

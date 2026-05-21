@@ -3,8 +3,14 @@ export type TypeGpuNodeKind = 'fragment' | 'element' | 'text' | 'comment';
 export interface TypeGpuNode {
   kind: TypeGpuNodeKind;
   uid: number;
+  revision: number;
+  treeRevision: number;
   name?: string;
   parent: TypeGpuNode | null;
+  firstChild: TypeGpuNode | null;
+  lastChild: TypeGpuNode | null;
+  previousSibling: TypeGpuNode | null;
+  nextSibling: TypeGpuNode | null;
   children: TypeGpuNode[];
   attributes: Record<string, unknown>;
   listeners: Map<string, Set<(event: TypeGpuNodeEvent) => void>>;
@@ -31,24 +37,32 @@ export function createFragment(): TypeGpuNode {
 }
 
 export function createElement(name: string): TypeGpuNode {
-  return { ...createStub('element'), name };
+  const node = createStub('element');
+  node.name = name;
+  return node;
 }
 
 export function createTextNode(value = ''): TypeGpuNode {
-  return { ...createStub('text'), value, children: [] };
+  const node = createStub('text');
+  node.value = value;
+  return node;
 }
 
 export function createComment(value = ''): TypeGpuNode {
-  return { ...createStub('comment'), value, children: [] };
+  const node = createStub('comment');
+  node.value = value;
+  return node;
 }
 
 export function setAttribute(node: TypeGpuNode, key: string, value: unknown): void {
   node.attributes[key] = value;
+  node.revision += 1;
   invalidateFrom(node);
 }
 
 export function removeAttribute(node: TypeGpuNode, key: string): void {
   delete node.attributes[key];
+  node.revision += 1;
   invalidateFrom(node);
 }
 
@@ -63,28 +77,42 @@ export function hasAttribute(node: TypeGpuNode, key: string): boolean {
 
 export function insert(parent: TypeGpuNode, node: TypeGpuNode, anchor: TypeGpuNode | null): void {
   if (node.kind === 'fragment') {
-    for (const child of [...node.children]) {
+    for (const child of childSnapshot(node)) {
       insert(parent, child, anchor);
     }
     return;
   }
 
+  if (node === anchor) return;
+
   if (node.parent) {
     remove(node);
   }
 
-  const index = anchor ? parent.children.indexOf(anchor) : -1;
-  if (anchor && index === -1) {
+  if (anchor && anchor.parent !== parent) {
     throw new Error('Anchor node is not a child of the target parent');
   }
 
-  if (anchor === null) {
-    parent.children.push(node);
-  } else {
-    parent.children.splice(index, 0, node);
-  }
+  const previous = anchor ? anchor.previousSibling : parent.lastChild;
+  const next = anchor;
 
   node.parent = parent;
+  node.previousSibling = previous;
+  node.nextSibling = next;
+
+  if (previous) {
+    previous.nextSibling = node;
+  } else {
+    parent.firstChild = node;
+  }
+
+  if (next) {
+    next.previousSibling = node;
+  } else {
+    parent.lastChild = node;
+  }
+
+  markTreeChanged(parent);
   invalidateFrom(parent);
 }
 
@@ -92,9 +120,25 @@ export function remove(node: TypeGpuNode): void {
   if (!node.parent) return;
 
   const parent = node.parent;
-  const index = parent.children.indexOf(node);
-  if (index !== -1) parent.children.splice(index, 1);
+  const previous = node.previousSibling;
+  const next = node.nextSibling;
+
+  if (previous) {
+    previous.nextSibling = next;
+  } else {
+    parent.firstChild = next;
+  }
+
+  if (next) {
+    next.previousSibling = previous;
+  } else {
+    parent.lastChild = previous;
+  }
+
   node.parent = null;
+  node.previousSibling = null;
+  node.nextSibling = null;
+  markTreeChanged(parent);
   invalidateFrom(parent);
 }
 
@@ -103,17 +147,15 @@ export function getParent(node: TypeGpuNode): TypeGpuNode | null {
 }
 
 export function getFirstChild(node: TypeGpuNode): TypeGpuNode | null {
-  return node.children[0] ?? null;
+  return node.firstChild;
 }
 
 export function getLastChild(node: TypeGpuNode): TypeGpuNode | null {
-  return node.children.at(-1) ?? null;
+  return node.lastChild;
 }
 
 export function getNextSibling(node: TypeGpuNode): TypeGpuNode | null {
-  if (!node.parent) return null;
-  const index = node.parent.children.indexOf(node);
-  return node.parent.children[index + 1] ?? null;
+  return node.nextSibling;
 }
 
 export function addEventListener(
@@ -150,7 +192,7 @@ export function setText(node: TypeGpuNode, value: string): void {
     return;
   }
 
-  for (const child of [...node.children]) {
+  for (const child of childSnapshot(node)) {
     remove(child);
   }
 
@@ -160,14 +202,28 @@ export function setText(node: TypeGpuNode, value: string): void {
 }
 
 function createStub(kind: TypeGpuNodeKind): TypeGpuNode {
-  return {
+  const node = {
     kind,
     uid: nextNodeUid++,
+    revision: 0,
+    treeRevision: 0,
     parent: null,
-    children: [],
+    firstChild: null,
+    lastChild: null,
+    previousSibling: null,
+    nextSibling: null,
     attributes: {},
     listeners: new Map()
-  };
+  } as TypeGpuNode;
+
+  Object.defineProperty(node, 'children', {
+    enumerable: true,
+    get() {
+      return childSnapshot(node);
+    }
+  });
+
+  return node;
 }
 
 export function findFirst(
@@ -175,7 +231,7 @@ export function findFirst(
   predicate: (node: TypeGpuNode) => boolean
 ): TypeGpuNode | null {
   if (predicate(node)) return node;
-  for (const child of node.children) {
+  for (let child = node.firstChild; child; child = child.nextSibling) {
     const found = findFirst(child, predicate);
     if (found) return found;
   }
@@ -184,7 +240,7 @@ export function findFirst(
 
 export function walk(node: TypeGpuNode, visitor: (node: TypeGpuNode) => void): void {
   visitor(node);
-  for (const child of node.children) {
+  for (let child = node.firstChild; child; child = child.nextSibling) {
     walk(child, visitor);
   }
 }
@@ -198,4 +254,18 @@ function findRoot(node: TypeGpuNode): TypeGpuNode {
   let current = node;
   while (current.parent) current = current.parent;
   return current;
+}
+
+function markTreeChanged(node: TypeGpuNode): void {
+  findRoot(node).treeRevision += 1;
+}
+
+function childSnapshot(node: TypeGpuNode): TypeGpuNode[] {
+  const children: TypeGpuNode[] = [];
+
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    children.push(child);
+  }
+
+  return children;
 }
