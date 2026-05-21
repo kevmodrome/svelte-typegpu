@@ -1,17 +1,16 @@
 import tgpu, { type TgpuRoot } from 'typegpu';
 import { createFpsMeter } from '../fps-meter';
 import {
-  BOX_INSTANCE_FLOATS,
-  BOX_SPIN_OFFSET_OFFSET,
-  BOX_SPIN_SPEED_OFFSET,
-  BOX_VERTEX_COUNT,
-  BOX_VERTEX_FLOATS,
-  createBoxVertexData
-} from './box-data';
+  PRIMITIVE_INSTANCE_FLOATS,
+  PRIMITIVE_SPIN_OFFSET_OFFSET,
+  PRIMITIVE_SPIN_SPEED_OFFSET,
+  PRIMITIVE_VERTEX_FLOATS
+} from './instance-data';
 import { createViewProjectionMatrix } from './camera-math';
 import { createContinuityTracker } from './continuity';
 import type {
   TypeGpuCameraSettings,
+  TypeGpuDrawBatch,
   TypeGpuInstanceDirtyRange,
   TypeGpuSceneState
 } from './types';
@@ -27,6 +26,14 @@ const DEFAULT_TYPEGPU_CAMERA: TypeGpuCameraSettings = {
   near: 0.1,
   far: 100
 };
+
+interface TypeGpuBatchBuffers {
+  geometryKey: string;
+  instanceBuffer: GPUBuffer | null;
+  instanceBufferByteLength: number;
+  instanceCount: number;
+  vertexBuffer: GPUBuffer;
+}
 
 export interface TypeGpuRenderer {
   setScene(scene: TypeGpuSceneState): void;
@@ -59,10 +66,9 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #continuity = createContinuityTracker();
   #depthTexture: GPUTexture | null = null;
   #disposed = false;
+  #drawBatches: TypeGpuDrawBatch[] = [];
   #frame = 0;
-  #instanceBuffer: GPUBuffer | null = null;
-  #instanceBufferByteLength = 0;
-  #instanceCount = 0;
+  #batchBuffers = new Map<string, TypeGpuBatchBuffers>();
   #lastTimestamp = 0;
   #bindGroup: GPUBindGroup;
   #fpsMeter;
@@ -72,7 +78,6 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #time = 0;
   #uniformData = new Float32Array(SCENE_UNIFORM_FLOATS);
   #uniformBuffer: GPUBuffer;
-  #vertexBuffer: GPUBuffer;
 
   constructor(
     private readonly root: TgpuRoot,
@@ -88,12 +93,6 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       format,
       alphaMode: 'premultiplied'
     });
-    this.#vertexBuffer = createAndUploadBuffer(
-      device,
-      'TypeGPU box vertices',
-      createBoxVertexData(),
-      GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
-    );
     this.#uniformBuffer = device.createBuffer({
       label: 'TypeGPU scene uniforms',
       size: SCENE_UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT,
@@ -104,11 +103,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#pipeline = pipelineResources.pipeline;
     this.setScene({
       camera: DEFAULT_TYPEGPU_CAMERA,
-      instances: new Float32Array(0),
-      instanceIds: [],
-      instanceCount: 0,
-      instancesChanged: true,
-      instanceDirtyRanges: []
+      drawBatches: []
     });
   }
 
@@ -117,15 +112,23 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
     this.#camera = scene.camera;
     this.#projectionDirty = true;
+    this.#drawBatches = scene.drawBatches;
+    this.#pruneBatchBuffers(scene.drawBatches);
 
-    if (scene.instancesChanged || !this.#instanceBuffer) {
-      const dirtyRanges = scene.instanceDirtyRanges.length
-        ? scene.instanceDirtyRanges
-        : scene.instanceCount > 0
-          ? [{ start: 0, count: scene.instanceCount }]
-          : [];
+    for (const batch of scene.drawBatches) {
+      const buffers = this.#ensureBatchBuffers(batch);
 
-      this.#uploadInstances(this.#applyContinuity(scene, dirtyRanges), scene.instanceCount, dirtyRanges);
+      if (batch.instancesChanged || !buffers.instanceBuffer) {
+        const dirtyRanges = batch.dirtyRanges.length
+          ? batch.dirtyRanges
+          : batch.instanceCount > 0
+            ? [{ start: 0, count: batch.instanceCount }]
+            : [];
+
+        this.#uploadInstances(buffers, this.#applyContinuity(batch, dirtyRanges), batch, dirtyRanges);
+      }
+
+      buffers.instanceCount = batch.instanceCount;
     }
   }
 
@@ -139,65 +142,105 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#disposed = true;
     cancelAnimationFrame(this.#frame);
     this.#depthTexture?.destroy();
-    this.#instanceBuffer?.destroy();
+    for (const buffers of this.#batchBuffers.values()) {
+      buffers.instanceBuffer?.destroy();
+      buffers.vertexBuffer.destroy();
+    }
     this.#uniformBuffer.destroy();
-    this.#vertexBuffer.destroy();
     this.root.destroy();
   }
 
+  #ensureBatchBuffers(batch: TypeGpuDrawBatch): TypeGpuBatchBuffers {
+    const existing = this.#batchBuffers.get(batch.key);
+
+    if (existing && existing.geometryKey === batch.geometry.key) {
+      return existing;
+    }
+
+    existing?.instanceBuffer?.destroy();
+    existing?.vertexBuffer.destroy();
+
+    const buffers = {
+      geometryKey: batch.geometry.key,
+      instanceBuffer: null,
+      instanceBufferByteLength: 0,
+      instanceCount: 0,
+      vertexBuffer: createAndUploadBuffer(
+        this.root.device,
+        `TypeGPU ${batch.geometry.key} vertices`,
+        batch.geometry.vertexData,
+        GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+      )
+    };
+
+    this.#batchBuffers.set(batch.key, buffers);
+    return buffers;
+  }
+
+  #pruneBatchBuffers(drawBatches: TypeGpuDrawBatch[]): void {
+    const liveKeys = new Set(drawBatches.map((batch) => batch.key));
+
+    for (const [key, buffers] of this.#batchBuffers) {
+      if (liveKeys.has(key)) continue;
+
+      buffers.instanceBuffer?.destroy();
+      buffers.vertexBuffer.destroy();
+      this.#batchBuffers.delete(key);
+    }
+  }
+
   #uploadInstances(
+    buffers: TypeGpuBatchBuffers,
     instanceData: Float32Array,
-    instanceCount: number,
+    batch: TypeGpuDrawBatch,
     dirtyRanges: TypeGpuInstanceDirtyRange[]
   ): void {
     const device = this.root.device;
     const byteLength = Math.max(4, instanceData.byteLength);
 
-    if (!this.#instanceBuffer || this.#instanceBufferByteLength !== byteLength) {
-      this.#instanceBuffer?.destroy();
-      this.#instanceBuffer = createAndUploadBuffer(
+    if (!buffers.instanceBuffer || buffers.instanceBufferByteLength !== byteLength) {
+      buffers.instanceBuffer?.destroy();
+      buffers.instanceBuffer = createAndUploadBuffer(
         device,
-        'TypeGPU box instances',
+        `TypeGPU ${batch.key} instances`,
         instanceData,
         GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
       );
-      this.#instanceBufferByteLength = byteLength;
+      buffers.instanceBufferByteLength = byteLength;
     } else {
       for (const range of dirtyRanges) {
         writeFloat32BufferRange(
           device,
-          this.#instanceBuffer,
+          buffers.instanceBuffer,
           instanceData,
-          range.start * BOX_INSTANCE_FLOATS,
-          range.count * BOX_INSTANCE_FLOATS
+          range.start * PRIMITIVE_INSTANCE_FLOATS,
+          range.count * PRIMITIVE_INSTANCE_FLOATS
         );
       }
     }
-
-    this.#instanceCount = instanceCount;
   }
 
   #applyContinuity(
-    scene: TypeGpuSceneState,
+    batch: TypeGpuDrawBatch,
     dirtyRanges: TypeGpuInstanceDirtyRange[]
   ): Float32Array {
-    this.#continuity.prune(scene.instanceIds);
+    this.#continuity.prune(this.#drawBatches.flatMap((drawBatch) => drawBatch.instanceIds));
 
     for (const range of dirtyRanges) {
-      const end = Math.min(scene.instanceIds.length, range.start + range.count);
+      const end = Math.min(batch.instanceIds.length, range.start + range.count);
 
       for (let index = range.start; index < end; index += 1) {
-        const offset = index * BOX_INSTANCE_FLOATS;
+        const offset = index * PRIMITIVE_INSTANCE_FLOATS;
 
-        scene.instances[offset + BOX_SPIN_OFFSET_OFFSET] = this.#continuity.offsetFor({
-          key: scene.instanceIds[index],
-          rate: scene.instances[offset + BOX_SPIN_SPEED_OFFSET],
+        batch.instances[offset + PRIMITIVE_SPIN_OFFSET_OFFSET] = this.#continuity.offsetFor({
+          key: batch.instanceIds[index],
+          rate: batch.instances[offset + PRIMITIVE_SPIN_SPEED_OFFSET],
           time: this.#time
         });
       }
     }
 
-    return scene.instances;
+    return batch.instances;
   }
 
   #render(timestamp: number): void {
@@ -212,7 +255,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#resize();
     this.#writeUniforms();
 
-    if (this.#instanceBuffer && this.#depthTexture) {
+    if (this.#depthTexture) {
       const encoder = device.createCommandEncoder({ label: 'TypeGPU frame' });
       const pass = encoder.beginRenderPass({
         colorAttachments: [
@@ -233,9 +276,16 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
       pass.setPipeline(this.#pipeline);
       pass.setBindGroup(0, this.#bindGroup);
-      pass.setVertexBuffer(0, this.#vertexBuffer);
-      pass.setVertexBuffer(1, this.#instanceBuffer);
-      pass.draw(BOX_VERTEX_COUNT, this.#instanceCount);
+
+      for (const batch of this.#drawBatches) {
+        const buffers = this.#batchBuffers.get(batch.key);
+        if (!buffers?.instanceBuffer || buffers.instanceCount === 0) continue;
+
+        pass.setVertexBuffer(0, buffers.vertexBuffer);
+        pass.setVertexBuffer(1, buffers.instanceBuffer);
+        pass.draw(batch.geometry.vertexCount, buffers.instanceCount);
+      }
+
       pass.end();
       device.queue.submit([encoder.finish()]);
     }
@@ -423,14 +473,14 @@ function createPipeline(
       entryPoint: 'vertex_main',
       buffers: [
         {
-          arrayStride: BOX_VERTEX_FLOATS * Float32Array.BYTES_PER_ELEMENT,
+          arrayStride: PRIMITIVE_VERTEX_FLOATS * Float32Array.BYTES_PER_ELEMENT,
           attributes: [
             { shaderLocation: 0, offset: 0, format: 'float32x3' },
             { shaderLocation: 1, offset: 3 * Float32Array.BYTES_PER_ELEMENT, format: 'float32x3' }
           ]
         },
         {
-          arrayStride: BOX_INSTANCE_FLOATS * Float32Array.BYTES_PER_ELEMENT,
+          arrayStride: PRIMITIVE_INSTANCE_FLOATS * Float32Array.BYTES_PER_ELEMENT,
           stepMode: 'instance',
           attributes: [
             { shaderLocation: 2, offset: 0, format: 'float32x3' },

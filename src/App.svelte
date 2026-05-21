@@ -4,15 +4,19 @@
   import { CUBE_COUNT_PRESETS } from './lib/cube-field';
   import {
     DEFAULT_SCENE_CONTROLS,
+    cameraControlsForCount,
     clampSceneControls,
+    copySceneControls,
     formatHueColor,
     nextHue
   } from './lib/scene-controls';
 
   type RendererBackend = 'three' | 'typegpu';
+  type VectorAxis = 0 | 1 | 2;
+  const VECTOR_AXES = [0, 1, 2] as const;
 
   let backend = $state<RendererBackend>('three');
-  let controls = $state({ ...DEFAULT_SCENE_CONTROLS });
+  let controls = $state(clampSceneControls(DEFAULT_SCENE_CONTROLS));
   let fps = $state(0);
   let color = $derived(formatHueColor(controls.hue));
   let spinLabel = $derived(controls.spinEnabled ? 'Pause' : 'Resume');
@@ -25,16 +29,38 @@
   }
 
   function reset() {
-    const next = clampSceneControls(DEFAULT_SCENE_CONTROLS);
-    controls.spinEnabled = next.spinEnabled;
-    controls.spinSpeed = next.spinSpeed;
-    controls.cubeScale = next.cubeScale;
-    controls.cubeCount = next.cubeCount;
-    controls.hue = next.hue;
+    copySceneControls(controls, DEFAULT_SCENE_CONTROLS);
+  }
+
+  function resetCamera() {
+    copySceneControls(controls, {
+      ...controls,
+      camera: cameraControlsForCount(controls.cubeCount)
+    });
+  }
+
+  function setCubeCount(count: number) {
+    copySceneControls(controls, {
+      ...controls,
+      cubeCount: count,
+      camera: cameraControlsForCount(count)
+    });
+  }
+
+  function clampControls() {
+    copySceneControls(controls, controls);
   }
 
   function formatCubeCount(count: number) {
     return count >= 1_000 ? `${count / 1_000}k` : String(count);
+  }
+
+  function axisLabel(axis: VectorAxis) {
+    return ['X', 'Y', 'Z'][axis];
+  }
+
+  function formatCameraValue(value: number) {
+    return value.toFixed(1);
   }
 </script>
 
@@ -108,6 +134,102 @@
       <output>{controls.cubeScale.toFixed(2)}</output>
     </label>
 
+    <div class="camera-controls" aria-label="Camera controls">
+      <div class="section-header">
+        <span>Camera</span>
+        <button class="compact-command" type="button" onclick={resetCamera}>Frame</button>
+      </div>
+
+      <label class="control-row">
+        <span>FOV</span>
+        <input
+          type="range"
+          min="20"
+          max="100"
+          step="1"
+          bind:value={controls.camera.fov}
+          onchange={clampControls}
+        />
+        <output>{controls.camera.fov.toFixed(0)}°</output>
+      </label>
+
+      <div class="slider-stack">
+        <span>Position</span>
+        {#each VECTOR_AXES as axis (axis)}
+          <label class="mini-slider-row">
+            <span>{axisLabel(axis)}</span>
+            <input
+              type="range"
+              min="-40"
+              max="40"
+              step="0.1"
+              bind:value={controls.camera.position[axis]}
+              onchange={clampControls}
+              aria-label={`Camera position ${axisLabel(axis)}`}
+            />
+            <output>{formatCameraValue(controls.camera.position[axis])}</output>
+          </label>
+        {/each}
+      </div>
+
+      <div class="slider-stack">
+        <span>Rotation</span>
+        <label class="mini-slider-row">
+          <span>Yaw</span>
+          <input
+            type="range"
+            min="-180"
+            max="180"
+            step="1"
+            bind:value={controls.camera.rotation.yaw}
+            onchange={clampControls}
+            aria-label="Camera yaw"
+          />
+          <output>{controls.camera.rotation.yaw.toFixed(0)}°</output>
+        </label>
+        <label class="mini-slider-row">
+          <span>Pitch</span>
+          <input
+            type="range"
+            min="-85"
+            max="85"
+            step="1"
+            bind:value={controls.camera.rotation.pitch}
+            onchange={clampControls}
+            aria-label="Camera pitch"
+          />
+          <output>{controls.camera.rotation.pitch.toFixed(0)}°</output>
+        </label>
+      </div>
+
+      <div class="clip-control">
+        <label>
+          <span>Near</span>
+          <input
+            type="range"
+            min="0.01"
+            max="10"
+            step="0.01"
+            bind:value={controls.camera.near}
+            onchange={clampControls}
+          />
+          <output>{controls.camera.near.toFixed(2)}</output>
+        </label>
+        <label>
+          <span>Far</span>
+          <input
+            type="range"
+            min="1"
+            max="1000"
+            step="1"
+            bind:value={controls.camera.far}
+            onchange={clampControls}
+          />
+          <output>{controls.camera.far.toFixed(0)}</output>
+        </label>
+      </div>
+    </div>
+
     <div class="count-row">
       <span>Count</span>
       <div class="segmented-control" aria-label="Cube count">
@@ -115,7 +237,7 @@
           <button
             type="button"
             class:active={controls.cubeCount === count}
-            onclick={() => (controls.cubeCount = count)}
+            onclick={() => setCubeCount(count)}
             aria-label={`Render ${count.toLocaleString()} cube${count === 1 ? '' : 's'}`}
           >
             {formatCubeCount(count)}

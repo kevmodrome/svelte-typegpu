@@ -14,11 +14,24 @@ export interface TypeGpuInstanceDirtyRange {
   count: number;
 }
 
-export interface TypeGpuSceneState {
-  camera: TypeGpuCameraSettings;
+export interface TypeGpuGeometryData {
+  key: string;
+  vertexData: Float32Array;
+  vertexCount: number;
+  vertexFloats: number;
+}
+
+export interface TypeGpuDrawBatch {
+  key: string;
+  geometry: TypeGpuGeometryData;
   instances: Float32Array;
   instanceIds: number[];
   instanceCount: number;
   instancesChanged: boolean;
-  instanceDirtyRanges: TypeGpuInstanceDirtyRange[];
+  dirtyRanges: TypeGpuInstanceDirtyRange[];
+}
+
+export interface TypeGpuSceneState {
+  camera: TypeGpuCameraSettings;
+  drawBatches: TypeGpuDrawBatch[];
 }

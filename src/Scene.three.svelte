@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createCubeField, sceneCameraForCount } from './lib/cube-field';
-  import { formatHueColor, type SceneControls } from './lib/scene-controls';
+  import { cameraLookAt, formatHueColor, type SceneControls } from './lib/scene-controls';
 
   interface Props {
     controls: SceneControls;
@@ -10,9 +10,9 @@
   let { controls, onCubeClick = () => {} }: Props = $props();
   let spin = $state(0);
   let cubes = $derived(createCubeField(controls.cubeCount));
-  let camera = $derived(sceneCameraForCount(controls.cubeCount));
+  let frame = $derived(sceneCameraForCount(controls.cubeCount));
   let color = $derived(formatHueColor(controls.hue));
-  let meshScale = $derived(controls.cubeScale * camera.cubeSize);
+  let meshScale = $derived(controls.cubeScale * frame.cubeSize);
 
   function activateFromKeyboard(event: KeyboardEvent) {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -40,10 +40,11 @@
 
 <scene background="#11141a">
   <perspectiveCamera
-    position={camera.position}
-    fov={45}
-    far={500}
-    lookAt={camera.lookAt}
+    position={controls.camera.position}
+    fov={controls.camera.fov}
+    near={controls.camera.near}
+    far={controls.camera.far}
+    lookAt={cameraLookAt(controls.camera)}
   ></perspectiveCamera>
   <ambientLight args={['#ffffff', 0.65]}></ambientLight>
   <directionalLight args={['#ffffff', 2.25]} position={[3, 4, 4]}></directionalLight>
@@ -67,7 +68,7 @@
   </group>
 
   <mesh position={[0, -1.35, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-    <planeGeometry args={[camera.floorSize, camera.floorSize]}></planeGeometry>
+    <planeGeometry args={[frame.floorSize, frame.floorSize]}></planeGeometry>
     <meshStandardMaterial color="#252a34" roughness={0.8} metalness={0.08}></meshStandardMaterial>
   </mesh>
 </scene>

@@ -126,7 +126,9 @@ button:hover {
   z-index: 2;
   display: grid;
   width: min(390px, calc(100vw - 48px));
+  max-height: calc(100vh - 64px);
   gap: 18px;
+  overflow: auto;
   padding: 20px;
   border: 1px solid color-mix(in srgb, #f7f2e8 18%, transparent);
   border-radius: 8px;
@@ -276,6 +278,70 @@ input[type='range'] {
   background: color-mix(in srgb, #ff8a61 22%, transparent);
 }
 
+.camera-controls {
+  display: grid;
+  gap: 12px;
+  padding: 14px 0;
+  border-block: 1px solid color-mix(in srgb, #f7f2e8 12%, transparent);
+}
+
+.section-header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.section-header > span,
+.slider-stack > span,
+.clip-control span {
+  color: #bfc7c3;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.slider-stack,
+.clip-control {
+  display: grid;
+  gap: 8px;
+}
+
+.clip-control {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.mini-slider-row {
+  display: grid;
+  grid-template-columns: 42px 1fr 54px;
+  align-items: center;
+  gap: 10px;
+}
+
+.mini-slider-row output,
+.clip-control output {
+  color: #f7f2e8;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.clip-control label {
+  display: grid;
+  grid-template-columns: 1fr 54px;
+  align-items: center;
+  gap: 7px 10px;
+}
+
+.clip-control label > span {
+  grid-column: 1 / -1;
+}
+
+.clip-control input {
+  min-width: 0;
+}
+
 @media (max-width: 720px) {
   .masthead {
     top: 18px;
@@ -292,6 +358,8 @@ input[type='range'] {
     bottom: 18px;
     left: 18px;
     width: auto;
+    max-height: min(680px, calc(100vh - 36px));
+    overflow: auto;
     padding: 16px;
   }
 }

@@ -1,20 +1,16 @@
 import { walk, type TypeGpuNode } from './core';
-import type { TypeGpuInstanceDirtyRange } from './types';
+import type { TypeGpuDrawBatch, TypeGpuGeometryData, TypeGpuInstanceDirtyRange } from './types';
 
 export interface InstancePrimitiveDefinition {
+  key: string;
+  geometry: TypeGpuGeometryData;
   floatsPerInstance: number;
   matches(node: TypeGpuNode): boolean;
   pack(node: TypeGpuNode, target: Float32Array, offset: number): void;
   instanceId?(node: TypeGpuNode): number;
 }
 
-export interface PrimitiveInstanceBuffer {
-  instances: Float32Array;
-  instanceIds: number[];
-  instanceCount: number;
-  instancesChanged: boolean;
-  dirtyRanges: TypeGpuInstanceDirtyRange[];
-}
+export type PrimitiveInstanceBuffer = TypeGpuDrawBatch;
 
 export interface PrimitiveInstanceCache {
   read(root: TypeGpuNode): PrimitiveInstanceBuffer;
@@ -44,6 +40,8 @@ export function createPrimitiveInstanceCache(
         treeRevision = root.treeRevision;
 
         return {
+          key: definition.key,
+          geometry: definition.geometry,
           instances,
           instanceIds,
           instanceCount: nodes.length,
@@ -63,6 +61,8 @@ export function createPrimitiveInstanceCache(
       });
 
       return {
+        key: definition.key,
+        geometry: definition.geometry,
         instances,
         instanceIds,
         instanceCount: nodes.length,

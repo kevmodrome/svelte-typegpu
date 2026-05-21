@@ -14,12 +14,13 @@ import { readPerspectiveCamera } from './components/perspective-camera';
 import { createSceneState, createTypeGpuSceneCache } from './scene-state';
 
 describe('TypeGPU renderer core', () => {
-  it('turns authored box nodes into compact instance data', () => {
+  it('turns authored primitive nodes into separate draw batches', () => {
     const root = createFragment();
     const scene = createElement('scene');
     const camera = createElement('perspectiveCamera');
     const first = createElement('box');
     const second = createElement('box');
+    const sphere = createElement('sphere');
 
     setAttribute(camera, 'position', [0, 2, 8]);
     setAttribute(camera, 'lookAt', [0, 0, 0]);
@@ -34,13 +35,19 @@ describe('TypeGPU renderer core', () => {
     setAttribute(second, 'position', [-1, -2, -3]);
     setAttribute(second, 'phase', 0.5);
     setAttribute(second, 'color', [0.4, 0.5, 0.6, 1]);
+    setAttribute(sphere, 'position', [7, 8, 9]);
+    setAttribute(sphere, 'phase', 0.75);
+    setAttribute(sphere, 'color', [0.7, 0.8, 0.9, 1]);
 
     insert(scene, camera, null);
     insert(scene, first, null);
     insert(scene, second, null);
+    insert(scene, sphere, null);
     insert(root, scene, null);
 
     const state = createSceneState(root);
+    const boxBatch = drawBatch(state, 'primitive:box');
+    const sphereBatch = drawBatch(state, 'primitive:sphere');
 
     expect(state).toMatchObject({
       camera: {
@@ -49,25 +56,36 @@ describe('TypeGPU renderer core', () => {
         fov: 50,
         near: 0.1,
         far: 100
-      },
-      instanceCount: 2
+      }
     });
-    expect(state.instanceIds).toEqual([first.uid, second.uid]);
-    expect(Array.from(state.instances.slice(0, 4))).toEqual([1, 2, 3, 0.25]);
-    expect(state.instances[4]).toBeCloseTo(0.1);
-    expect(state.instances[5]).toBeCloseTo(0.2);
-    expect(state.instances[6]).toBeCloseTo(0.3);
-    expect(state.instances[7]).toBe(1);
-    expect(Array.from(state.instances.slice(8, 11))).toEqual([20, 5, 10]);
-    expect(state.instances[11]).toBeCloseTo(1.4);
-    expect(state.instances[12]).toBe(0);
-    expect(Array.from(state.instances.slice(13, 17))).toEqual([-1, -2, -3, 0.5]);
-    expect(state.instances[17]).toBeCloseTo(0.4);
-    expect(state.instances[18]).toBeCloseTo(0.5);
-    expect(state.instances[19]).toBeCloseTo(0.6);
-    expect(state.instances[20]).toBe(1);
-    expect(Array.from(state.instances.slice(21, 25))).toEqual([1, 1, 1, 0]);
-    expect(state.instances[25]).toBe(0);
+
+    expect(boxBatch.geometry.key).toBe('box');
+    expect(boxBatch.instanceCount).toBe(2);
+    expect(boxBatch.instanceIds).toEqual([first.uid, second.uid]);
+    expect(Array.from(boxBatch.instances.slice(0, 4))).toEqual([1, 2, 3, 0.25]);
+    expect(boxBatch.instances[4]).toBeCloseTo(0.1);
+    expect(boxBatch.instances[5]).toBeCloseTo(0.2);
+    expect(boxBatch.instances[6]).toBeCloseTo(0.3);
+    expect(boxBatch.instances[7]).toBe(1);
+    expect(Array.from(boxBatch.instances.slice(8, 11))).toEqual([20, 5, 10]);
+    expect(boxBatch.instances[11]).toBeCloseTo(1.4);
+    expect(boxBatch.instances[12]).toBe(0);
+    expect(Array.from(boxBatch.instances.slice(13, 17))).toEqual([-1, -2, -3, 0.5]);
+    expect(boxBatch.instances[17]).toBeCloseTo(0.4);
+    expect(boxBatch.instances[18]).toBeCloseTo(0.5);
+    expect(boxBatch.instances[19]).toBeCloseTo(0.6);
+    expect(boxBatch.instances[20]).toBe(1);
+    expect(Array.from(boxBatch.instances.slice(21, 25))).toEqual([1, 1, 1, 0]);
+    expect(boxBatch.instances[25]).toBe(0);
+
+    expect(sphereBatch.geometry.key).toBe('sphere');
+    expect(sphereBatch.instanceCount).toBe(1);
+    expect(sphereBatch.instanceIds).toEqual([sphere.uid]);
+    expect(Array.from(sphereBatch.instances.slice(0, 4))).toEqual([7, 8, 9, 0.75]);
+    expect(sphereBatch.instances[4]).toBeCloseTo(0.7);
+    expect(sphereBatch.instances[5]).toBeCloseTo(0.8);
+    expect(sphereBatch.instances[6]).toBeCloseTo(0.9);
+    expect(sphereBatch.instances[7]).toBe(1);
   });
 
   it('reads camera settings from a perspectiveCamera node', () => {
@@ -146,11 +164,13 @@ describe('TypeGPU renderer core', () => {
     const firstState = createSceneState(root, cache);
     setAttribute(camera, 'fov', 35);
     const secondState = createSceneState(root, cache);
+    const firstBoxBatch = drawBatch(firstState, 'primitive:box');
+    const secondBoxBatch = drawBatch(secondState, 'primitive:box');
 
-    expect(firstState.instancesChanged).toBe(true);
-    expect(secondState.instances).toBe(firstState.instances);
-    expect(secondState.instancesChanged).toBe(false);
-    expect(secondState.instanceDirtyRanges).toEqual([]);
+    expect(firstBoxBatch.instancesChanged).toBe(true);
+    expect(secondBoxBatch.instances).toBe(firstBoxBatch.instances);
+    expect(secondBoxBatch.instancesChanged).toBe(false);
+    expect(secondBoxBatch.dirtyRanges).toEqual([]);
   });
 
   it('re-packs only changed primitive nodes when the primitive structure is stable', () => {
@@ -169,13 +189,25 @@ describe('TypeGPU renderer core', () => {
     const firstState = createSceneState(root, cache);
     setAttribute(second, 'color', [0.2, 0.3, 0.4, 1]);
     const secondState = createSceneState(root, cache);
+    const firstBoxBatch = drawBatch(firstState, 'primitive:box');
+    const secondBoxBatch = drawBatch(secondState, 'primitive:box');
 
-    expect(secondState.instances).toBe(firstState.instances);
-    expect(secondState.instancesChanged).toBe(true);
-    expect(secondState.instanceDirtyRanges).toEqual([{ start: 1, count: 1 }]);
-    expect(secondState.instances[BOX_INSTANCE_FLOATS + 4]).toBeCloseTo(0.2);
-    expect(secondState.instances[BOX_INSTANCE_FLOATS + 5]).toBeCloseTo(0.3);
-    expect(secondState.instances[BOX_INSTANCE_FLOATS + 6]).toBeCloseTo(0.4);
-    expect(secondState.instances[BOX_INSTANCE_FLOATS + 7]).toBe(1);
+    expect(secondBoxBatch.instances).toBe(firstBoxBatch.instances);
+    expect(secondBoxBatch.instancesChanged).toBe(true);
+    expect(secondBoxBatch.dirtyRanges).toEqual([{ start: 1, count: 1 }]);
+    expect(secondBoxBatch.instances[BOX_INSTANCE_FLOATS + 4]).toBeCloseTo(0.2);
+    expect(secondBoxBatch.instances[BOX_INSTANCE_FLOATS + 5]).toBeCloseTo(0.3);
+    expect(secondBoxBatch.instances[BOX_INSTANCE_FLOATS + 6]).toBeCloseTo(0.4);
+    expect(secondBoxBatch.instances[BOX_INSTANCE_FLOATS + 7]).toBe(1);
   });
 });
+
+function drawBatch(state: ReturnType<typeof createSceneState>, key: string) {
+  const batch = state.drawBatches.find((candidate) => candidate.key === key);
+
+  if (!batch) {
+    throw new Error(`Missing draw batch ${key}`);
+  }
+
+  return batch;
+}
