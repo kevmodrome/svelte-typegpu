@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Color, Mesh, PerspectiveCamera, Scene } from 'three';
+import { Color, InstancedMesh, Matrix4, Mesh, PerspectiveCamera, Scene, Vector3 } from 'three';
 import {
   addEventListener,
   createElement,
@@ -49,6 +49,94 @@ describe('Three renderer core', () => {
     expect(((mesh.three as Mesh).material as unknown as { color: Color }).color.getHexString()).toBe(
       'ff3366'
     );
+  });
+
+  it('creates instanced meshes and applies instance transforms', () => {
+    const mesh = createElement('instancedMesh');
+    const matrix = new Matrix4();
+    const position = new Vector3();
+
+    setAttribute(mesh, 'args', [2]);
+    setAttribute(mesh, 'instanceTransforms', [
+      { position: [1, 2, 3], rotation: [0, 0, 0], scale: 2 },
+      { position: [4, 5, 6], rotation: [0, Math.PI / 2, 0], scale: 1 }
+    ]);
+
+    expect(mesh.three).toBeInstanceOf(InstancedMesh);
+    expect((mesh.three as InstancedMesh).count).toBe(2);
+
+    (mesh.three as InstancedMesh).getMatrixAt(0, matrix);
+    position.setFromMatrixPosition(matrix);
+
+    expect(position.toArray()).toEqual([1, 2, 3]);
+  });
+
+  it('updates instanced meshes from stable field data and scalar animation attributes', () => {
+    const mesh = createElement('instancedMesh');
+    const matrix = new Matrix4();
+    const position = new Vector3();
+    const scale = new Vector3();
+
+    setAttribute(mesh, 'args', [2]);
+    setAttribute(mesh, 'instanceField', [
+      { position: [1, 2, 3], phase: 0 },
+      { position: [4, 5, 6], phase: 0.5 }
+    ]);
+    setAttribute(mesh, 'instanceScale', 0.75);
+    setAttribute(mesh, 'instanceSpin', 1);
+
+    expect(mesh.three).toBeInstanceOf(InstancedMesh);
+    expect((mesh.three as InstancedMesh).count).toBe(2);
+
+    (mesh.three as InstancedMesh).getMatrixAt(1, matrix);
+    position.setFromMatrixPosition(matrix);
+    scale.setFromMatrixScale(matrix);
+
+    expect(position.toArray()).toEqual([4, 5, 6]);
+    expect(scale.x).toBeCloseTo(0.75);
+    expect(scale.y).toBeCloseTo(0.75);
+    expect(scale.z).toBeCloseTo(0.75);
+  });
+
+  it('automatically batches compatible mesh siblings into an internal InstancedMesh', async () => {
+    const scene = createElement('scene');
+    const first = createBatchableMesh([1, 0, 0], '#ff3366');
+    const second = createBatchableMesh([2, 0, 0], '#ff3366');
+    const matrix = new Matrix4();
+    const position = new Vector3();
+
+    insert(scene, first, null);
+    insert(scene, second, null);
+    await Promise.resolve();
+
+    const batch = (scene.three as Scene).children.find(
+      (child): child is InstancedMesh => child instanceof InstancedMesh
+    );
+
+    expect(batch).toBeInstanceOf(InstancedMesh);
+    expect(batch?.count).toBe(2);
+    expect((scene.three as Scene).children).not.toContain(first.three);
+    expect((scene.three as Scene).children).not.toContain(second.three);
+    expect(batch?.userData.__svelteThreeInstanceNodes).toEqual([first, second]);
+
+    batch?.getMatrixAt(1, matrix);
+    position.setFromMatrixPosition(matrix);
+    expect(position.toArray()).toEqual([2, 0, 0]);
+  });
+
+  it('does not batch meshes with incompatible material state', async () => {
+    const scene = createElement('scene');
+    const first = createBatchableMesh([1, 0, 0], '#ff3366');
+    const second = createBatchableMesh([2, 0, 0], '#33aaff');
+
+    insert(scene, first, null);
+    insert(scene, second, null);
+    await Promise.resolve();
+
+    expect((scene.three as Scene).children.some((child) => child instanceof InstancedMesh)).toBe(
+      false
+    );
+    expect((scene.three as Scene).children).toEqual([first.three, second.three]);
   });
 
   it('updates common Three object attributes', () => {
@@ -113,3 +201,17 @@ describe('Three renderer core', () => {
     );
   });
 });
+
+function createBatchableMesh(position: [number, number, number], color: string) {
+  const mesh = createElement('mesh');
+  const geometry = createElement('boxGeometry');
+  const material = createElement('meshStandardMaterial');
+
+  setAttribute(geometry, 'args', [1, 1, 1]);
+  setAttribute(material, 'color', color);
+  setAttribute(mesh, 'position', position);
+  insert(mesh, geometry, null);
+  insert(mesh, material, null);
+
+  return mesh;
+}

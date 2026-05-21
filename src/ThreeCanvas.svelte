@@ -27,6 +27,7 @@
     sceneControls.spinEnabled = next.spinEnabled;
     sceneControls.spinSpeed = next.spinSpeed;
     sceneControls.cubeScale = next.cubeScale;
+    sceneControls.cubeCount = next.cubeCount;
     sceneControls.hue = next.hue;
     root?.setContinuous(next.spinEnabled && next.spinSpeed > 0);
   });

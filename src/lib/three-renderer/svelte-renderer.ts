@@ -166,7 +166,7 @@ function createRuntime(
 
     const intersections = raycaster.intersectObjects(scene.children, true);
     for (const intersection of intersections) {
-      const node = findInteractiveNode(intersection.object, event.type);
+      const node = findInteractiveNode(intersection.object, event.type, intersection.instanceId);
       if (node) {
         dispatchNodeEvent(node, event.type, {
           originalEvent: event,
@@ -205,7 +205,13 @@ function createRuntime(
   };
 }
 
-function findInteractiveNode(object: Object3D, type: string): ThreeNode | null {
+function findInteractiveNode(object: Object3D, type: string, instanceId?: number): ThreeNode | null {
+  const instances = object.userData.__svelteThreeInstanceNodes as ThreeNode[] | undefined;
+  if (instances && instanceId !== undefined) {
+    const node = instances[instanceId];
+    if (node?.listeners.get(type)?.size) return node;
+  }
+
   let current: Object3D | null = object;
 
   while (current) {

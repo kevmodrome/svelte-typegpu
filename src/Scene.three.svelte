@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { createCubeField, sceneCameraForCount } from './lib/cube-field';
   import { formatHueColor, type SceneControls } from './lib/scene-controls';
 
   interface Props {
@@ -8,7 +9,10 @@
 
   let { controls, onCubeClick = () => {} }: Props = $props();
   let spin = $state(0);
+  let cubes = $derived(createCubeField(controls.cubeCount));
+  let camera = $derived(sceneCameraForCount(controls.cubeCount));
   let color = $derived(formatHueColor(controls.hue));
+  let meshScale = $derived(controls.cubeScale * camera.cubeSize);
 
   function activateFromKeyboard(event: KeyboardEvent) {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -35,25 +39,35 @@
 </script>
 
 <scene background="#11141a">
-  <perspectiveCamera position={[0, 1.4, 5]} fov={45} lookAt={[0, 0, 0]}></perspectiveCamera>
+  <perspectiveCamera
+    position={camera.position}
+    fov={45}
+    far={500}
+    lookAt={camera.lookAt}
+  ></perspectiveCamera>
   <ambientLight args={['#ffffff', 0.65]}></ambientLight>
   <directionalLight args={['#ffffff', 2.25]} position={[3, 4, 4]}></directionalLight>
 
-  <mesh
-    role="button"
-    tabindex="0"
-    aria-label="Change cube color"
-    rotation={[spin, spin * 0.8, 0]}
-    scale={controls.cubeScale}
-    onclick={onCubeClick}
-    onkeydown={activateFromKeyboard}
-  >
-    <boxGeometry args={[1.5, 1.5, 1.5]}></boxGeometry>
-    <meshStandardMaterial color={color} roughness={0.34} metalness={0.28}></meshStandardMaterial>
-  </mesh>
+  <group rotation={[spin, spin * 0.8, 0]}>
+    {#each cubes as cube (cube.id)}
+      <mesh
+        role="button"
+        tabindex="0"
+        aria-label="Change cube color"
+        position={cube.position}
+        rotation={[cube.phase, cube.phase * 0.6, cube.phase * 0.35]}
+        scale={meshScale}
+        onclick={onCubeClick}
+        onkeydown={activateFromKeyboard}
+      >
+        <boxGeometry args={[1, 1, 1]}></boxGeometry>
+        <meshStandardMaterial color={color} roughness={0.34} metalness={0.28}></meshStandardMaterial>
+      </mesh>
+    {/each}
+  </group>
 
   <mesh position={[0, -1.35, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-    <planeGeometry args={[6, 6]}></planeGeometry>
+    <planeGeometry args={[camera.floorSize, camera.floorSize]}></planeGeometry>
     <meshStandardMaterial color="#252a34" roughness={0.8} metalness={0.08}></meshStandardMaterial>
   </mesh>
 </scene>

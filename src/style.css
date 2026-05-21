@@ -60,6 +60,22 @@ button:hover {
   touch-action: none;
 }
 
+.gpu-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(360px, calc(100vw - 48px));
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, #ff6b6b 42%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, #11141a 88%, transparent);
+  color: #ffe7e7;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  text-align: center;
+  transform: translate(-50%, -50%);
+}
+
 .masthead {
   position: absolute;
   top: 28px;
@@ -184,7 +200,57 @@ button:hover {
   gap: 12px;
 }
 
+.count-row {
+  display: grid;
+  grid-template-columns: 58px 1fr 58px;
+  align-items: center;
+  gap: 12px;
+}
+
+.backend-row {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.count-row > span,
+.backend-row > span {
+  color: #bfc7c3;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.segmented-control {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.backend-control {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.segmented-control button {
+  min-height: 34px;
+  padding: 6px 8px;
+}
+
+.segmented-control button.active {
+  border-color: color-mix(in srgb, #8fe4d7 72%, transparent);
+  background: color-mix(in srgb, #8fe4d7 18%, transparent);
+  color: #dffcf8;
+}
+
 .control-row output {
+  color: #f7f2e8;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.count-row output {
   color: #f7f2e8;
   font-variant-numeric: tabular-nums;
   text-align: right;

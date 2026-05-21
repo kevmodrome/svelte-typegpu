@@ -13,12 +13,14 @@ describe('scene controls', () => {
         ...DEFAULT_SCENE_CONTROLS,
         spinSpeed: 4,
         cubeScale: -1,
+        cubeCount: 20_000,
         hue: 725
       })
     ).toEqual({
       ...DEFAULT_SCENE_CONTROLS,
       spinSpeed: 2,
       cubeScale: 0.45,
+      cubeCount: 10_000,
       hue: 5
     });
   });

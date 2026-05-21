@@ -1,7 +1,10 @@
+import { clampCubeCount } from './cube-field';
+
 export interface SceneControls {
   spinEnabled: boolean;
   spinSpeed: number;
   cubeScale: number;
+  cubeCount: number;
   hue: number;
 }
 
@@ -9,6 +12,7 @@ export const DEFAULT_SCENE_CONTROLS: SceneControls = {
   spinEnabled: true,
   spinSpeed: 1,
   cubeScale: 1,
+  cubeCount: 1,
   hue: 330
 };
 
@@ -17,6 +21,7 @@ export function clampSceneControls(controls: SceneControls): SceneControls {
     spinEnabled: controls.spinEnabled,
     spinSpeed: clamp(controls.spinSpeed, 0, 2),
     cubeScale: clamp(controls.cubeScale, 0.45, 2.2),
+    cubeCount: clampCubeCount(controls.cubeCount),
     hue: normalizeHue(controls.hue)
   };
 }

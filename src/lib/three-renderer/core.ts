@@ -7,7 +7,9 @@ import {
   DirectionalLight,
   Euler,
   Group,
+  InstancedMesh,
   Material,
+  Matrix4,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -15,6 +17,7 @@ import {
   PerspectiveCamera,
   PlaneGeometry,
   PointLight,
+  Quaternion,
   Scene,
   SphereGeometry,
   Vector3
@@ -31,6 +34,7 @@ export interface ThreeNode {
   listeners: Map<string, Set<(event: ThreeNodeEvent) => void>>;
   three: any;
   role: 'object' | 'geometry' | 'material' | 'none';
+  autoBatchCache?: Map<string, InstancedMesh>;
   runtime?: ThreeRuntime;
   value?: string;
 }
@@ -229,6 +233,14 @@ function rebuildThreeObject(node: ThreeNode): void {
       node.three = new Mesh();
       node.role = 'object';
       break;
+    case 'instancedMesh':
+      node.three = new InstancedMesh(
+        new BufferGeometry(),
+        new MeshBasicMaterial(),
+        Math.max(1, numberArg(args[0], 1))
+      );
+      node.role = 'object';
+      break;
     case 'perspectiveCamera':
       node.three = new PerspectiveCamera(
         numberArg(args[0], 75),
@@ -300,6 +312,10 @@ function rebuildThreeObject(node: ThreeNode): void {
     if (key !== 'args') applyAttribute(node, key, value);
   }
 
+  for (const child of node.children) {
+    attachToParent(node, child);
+  }
+
   dispose(previous);
 }
 
@@ -319,6 +335,19 @@ function applyAttribute(node: ThreeNode, key: string, value: unknown): void {
 
   if (key === 'scale' && target.scale instanceof Vector3) {
     setVector3(target.scale, value, true);
+    return;
+  }
+
+  if (key === 'instanceTransforms' && target instanceof InstancedMesh) {
+    setInstanceTransforms(target, value);
+    return;
+  }
+
+  if (
+    target instanceof InstancedMesh &&
+    (key === 'instanceField' || key === 'instanceSpin' || key === 'instanceScale')
+  ) {
+    setInstanceFieldTransforms(node);
     return;
   }
 
@@ -398,6 +427,7 @@ function syncThreeChildOrder(parent: ThreeNode): void {
 
 function invalidateFrom(node: ThreeNode): void {
   const root = findRoot(node);
+  scheduleBatchRefresh(root);
   root.runtime?.sync(root);
   root.runtime?.invalidate();
 }
@@ -428,6 +458,210 @@ function setEuler(target: Euler, value: unknown): void {
   target.set(x, y, z);
 }
 
+function setInstanceTransforms(target: InstancedMesh, value: unknown): void {
+  if (!Array.isArray(value)) return;
+
+  const matrix = new Matrix4();
+  const position = new Vector3();
+  const rotation = new Euler();
+  const quaternion = new Quaternion();
+  const scale = new Vector3();
+  const count = Math.min(target.instanceMatrix.count, value.length);
+
+  for (let index = 0; index < count; index += 1) {
+    const transform = value[index] as {
+      position?: unknown;
+      rotation?: unknown;
+      scale?: unknown;
+    };
+
+    setVector3(position, transform.position);
+    setEuler(rotation, transform.rotation);
+    quaternion.setFromEuler(rotation);
+    setVector3(scale, transform.scale ?? 1, true);
+    matrix.compose(position, quaternion, scale);
+    target.setMatrixAt(index, matrix);
+  }
+
+  target.count = count;
+  target.instanceMatrix.needsUpdate = true;
+}
+
+function setInstanceFieldTransforms(node: ThreeNode): void {
+  const target = node.three;
+  if (!(target instanceof InstancedMesh)) return;
+
+  const instances = node.attributes.instanceField;
+  if (!Array.isArray(instances)) return;
+
+  const spin = numberArg(node.attributes.instanceSpin, 0);
+  const instanceScale = numberArg(node.attributes.instanceScale, 1);
+  const matrix = new Matrix4();
+  const position = new Vector3();
+  const rotation = new Euler();
+  const quaternion = new Quaternion();
+  const scale = new Vector3(instanceScale, instanceScale, instanceScale);
+  const count = Math.min(target.instanceMatrix.count, instances.length);
+
+  for (let index = 0; index < count; index += 1) {
+    const instance = instances[index] as { position?: unknown; phase?: unknown };
+    const phase = numberArg(instance.phase, 0);
+    setVector3(position, instance.position);
+    rotation.set(spin + phase, spin * 0.8 + phase * 0.6, phase * 0.35);
+    quaternion.setFromEuler(rotation);
+    matrix.compose(position, quaternion, scale);
+    target.setMatrixAt(index, matrix);
+  }
+
+  target.count = count;
+  target.instanceMatrix.needsUpdate = true;
+}
+
+function scheduleBatchRefresh(root: ThreeNode): void {
+  if (queuedBatchRoots.has(root)) return;
+
+  queuedBatchRoots.add(root);
+  queueMicrotask(() => {
+    queuedBatchRoots.delete(root);
+    refreshAutoBatches(root);
+    root.runtime?.invalidate();
+  });
+}
+
+function refreshAutoBatches(node: ThreeNode): void {
+  for (const child of node.children) {
+    refreshAutoBatches(child);
+  }
+
+  if (node.three instanceof Object3D) {
+    refreshNodeBatches(node);
+  }
+}
+
+function refreshNodeBatches(parent: ThreeNode): void {
+  const host = parent.three;
+  if (!(host instanceof Object3D)) return;
+
+  const groups = new Map<string, ThreeNode[]>();
+  for (const child of parent.children) {
+    const signature = getBatchSignature(child);
+    if (!signature) continue;
+
+    const group = groups.get(signature) ?? [];
+    group.push(child);
+    groups.set(signature, group);
+  }
+
+  for (const [signature, group] of [...groups]) {
+    if (group.length < 2) {
+      groups.delete(signature);
+    }
+  }
+
+  const cache = (parent.autoBatchCache ??= new Map());
+  for (const [signature, batch] of [...cache]) {
+    if (!groups.has(signature)) {
+      host.remove(batch);
+      cache.delete(signature);
+    }
+  }
+
+  const renderedChildren: Object3D[] = [];
+  const emittedBatches = new Set<string>();
+
+  for (const child of parent.children) {
+    const signature = getBatchSignature(child);
+    const group = signature ? groups.get(signature) : undefined;
+
+    if (signature && group) {
+      let batch = cache.get(signature);
+      if (!batch || batch.instanceMatrix.count < group.length) {
+        if (batch) host.remove(batch);
+        batch = createBatch(group, signature);
+        cache.set(signature, batch);
+      }
+
+      updateBatch(batch, group);
+      if (!emittedBatches.has(signature)) {
+        host.add(batch);
+        renderedChildren.push(batch);
+        emittedBatches.add(signature);
+      }
+
+      if (child.three instanceof Object3D) {
+        host.remove(child.three);
+      }
+      continue;
+    }
+
+    if (child.three instanceof Object3D) {
+      host.add(child.three);
+      renderedChildren.push(child.three);
+    }
+  }
+
+  const unordered = host.children.filter((child) => !renderedChildren.includes(child));
+  host.children.splice(0, host.children.length, ...renderedChildren, ...unordered);
+}
+
+function createBatch(group: ThreeNode[], signature: string): InstancedMesh {
+  const firstMesh = group[0].three as Mesh;
+  const batch = new InstancedMesh(firstMesh.geometry, firstMesh.material as Material, group.length);
+  batch.userData.__svelteThreeBatchSignature = signature;
+  return batch;
+}
+
+function updateBatch(batch: InstancedMesh, group: ThreeNode[]): void {
+  const matrix = new Matrix4();
+  const quaternion = new Quaternion();
+  batch.count = group.length;
+  batch.userData.__svelteThreeInstanceNodes = group;
+
+  for (let index = 0; index < group.length; index += 1) {
+    const mesh = group[index].three as Mesh;
+    quaternion.setFromEuler(mesh.rotation);
+    matrix.compose(mesh.position, quaternion, mesh.scale);
+    batch.setMatrixAt(index, matrix);
+  }
+
+  batch.instanceMatrix.needsUpdate = true;
+}
+
+function getBatchSignature(node: ThreeNode): string | null {
+  if (node.name !== 'mesh' || !(node.three instanceof Mesh)) return null;
+
+  const geometry = node.children.find(
+    (child) => child.role === 'geometry' && child.three instanceof BufferGeometry
+  );
+  const material = node.children.find(
+    (child) => child.role === 'material' && child.three instanceof Material
+  );
+
+  if (!geometry || !material) return null;
+
+  return JSON.stringify({
+    geometry: geometry.name,
+    geometryArgs: normalizeSignatureValue(geometry.attributes.args),
+    material: material.name,
+    materialAttributes: normalizeAttributes(material.attributes)
+  });
+}
+
+function normalizeAttributes(attributes: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(attributes)
+      .filter(([key]) => key !== 'children')
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, value]) => [key, normalizeSignatureValue(value)])
+  );
+}
+
+function normalizeSignatureValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeSignatureValue);
+  if (value == null || ['boolean', 'number', 'string'].includes(typeof value)) return value;
+  return String(value);
+}
+
 function vectorTuple(value: unknown): [number, number, number] {
   if (Array.isArray(value)) {
     return [numberArg(value[0], 0), numberArg(value[1], 0), numberArg(value[2], 0)];
@@ -446,6 +680,8 @@ function numberArg(value: unknown, fallback: number): number {
 }
 
 type ColorRepresentation = ConstructorParameters<typeof Color>[0];
+
+const queuedBatchRoots = new WeakSet<ThreeNode>();
 
 function findFirst<T extends ThreeNode>(
   node: ThreeNode,
