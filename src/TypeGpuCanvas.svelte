@@ -54,7 +54,7 @@
   });
 </script>
 
-<div class="three-canvas" bind:this={host} aria-label="TypeGPU custom-rendered scene">
+<div class="renderer-canvas" bind:this={host} aria-label="TypeGPU custom-rendered scene">
   {#if error}
     <div class="gpu-error" role="status">{error}</div>
   {/if}

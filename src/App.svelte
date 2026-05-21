@@ -1,5 +1,4 @@
 <script lang="ts">
-  import ThreeCanvas from './ThreeCanvas.svelte';
   import TypeGpuCanvas from './TypeGpuCanvas.svelte';
   import { CUBE_COUNT_PRESETS } from './lib/cube-field';
   import {
@@ -11,18 +10,13 @@
     nextHue
   } from './lib/scene-controls';
 
-  type RendererBackend = 'three' | 'typegpu';
   type VectorAxis = 0 | 1 | 2;
   const VECTOR_AXES = [0, 1, 2] as const;
 
-  let backend = $state<RendererBackend>('three');
   let controls = $state(clampSceneControls(DEFAULT_SCENE_CONTROLS));
   let fps = $state(0);
   let color = $derived(formatHueColor(controls.hue));
   let spinLabel = $derived(controls.spinEnabled ? 'Pause' : 'Resume');
-  let sceneTitle = $derived(
-    backend === 'typegpu' ? 'DOM controls, TypeGPU scene' : 'DOM controls, Three scene'
-  );
 
   function shiftHue() {
     controls.hue = nextHue(controls.hue);
@@ -65,16 +59,12 @@
 </script>
 
 <main class="shell">
-  {#if backend === 'typegpu'}
-    <TypeGpuCanvas {controls} onShapeClick={shiftHue} onFps={(value) => (fps = value)} />
-  {:else}
-    <ThreeCanvas {controls} onCubeClick={shiftHue} onFps={(value) => (fps = value)} />
-  {/if}
+  <TypeGpuCanvas {controls} onShapeClick={shiftHue} onFps={(value) => (fps = value)} />
 
   <header class="masthead" aria-label="Renderer status">
     <div>
       <p class="eyebrow">Svelte custom renderer</p>
-      <h1>{sceneTitle}</h1>
+      <h1>DOM controls, TypeGPU scene</h1>
     </div>
     <button class="icon-command" type="button" onclick={reset} aria-label="Reset scene controls">
       Reset
@@ -85,32 +75,6 @@
     <div class="fps-strip" aria-label="Render performance">
       <span>FPS</span>
       <strong>{fps || '...'}</strong>
-    </div>
-
-    <div class="backend-row">
-      <span>Render</span>
-      <div class="segmented-control backend-control" aria-label="Renderer backend">
-        <button
-          type="button"
-          class:active={backend === 'three'}
-          onclick={() => {
-            backend = 'three';
-            fps = 0;
-          }}
-        >
-          Three
-        </button>
-        <button
-          type="button"
-          class:active={backend === 'typegpu'}
-          onclick={() => {
-            backend = 'typegpu';
-            fps = 0;
-          }}
-        >
-          TypeGPU
-        </button>
-      </div>
     </div>
 
     <div class="meter-row">

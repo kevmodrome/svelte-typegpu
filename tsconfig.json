@@ -4,8 +4,7 @@
     "allowJs": true,
     "checkJs": false,
     "moduleResolution": "bundler",
-    "types": ["vite/client"]
+    "types": ["vite/client", "@webgpu/types"]
   },
   "include": ["src/**/*.ts", "src/**/*.svelte", "vite.config.ts"]
 }
-

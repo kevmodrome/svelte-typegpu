@@ -74,7 +74,7 @@ export async function createTypeGpuRoot({
   canvas = document.createElement('canvas'),
   onFps
 }: TypeGpuRootOptions): Promise<TypeGpuRoot> {
-  canvas.className = 'three-root-canvas';
+  canvas.className = 'renderer-root-canvas';
   if (!canvas.parentNode) target.append(canvas);
 
   const gpu = await createTypeGpuRenderer({ canvas, onFps });
