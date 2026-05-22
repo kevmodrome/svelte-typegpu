@@ -21,6 +21,22 @@ import {
 import type { TypeGpuLight } from './types';
 
 describe('TypeGPU lighting data packing', () => {
+  it.each([
+    ['none', TYPEGPU_LIGHT_KIND_NONE],
+    ['ambient', 1],
+    ['hemisphere', 2],
+    ['directional', 3],
+    ['point', 4],
+    ['spot', 5]
+  ] as const)('maps %s lights to numeric id %i', (kind, expected) => {
+    if (kind === 'none') {
+      expect(TYPEGPU_LIGHT_KIND_NONE).toBe(expected);
+      return;
+    }
+
+    expect(TYPEGPU_LIGHT_KIND[kind]).toBe(expected);
+  });
+
   it('packs light count and light records into a mixed u32/f32 ArrayBuffer', () => {
     const buffer = packLightingState([
       light({

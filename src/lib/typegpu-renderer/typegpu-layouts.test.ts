@@ -21,6 +21,17 @@ import {
   MESH_ROTATION_OFFSET,
   MESH_VERTEX_FLOATS
 } from './instance-data';
+import {
+  TYPEGPU_LIGHT_COLOR_OFFSET,
+  TYPEGPU_LIGHT_DIRECTION_OFFSET,
+  TYPEGPU_LIGHT_FLAGS_OFFSET,
+  TYPEGPU_LIGHT_HEADER_BYTES,
+  TYPEGPU_LIGHT_KIND_OFFSET,
+  TYPEGPU_LIGHT_PARAMS_OFFSET,
+  TYPEGPU_LIGHT_POSITION_OFFSET,
+  TYPEGPU_LIGHT_SECONDARY_COLOR_OFFSET,
+  TYPEGPU_LIGHT_SHADOW_INDEX_OFFSET
+} from './lighting-data';
 
 describe('TypeGPU layout schemas', () => {
   it('describes the mesh vertex buffer with a TypeGPU vertex layout', () => {
@@ -85,5 +96,38 @@ describe('TypeGPU layout schemas', () => {
     expect(d.sizeOf(typegpuLightingSchema)).toBe(TYPEGPU_LIGHTING_BYTES);
     expect(lightingBindGroupLayout.index).toBe(1);
     expect(lightingBindGroupLayout.entries.lighting?.uniform).toBe(typegpuLightingSchema);
+  });
+
+  it('keeps lighting packer offsets aligned with TypeGPU light record layout', () => {
+    expect(d.memoryLayoutOf(typegpuLightSchema, (light) => light.kind).offset).toBe(
+      TYPEGPU_LIGHT_KIND_OFFSET
+    );
+    expect(d.memoryLayoutOf(typegpuLightSchema, (light) => light.flags).offset).toBe(
+      TYPEGPU_LIGHT_FLAGS_OFFSET
+    );
+    expect(d.memoryLayoutOf(typegpuLightSchema, (light) => light.shadowIndex).offset).toBe(
+      TYPEGPU_LIGHT_SHADOW_INDEX_OFFSET
+    );
+    expect(d.memoryLayoutOf(typegpuLightSchema, (light) => light.position_range).offset).toBe(
+      TYPEGPU_LIGHT_POSITION_OFFSET
+    );
+    expect(d.memoryLayoutOf(typegpuLightSchema, (light) => light.direction_angle).offset).toBe(
+      TYPEGPU_LIGHT_DIRECTION_OFFSET
+    );
+    expect(d.memoryLayoutOf(typegpuLightSchema, (light) => light.color_intensity).offset).toBe(
+      TYPEGPU_LIGHT_COLOR_OFFSET
+    );
+    expect(d.memoryLayoutOf(typegpuLightSchema, (light) => light.secondary_color).offset).toBe(
+      TYPEGPU_LIGHT_SECONDARY_COLOR_OFFSET
+    );
+    expect(d.memoryLayoutOf(typegpuLightSchema, (light) => light.params).offset).toBe(
+      TYPEGPU_LIGHT_PARAMS_OFFSET
+    );
+  });
+
+  it('keeps lighting packer header aligned with TypeGPU lighting layout', () => {
+    expect(d.memoryLayoutOf(typegpuLightingSchema, (lighting) => lighting.lights).offset).toBe(
+      TYPEGPU_LIGHT_HEADER_BYTES
+    );
   });
 });
