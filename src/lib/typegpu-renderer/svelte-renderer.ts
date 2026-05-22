@@ -96,17 +96,22 @@ function createRuntime(
   gpu: TypeGpuRenderer
 ): RuntimeState {
   let queued = false;
+  let drawBatchesDirty = true;
+  let syncedTreeRevision = -1;
   const sceneCache = createTypeGpuSceneCache();
 
-  function scheduleSync(nextRoot: TypeGpuNode) {
+  function scheduleSync(nextRoot: TypeGpuNode, dirtyNode?: TypeGpuNode) {
     root = nextRoot;
+    drawBatchesDirty ||= invalidatesDrawBatches(root, dirtyNode, syncedTreeRevision);
 
     if (queued) return;
 
     queued = true;
     queueMicrotask(() => {
       queued = false;
-      gpu.setScene(createSceneState(root, sceneCache));
+      gpu.setScene(createSceneState(root, sceneCache, { reuseDrawBatches: !drawBatchesDirty }));
+      syncedTreeRevision = root.treeRevision;
+      drawBatchesDirty = false;
     });
   }
 
@@ -128,4 +133,15 @@ function createRuntime(
       gpu.dispose();
     }
   };
+}
+
+function invalidatesDrawBatches(
+  root: TypeGpuNode,
+  dirtyNode: TypeGpuNode | undefined,
+  syncedTreeRevision: number
+): boolean {
+  if (!dirtyNode) return true;
+  if (root.treeRevision !== syncedTreeRevision) return true;
+
+  return dirtyNode.name !== 'scene' && dirtyNode.name !== 'perspectiveCamera';
 }

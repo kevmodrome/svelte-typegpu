@@ -21,7 +21,7 @@ export interface TypeGpuNode {
 let nextNodeUid = 1;
 
 export interface TypeGpuRuntime {
-  scheduleSync(root: TypeGpuNode): void;
+  scheduleSync(root: TypeGpuNode, dirtyNode?: TypeGpuNode): void;
 }
 
 export interface TypeGpuNodeEvent {
@@ -247,7 +247,7 @@ export function walk(node: TypeGpuNode, visitor: (node: TypeGpuNode) => void): v
 
 function invalidateFrom(node: TypeGpuNode): void {
   const root = findRoot(node);
-  root.runtime?.scheduleSync(root);
+  root.runtime?.scheduleSync(root, node);
 }
 
 function findRoot(node: TypeGpuNode): TypeGpuNode {

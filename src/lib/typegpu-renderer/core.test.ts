@@ -225,6 +225,52 @@ describe('TypeGPU renderer core', () => {
     expect(secondBoxBatch.dirtyRanges).toEqual([]);
   });
 
+  it('can reuse cached draw batches for global scene-only updates', () => {
+    const cache = createTypeGpuSceneCache();
+    const root = createFragment();
+    const scene = createElement('scene');
+    const mesh = createElement('mesh');
+    const geometry = createElement('boxGeometry');
+    const material = createElement('standardMaterial');
+
+    insert(mesh, geometry, null);
+    insert(mesh, material, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+
+    const firstState = createSceneState(root, cache);
+    const readDrawBatches = vi.spyOn(cache.drawBatchCache, 'read');
+
+    setAttribute(scene, 'scale', 1.5);
+    setAttribute(scene, 'animationSpeed', 0.35);
+
+    const secondState = createSceneState(root, cache, { reuseDrawBatches: true });
+
+    expect(readDrawBatches).not.toHaveBeenCalled();
+    expect(secondState.scale).toBe(1.5);
+    expect(secondState.animationSpeed).toBe(0.35);
+    expect(secondState.drawBatches).toHaveLength(firstState.drawBatches.length);
+    expect(secondState.drawBatches[0].instances).toBe(firstState.drawBatches[0].instances);
+    expect(secondState.drawBatches[0].instancesChanged).toBe(false);
+    expect(secondState.drawBatches[0].dirtyRanges).toEqual([]);
+  });
+
+  it('passes the invalidated node to runtime sync scheduling', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const mesh = createElement('mesh');
+    const scheduleSync = vi.fn();
+
+    root.runtime = { scheduleSync };
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+    scheduleSync.mockClear();
+
+    setAttribute(scene, 'scale', 1.5);
+
+    expect(scheduleSync).toHaveBeenLastCalledWith(root, scene);
+  });
+
   it('re-packs only changed mesh nodes when the mesh structure is stable', () => {
     const cache = createTypeGpuSceneCache();
     const root = createFragment();
