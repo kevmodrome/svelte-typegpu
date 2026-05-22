@@ -22,6 +22,17 @@ export function findFirstInteractiveMesh(root: TypeGpuNode, type: string): TypeG
   return findFirst(root, (node) => node.name === 'mesh' && Boolean(node.listeners.get(type)?.size));
 }
 
+export function subtreeHasMeshNode(node: TypeGpuNode | undefined): boolean {
+  if (!node) return false;
+  if (node.name === 'mesh') return true;
+
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    if (subtreeHasMeshNode(child)) return true;
+  }
+
+  return false;
+}
+
 function collectFromNode(
   node: TypeGpuNode,
   context: MeshWalkContext,

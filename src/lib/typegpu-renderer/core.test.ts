@@ -311,6 +311,45 @@ describe('TypeGPU renderer core', () => {
     expect(secondBoxBatch.instancesChanged).toBe(false);
   });
 
+  it('updates light-only group transforms without repacking meshes', () => {
+    const cache = createTypeGpuSceneCache();
+    const root = createFragment();
+    const scene = createElement('scene');
+    const lightGroup = createElement('group');
+    const light = createElement('pointLight');
+    const meshGroup = createElement('group');
+    const mesh = createElement('mesh');
+    const geometry = createElement('boxGeometry');
+
+    setAttribute(light, 'position', [1, 0, 0]);
+    insert(lightGroup, light, null);
+    insert(mesh, geometry, null);
+    insert(meshGroup, mesh, null);
+    insert(scene, lightGroup, null);
+    insert(scene, meshGroup, null);
+    insert(root, scene, null);
+
+    const firstState = createSceneState(root, cache);
+    const readDrawBatches = vi.spyOn(cache.drawBatchCache, 'read');
+    const drawBatchesDirty = invalidatesDrawBatches(root, lightGroup, root.treeRevision);
+    const lightsDirty = invalidatesLights(root, lightGroup, root.treeRevision);
+
+    setAttribute(lightGroup, 'position', [3, 0, 0]);
+    const secondState = createSceneState(root, cache, {
+      reuseDrawBatches: !drawBatchesDirty,
+      reuseLights: !lightsDirty
+    });
+
+    expect(drawBatchesDirty).toBe(false);
+    expect(lightsDirty).toBe(true);
+    expect(readDrawBatches).not.toHaveBeenCalled();
+    expect(secondState.lightsChanged).toBe(true);
+    expect(secondState.lights[0].position).toEqual([4, 0, 0]);
+    expect(secondState.drawBatches[0].instances).toBe(firstState.drawBatches[0].instances);
+    expect(secondState.drawBatches[0].instancesChanged).toBe(false);
+    expect(invalidatesDrawBatches(root, meshGroup, root.treeRevision)).toBe(true);
+  });
+
   it('marks lighting dirty for light changes and parent group transforms', () => {
     const root = createFragment();
     const scene = createElement('scene');

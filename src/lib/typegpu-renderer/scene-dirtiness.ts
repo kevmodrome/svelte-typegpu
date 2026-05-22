@@ -1,4 +1,5 @@
 import { isSupportedLightNode, subtreeHasSupportedLight } from './components/lights';
+import { subtreeHasMeshNode } from './components/mesh';
 import type { TypeGpuNode } from './core';
 
 export function invalidatesDrawBatches(
@@ -8,6 +9,10 @@ export function invalidatesDrawBatches(
 ): boolean {
   if (!dirtyNode) return true;
   if (root.treeRevision !== syncedTreeRevision) return true;
+
+  if (dirtyNode.name === 'group') {
+    return subtreeHasMeshNode(dirtyNode);
+  }
 
   return (
     dirtyNode.name !== 'scene' &&
