@@ -10,9 +10,11 @@ import {
   remove,
   setAttribute
 } from './core';
+import { collectLights } from './components/lights';
 import { collectMeshDrawItems, findFirstInteractiveMesh } from './components/mesh';
 import { readPerspectiveCamera } from './components/perspective-camera';
 import { createSceneState, createTypeGpuSceneCache } from './scene-state';
+import { MAX_TYPEGPU_LIGHTS } from './types';
 
 describe('TypeGPU renderer core', () => {
   it('turns authored mesh nodes into geometry/material draw batches', () => {
@@ -486,6 +488,127 @@ describe('TypeGPU renderer core', () => {
     insert(root, scene, null);
 
     expect(findFirstInteractiveMesh(root, 'click')).toBe(second);
+  });
+
+  it('reads supported light nodes into normalized light records', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const ambient = createElement('ambientLight');
+    const hemi = createElement('hemisphereLight');
+    const directional = createElement('directionalLight');
+    const point = createElement('pointLight');
+    const spot = createElement('spotLight');
+
+    setAttribute(ambient, 'color', [0.2, 0.3, 0.4]);
+    setAttribute(ambient, 'intensity', 0.15);
+    setAttribute(hemi, 'skyColor', [0.5, 0.6, 0.7]);
+    setAttribute(hemi, 'groundColor', [0.1, 0.08, 0.04]);
+    setAttribute(hemi, 'intensity', 0.5);
+    setAttribute(directional, 'lookAt', [0, 0, 0]);
+    setAttribute(directional, 'position', [0, 3, 4]);
+    setAttribute(directional, 'intensity', 2);
+    setAttribute(point, 'position', [2, 3, 1]);
+    setAttribute(point, 'range', 12);
+    setAttribute(point, 'decay', 2);
+    setAttribute(spot, 'position', [0, 5, 4]);
+    setAttribute(spot, 'lookAt', [0, 0, 0]);
+    setAttribute(spot, 'angle', 0.45);
+    setAttribute(spot, 'penumbra', 0.35);
+
+    insert(scene, ambient, null);
+    insert(scene, hemi, null);
+    insert(scene, directional, null);
+    insert(scene, point, null);
+    insert(scene, spot, null);
+    insert(root, scene, null);
+
+    const lights = collectLights(root);
+
+    expect(lights.map((light) => light.kind)).toEqual([
+      'ambient',
+      'hemisphere',
+      'directional',
+      'point',
+      'spot'
+    ]);
+    expect(lights[0]).toMatchObject({
+      color: [0.2, 0.3, 0.4],
+      intensity: 0.15,
+      castsShadow: false,
+      shadowIndex: -1
+    });
+    expect(lights[1]).toMatchObject({
+      color: [0.5, 0.6, 0.7],
+      groundColor: [0.1, 0.08, 0.04],
+      intensity: 0.5
+    });
+    expect(lights[2].direction[0]).toBeCloseTo(0);
+    expect(lights[2].direction[1]).toBeCloseTo(-0.6);
+    expect(lights[2].direction[2]).toBeCloseTo(-0.8);
+    expect(lights[3]).toMatchObject({
+      position: [2, 3, 1],
+      range: 12,
+      decay: 2
+    });
+    expect(lights[4]).toMatchObject({
+      angle: 0.45,
+      penumbra: 0.35
+    });
+  });
+
+  it('applies group transforms to descendant point and spot lights', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const group = createElement('group');
+    const point = createElement('pointLight');
+    const spot = createElement('spotLight');
+
+    setAttribute(group, 'position', [10, 0, 0]);
+    setAttribute(group, 'scale', [2, 3, 4]);
+    setAttribute(point, 'position', [1, 2, 3]);
+    setAttribute(spot, 'position', [2, 0, 0]);
+    setAttribute(spot, 'lookAt', [10, 0, 0]);
+
+    insert(group, point, null);
+    insert(group, spot, null);
+    insert(scene, group, null);
+    insert(root, scene, null);
+
+    const [pointLight, spotLight] = collectLights(root);
+
+    expect(pointLight.position[0]).toBeCloseTo(12);
+    expect(pointLight.position[1]).toBeCloseTo(6);
+    expect(pointLight.position[2]).toBeCloseTo(12);
+    expect(spotLight.position).toEqual([14, 0, 0]);
+    expect(spotLight.direction).toEqual([-1, 0, 0]);
+  });
+
+  it('clamps malformed light props and limits the scene to MAX_TYPEGPU_LIGHTS', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const point = createElement('pointLight');
+
+    setAttribute(point, 'intensity', -3);
+    setAttribute(point, 'range', -5);
+    setAttribute(point, 'angle', Math.PI);
+    setAttribute(point, 'penumbra', 2);
+    insert(scene, point, null);
+
+    for (let index = 0; index < MAX_TYPEGPU_LIGHTS + 4; index += 1) {
+      insert(scene, createElement('ambientLight'), null);
+    }
+
+    insert(root, scene, null);
+
+    const lights = collectLights(root);
+
+    expect(lights).toHaveLength(MAX_TYPEGPU_LIGHTS);
+    expect(lights[0]).toMatchObject({
+      intensity: 0,
+      range: 0,
+      penumbra: 1
+    });
+    expect(lights[0].angle).toBeLessThan(Math.PI / 2);
   });
 });
 

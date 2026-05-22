@@ -34,6 +34,31 @@ export function colorTuple(value: unknown): RgbaTuple {
   return [1, 1, 1, 1];
 }
 
+export function rgbTuple(value: unknown, fallback: Vector3Tuple = [1, 1, 1]): Vector3Tuple {
+  if (Array.isArray(value)) {
+    return [
+      numberArg(value[0], fallback[0]),
+      numberArg(value[1], fallback[1]),
+      numberArg(value[2], fallback[2])
+    ];
+  }
+
+  return fallback;
+}
+
+export function nonNegativeNumberArg(value: unknown, fallback: number): number {
+  return Math.max(0, numberArg(value, fallback));
+}
+
+export function clampedNumberArg(
+  value: unknown,
+  fallback: number,
+  min: number,
+  max: number
+): number {
+  return Math.min(max, Math.max(min, numberArg(value, fallback)));
+}
+
 export function scaleTuple(value: unknown, fallback: Vector3Tuple = [1, 1, 1]): Vector3Tuple {
   const scalar = numberArg(value, Number.NaN);
 

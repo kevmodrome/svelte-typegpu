@@ -1,8 +1,11 @@
 export type Vector3Tuple = [number, number, number];
 export type RgbaTuple = [number, number, number, number];
 
+export const MAX_TYPEGPU_LIGHTS = 32;
+
 export type TypeGpuGeometryKind = 'box' | 'sphere';
 export type TypeGpuMaterialKind = 'standard';
+export type TypeGpuLightKind = 'ambient' | 'hemisphere' | 'directional' | 'point' | 'spot';
 
 export interface TypeGpuCameraSettings {
   position: Vector3Tuple;
@@ -50,6 +53,23 @@ export interface TypeGpuMeshDrawItem {
   transform: TypeGpuTransform;
   phase: number;
   spinSpeed: number;
+}
+
+export interface TypeGpuLight {
+  id: number;
+  revision: number;
+  kind: TypeGpuLightKind;
+  color: Vector3Tuple;
+  intensity: number;
+  position: Vector3Tuple;
+  direction: Vector3Tuple;
+  range: number;
+  decay: number;
+  angle: number;
+  penumbra: number;
+  groundColor: Vector3Tuple;
+  castsShadow: boolean;
+  shadowIndex: number;
 }
 
 export interface TypeGpuDrawBatch {
