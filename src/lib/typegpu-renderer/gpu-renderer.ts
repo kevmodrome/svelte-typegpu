@@ -66,6 +66,13 @@ type TypeGpuMaterialTexture = TgpuTexture & SampledFlag;
 type TypeGpuDepthTexture = TgpuTexture & RenderFlag;
 type TypeGpuMeshPipeline = ReturnType<typeof createMeshPipeline>;
 
+export interface LoadedTextureImage {
+  source: ExternalImageSource | Uint8ClampedArray;
+  width: number;
+  height: number;
+  close(): void;
+}
+
 interface TypeGpuMaterialResource {
   key: string;
   texture: TypeGpuMaterialTexture;
@@ -263,17 +270,11 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   async #loadMaterialTexture(key: string, src: string | null): Promise<void> {
     if (!src) return;
 
-    let bitmap: ImageBitmap | null = null;
+    let image: LoadedTextureImage | null = null;
     let texture: TypeGpuMaterialTexture | null = null;
 
     try {
-      const response = await fetch(src);
-
-      if (!response.ok) {
-        throw new Error(`Failed to load material texture ${src}: ${response.status}`);
-      }
-
-      bitmap = await createImageBitmap(await response.blob());
+      image = await loadTextureImageSource(src);
 
       if (this.#disposed) {
         return;
@@ -281,14 +282,14 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
       const root = this.root;
       texture = root.createTexture({
-        size: [bitmap.width, bitmap.height],
+        size: [image.width, image.height],
         format: 'rgba8unorm',
         dimension: '2d'
       })
         .$usage('sampled')
         .$name(`TypeGPU material texture ${src}`);
 
-      texture.write(bitmap);
+      writeLoadedTexture(texture, image);
 
       if (this.#disposed) {
         texture.destroy();
@@ -323,7 +324,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
         status: 'failed'
       });
     } finally {
-      bitmap?.close();
+      image?.close();
     }
   }
 
@@ -496,6 +497,84 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#uniformData[20] = this.#colorShift * DEGREES_TO_RADIANS;
     this.#uniformBuffer.write(arrayBufferFor(this.#uniformData));
   }
+}
+
+export async function loadTextureImageSource(src: string): Promise<LoadedTextureImage> {
+  const response = await fetch(src);
+
+  if (!response.ok) {
+    throw new Error(`Failed to load material texture ${src}: ${response.status}`);
+  }
+
+  const blob = await response.blob();
+
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bitmap = await createImageBitmap(blob);
+
+      return {
+        source: bitmap,
+        width: bitmap.width,
+        height: bitmap.height,
+        close: () => bitmap.close()
+      };
+    } catch {
+      // Some browsers cannot decode SVG blobs through createImageBitmap, but they can
+      // decode them as HTML images that we rasterize before uploading with TypeGPU.
+    }
+  }
+
+  return loadHtmlTextureImage(blob);
+}
+
+function loadHtmlTextureImage(blob: Blob): Promise<LoadedTextureImage> {
+  const objectUrl = URL.createObjectURL(blob);
+  const image = new Image();
+  image.decoding = 'async';
+  image.src = objectUrl;
+
+  return image
+    .decode()
+    .then(() => ({
+      width: image.naturalWidth || image.width,
+      height: image.naturalHeight || image.height,
+      source: rasterizeImage(image, image.naturalWidth || image.width, image.naturalHeight || image.height),
+      close: () => {
+        URL.revokeObjectURL(objectUrl);
+        image.removeAttribute('src');
+      }
+    }))
+    .catch((error: unknown) => {
+      URL.revokeObjectURL(objectUrl);
+      image.removeAttribute('src');
+      throw error;
+    });
+}
+
+function writeLoadedTexture(texture: TypeGpuMaterialTexture, image: LoadedTextureImage): void {
+  if (ArrayBuffer.isView(image.source)) {
+    texture.write(image.source);
+    return;
+  }
+
+  texture.write(image.source);
+}
+
+function rasterizeImage(image: CanvasImageSource, width: number, height: number): Uint8ClampedArray {
+  const canvas =
+    typeof OffscreenCanvas === 'function'
+      ? new OffscreenCanvas(width, height)
+      : document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+
+  if (!context) {
+    throw new Error('Unable to rasterize material texture.');
+  }
+
+  context.drawImage(image, 0, 0, width, height);
+  return context.getImageData(0, 0, width, height).data;
 }
 
 function beginTypeGpuRenderPass({

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
-import { describe, expect, it } from 'vitest';
-import { SCENE_UNIFORM_FLOATS } from './gpu-renderer';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { loadTextureImageSource, SCENE_UNIFORM_FLOATS } from './gpu-renderer';
 import { MESH_INSTANCE_FLOATS, MESH_ROTATION_OFFSET } from './instance-data';
 
 describe('TypeGPU GPU renderer', () => {
@@ -9,6 +9,11 @@ describe('TypeGPU GPU renderer', () => {
   const pipelineSource = readFileSync('src/lib/typegpu-renderer/typegpu-pipeline.ts', 'utf8');
   const layoutsSource = readFileSync('src/lib/typegpu-renderer/typegpu-layouts.ts', 'utf8');
   const source = [rendererSource, pipelineSource, layoutsSource].join('\n');
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
 
   it('allocates enough floats for the WGSL scene uniform struct alignment', () => {
     expect(SCENE_UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT).toBe(96);
@@ -41,10 +46,69 @@ describe('TypeGPU GPU renderer', () => {
   });
 
   it('cleans up decoded texture assets if material loading fails mid-upload', () => {
-    expect(rendererSource).toContain('let bitmap: ImageBitmap | null = null;');
+    expect(rendererSource).toContain('let image: LoadedTextureImage | null = null;');
     expect(rendererSource).toContain('let texture: TypeGpuMaterialTexture | null = null;');
     expect(rendererSource).toMatch(/catch\s*{\s*texture\?\.destroy\(\);/s);
-    expect(rendererSource).toMatch(/finally\s*{\s*bitmap\?\.close\(\);\s*}/s);
+    expect(rendererSource).toMatch(/finally\s*{\s*image\?\.close\(\);\s*}/s);
+  });
+
+  it('falls back to an HTML image source when createImageBitmap cannot decode a texture blob', async () => {
+    const createImageBitmap = vi.fn(async () => {
+      throw new DOMException('The source image could not be decoded.', 'InvalidStateError');
+    });
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:checker');
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const pixels = new Uint8ClampedArray(64 * 64 * 4);
+    const drawImage = vi.fn();
+    const getImageData = vi.fn(() => ({ data: pixels }));
+    const canvas = {
+      width: 0,
+      height: 0,
+      getContext: vi.fn(() => ({ drawImage, getImageData }))
+    };
+    let createdImage: FakeImage | null = null;
+
+    class FakeImage {
+      decoding = '';
+      naturalWidth = 64;
+      naturalHeight = 64;
+      src = '';
+
+      constructor() {
+        createdImage = this;
+      }
+
+      async decode(): Promise<void> {}
+
+      removeAttribute(name: string): void {
+        if (name === 'src') this.src = '';
+      }
+    }
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('<svg></svg>', { status: 200 }))
+    );
+    vi.stubGlobal('createImageBitmap', createImageBitmap);
+    vi.stubGlobal('Image', FakeImage);
+    vi.stubGlobal('document', { createElement: vi.fn(() => canvas) });
+
+    const image = await loadTextureImageSource('/textures/checker.svg');
+
+    expect(createImageBitmap).toHaveBeenCalledOnce();
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(image.width).toBe(64);
+    expect(image.height).toBe(64);
+    expect(image.source).toBe(pixels);
+    expect(canvas.width).toBe(64);
+    expect(canvas.height).toBe(64);
+    expect(drawImage).toHaveBeenCalledWith(expect.any(FakeImage), 0, 0, 64, 64);
+    expect(getImageData).toHaveBeenCalledWith(0, 0, 64, 64);
+
+    image.close();
+
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:checker');
+    expect(createdImage?.src).toBe('');
   });
 
   it('uses TypeGPU pipeline binding for material draws', () => {
