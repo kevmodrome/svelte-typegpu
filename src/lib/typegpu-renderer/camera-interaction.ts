@@ -205,6 +205,12 @@ export function createCameraInteractionController({
     previousPointerPosition = null;
   };
 
+  const onContextMenu = (event: Event) => {
+    if (activePointerControls?.dragButton === 'secondary') {
+      event.preventDefault();
+    }
+  };
+
   const onTouchStart = (event: Event) => {
     const touchEvent = event as TouchEvent;
     if (!activePointerControls || !orbit) return;
@@ -285,6 +291,7 @@ export function createCameraInteractionController({
   const canvasListeners: ListenerRegistration[] = [
     ['wheel', onWheel, { passive: false }],
     ['mousedown', onMouseDown, { passive: false }],
+    ['contextmenu', onContextMenu, { passive: false }],
     ['touchstart', onTouchStart, { passive: false }],
     ['touchmove', onTouchMove, { passive: false }]
   ];
@@ -383,7 +390,15 @@ function buttonNumber(button: TypeGpuPointerDragButton): number {
 }
 
 function buttonMask(button: TypeGpuPointerDragButton): number {
-  return 1 << buttonNumber(button);
+  switch (button) {
+    case 'middle':
+      return 4;
+    case 'secondary':
+      return 2;
+    case 'primary':
+    default:
+      return 1;
+  }
 }
 
 function hasSameInteractiveCameraState(

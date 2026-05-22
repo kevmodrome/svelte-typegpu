@@ -179,6 +179,7 @@ describe('TypeGPU camera interaction controller', () => {
 
     expect(canvas.listenerCount('wheel')).toBe(1);
     expect(canvas.listenerCount('mousedown')).toBe(1);
+    expect(canvas.listenerCount('contextmenu')).toBe(1);
     expect(canvas.listenerCount('touchstart')).toBe(1);
     expect(canvas.listenerCount('touchmove')).toBe(1);
     expect(windowTarget.listenerCount('mousemove')).toBe(1);
@@ -188,6 +189,7 @@ describe('TypeGPU camera interaction controller', () => {
     expect(windowTarget.listenerCount('touchcancel')).toBe(1);
     expect(canvas.listenerOptions('wheel')).toEqual({ passive: false });
     expect(canvas.listenerOptions('mousedown')).toEqual({ passive: false });
+    expect(canvas.listenerOptions('contextmenu')).toEqual({ passive: false });
     expect(canvas.listenerOptions('touchstart')).toEqual({ passive: false });
     expect(canvas.listenerOptions('touchmove')).toEqual({ passive: false });
     expect(windowTarget.listenerOptions('mousemove')).toEqual({ passive: false });
@@ -204,7 +206,7 @@ describe('TypeGPU camera interaction controller', () => {
     });
 
     controller.reconcile(sceneState());
-    expect(canvas.listenerCount()).toBe(4);
+    expect(canvas.listenerCount()).toBe(5);
     expect(windowTarget.listenerCount()).toBe(5);
 
     controller.reconcile(sceneState({ pointer: null }));
@@ -223,7 +225,7 @@ describe('TypeGPU camera interaction controller', () => {
     });
 
     controller.reconcile(sceneState());
-    expect(canvas.listenerCount()).toBe(4);
+    expect(canvas.listenerCount()).toBe(5);
     expect(windowTarget.listenerCount()).toBe(5);
 
     controller.dispose();
@@ -480,6 +482,89 @@ describe('TypeGPU camera interaction controller', () => {
     expect(renderer.setCamera).toHaveBeenCalledOnce();
     const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
     expect(nextCamera.position[0]).toBeLessThan(0);
+  });
+
+  it('rotates the camera from middle mouse drag', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    controller.reconcile(
+      sceneState({ pointer: { ...pointerControls, dragButton: 'middle' } })
+    );
+    canvas.dispatch<MouseEvent>('mousedown', { button: 1, clientX: 10, clientY: 20 } as Partial<
+      MouseEvent
+    >);
+    windowTarget.dispatch<MouseEvent>('mousemove', {
+      buttons: 4,
+      clientX: 110,
+      clientY: 20
+    } as Partial<MouseEvent>);
+
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+  });
+
+  it('rotates the camera from secondary mouse drag', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    controller.reconcile(
+      sceneState({ pointer: { ...pointerControls, dragButton: 'secondary' } })
+    );
+    canvas.dispatch<MouseEvent>('mousedown', { button: 2, clientX: 10, clientY: 20 } as Partial<
+      MouseEvent
+    >);
+    windowTarget.dispatch<MouseEvent>('mousemove', {
+      buttons: 2,
+      clientX: 110,
+      clientY: 20
+    } as Partial<MouseEvent>);
+
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+  });
+
+  it('prevents the context menu for secondary mouse drag controls only', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer: fakeRenderer(),
+      windowTarget: windowTarget as unknown as Window
+    });
+
+    controller.reconcile(sceneState({ pointer: true }));
+    const primaryContextMenu = canvas.dispatch<MouseEvent>('contextmenu', {
+      preventDefault: vi.fn()
+    } as Partial<MouseEvent>);
+
+    controller.reconcile(
+      sceneState({ pointer: { ...pointerControls, dragButton: 'secondary' } })
+    );
+    const secondaryContextMenu = canvas.dispatch<MouseEvent>('contextmenu', {
+      preventDefault: vi.fn()
+    } as Partial<MouseEvent>);
+
+    expect(primaryContextMenu.preventDefault).not.toHaveBeenCalled();
+    expect(secondaryContextMenu.preventDefault).toHaveBeenCalledOnce();
   });
 
   it('rotates the camera from one-finger touch movement', () => {
