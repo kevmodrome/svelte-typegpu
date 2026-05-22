@@ -286,9 +286,7 @@ export function createCameraInteractionController({
       return;
     }
 
-    dragging = false;
-    previousPointerPosition = null;
-    lastPinchDistance = null;
+    resetGestureState();
   };
 
   const canvasListeners: ListenerRegistration[] = [

@@ -560,6 +560,36 @@ describe('TypeGPU camera interaction controller', () => {
     expect(renderer.setCamera).not.toHaveBeenCalled();
   });
 
+  it('ignores window touchmove after a touch gesture fully ends', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const frames = fakeFrameScheduler();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: frames.requestFrame,
+      cancelFrame: frames.cancelFrame
+    });
+
+    controller.reconcile(sceneState({ pointer: true }));
+    canvas.dispatch<TouchEvent>('touchstart', {
+      touches: [{ clientX: 10, clientY: 20 }]
+    } as unknown as Partial<TouchEvent>);
+    windowTarget.dispatch<TouchEvent>('touchend', {
+      touches: []
+    } as unknown as Partial<TouchEvent>);
+    const touchMove = windowTarget.dispatch<TouchEvent>('touchmove', {
+      touches: [{ clientX: 40, clientY: 20 }],
+      preventDefault: vi.fn()
+    } as unknown as Partial<TouchEvent>);
+
+    expect(touchMove.preventDefault).not.toHaveBeenCalled();
+    expect(frames.requestFrame).not.toHaveBeenCalled();
+    expect(renderer.setCamera).not.toHaveBeenCalled();
+  });
+
   it('ignores touch input when touch controls are disabled', () => {
     const canvas = new FakeEventTarget();
     const windowTarget = new FakeEventTarget();
