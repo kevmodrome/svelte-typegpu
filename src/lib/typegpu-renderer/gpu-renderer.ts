@@ -1,15 +1,14 @@
-import tgpu, { type TgpuRoot } from 'typegpu';
+import tgpu, { d, type TgpuRoot, type TgpuVertexLayout } from 'typegpu';
 import { createFpsMeter } from '../fps-meter';
 import {
-  MESH_INSTANCE_FLOATS,
   MESH_ROUGHNESS_OFFSET,
   MESH_ROTATION_OFFSET,
   MESH_SPIN_OFFSET_OFFSET,
-  MESH_SPIN_SPEED_OFFSET,
-  MESH_VERTEX_FLOATS
+  MESH_SPIN_SPEED_OFFSET
 } from './instance-data';
 import { createViewProjectionMatrix } from './camera-math';
 import { createContinuityTracker } from './continuity';
+import { meshInstanceLayout, meshVertexLayout } from './typegpu-layouts';
 import type {
   TypeGpuCameraSettings,
   TypeGpuDrawBatch,
@@ -31,10 +30,16 @@ const DEFAULT_TYPEGPU_CAMERA: TypeGpuCameraSettings = {
 
 interface TypeGpuBatchBuffers {
   geometryKey: string;
-  instanceBuffer: GPUBuffer | null;
+  instanceBuffer: TypeGpuVertexBuffer | null;
   instanceBufferByteLength: number;
   instanceCount: number;
-  vertexBuffer: GPUBuffer;
+  vertexBuffer: TypeGpuVertexBuffer;
+}
+
+interface TypeGpuVertexBuffer {
+  buffer: GPUBuffer;
+  write(data: ArrayBuffer, options?: { startOffset?: number; endOffset?: number }): void;
+  destroy(): void;
 }
 
 export interface TypeGpuRenderer {
@@ -175,10 +180,10 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       instanceBufferByteLength: 0,
       instanceCount: 0,
       vertexBuffer: createAndUploadBuffer(
-        this.root.device,
+        this.root,
+        meshVertexLayout,
         `TypeGPU ${batch.geometry.key} vertices`,
-        batch.geometry.vertexData,
-        GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+        batch.geometry.vertexData
       )
     };
 
@@ -211,22 +216,20 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     batch: TypeGpuDrawBatch,
     dirtyRanges: TypeGpuInstanceDirtyRange[]
   ): void {
-    const device = this.root.device;
-    const byteLength = Math.max(4, instanceData.byteLength);
+    const byteLength = Math.max(meshInstanceLayout.stride, instanceData.byteLength);
 
     if (!buffers.instanceBuffer || buffers.instanceBufferByteLength !== byteLength) {
       buffers.instanceBuffer?.destroy();
       buffers.instanceBuffer = createAndUploadBuffer(
-        device,
+        this.root,
+        meshInstanceLayout,
         `TypeGPU ${batch.key} instances`,
-        instanceData,
-        GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+        instanceData
       );
       buffers.instanceBufferByteLength = byteLength;
     } else {
       for (const range of dirtyRanges) {
         writeFloat32BufferRange(
-          device,
           buffers.instanceBuffer,
           instanceData,
           range.start * batch.floatsPerInstance,
@@ -299,8 +302,8 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
         const buffers = this.#batchBuffers.get(batch.key);
         if (!buffers?.instanceBuffer || buffers.instanceCount === 0) continue;
 
-        pass.setVertexBuffer(0, buffers.vertexBuffer);
-        pass.setVertexBuffer(1, buffers.instanceBuffer);
+        pass.setVertexBuffer(0, buffers.vertexBuffer.buffer);
+        pass.setVertexBuffer(1, buffers.instanceBuffer.buffer);
         pass.draw(batch.geometry.vertexCount, buffers.instanceCount);
       }
 
@@ -348,18 +351,20 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 }
 
 function createAndUploadBuffer(
-  device: GPUDevice,
+  root: TgpuRoot,
+  layout: TgpuVertexLayout,
   label: string,
-  data: Float32Array,
-  usage: GPUBufferUsageFlags
-): GPUBuffer {
-  const buffer = device.createBuffer({
-    label,
-    size: Math.max(4, data.byteLength),
-    usage
-  });
+  data: Float32Array
+): TypeGpuVertexBuffer {
+  const byteLength = Math.max(layout.stride, data.byteLength);
+  const buffer = root
+    .createBuffer(d.arrayOf(d.f32, byteLength / Float32Array.BYTES_PER_ELEMENT))
+    .$usage('vertex')
+    .$name(label);
 
-  writeFloat32Buffer(device, buffer, data);
+  if (data.length > 0) {
+    buffer.write(arrayBufferFor(data));
+  }
 
   return buffer;
 }
@@ -369,8 +374,7 @@ function writeFloat32Buffer(device: GPUDevice, buffer: GPUBuffer, data: Float32A
 }
 
 function writeFloat32BufferRange(
-  device: GPUDevice,
-  buffer: GPUBuffer,
+  buffer: TypeGpuVertexBuffer,
   data: Float32Array,
   startFloat: number,
   floatCount: number
@@ -378,14 +382,20 @@ function writeFloat32BufferRange(
   if (floatCount === 0) return;
 
   const startByte = startFloat * Float32Array.BYTES_PER_ELEMENT;
+  const endByte = startByte + floatCount * Float32Array.BYTES_PER_ELEMENT;
 
-  device.queue.writeBuffer(
-    buffer,
-    startByte,
-    data.buffer as ArrayBuffer,
-    data.byteOffset + startByte,
-    floatCount * Float32Array.BYTES_PER_ELEMENT
-  );
+  buffer.write(arrayBufferFor(data.subarray(startFloat, startFloat + floatCount)), {
+    startOffset: startByte,
+    endOffset: endByte
+  });
+}
+
+function arrayBufferFor(data: Float32Array): ArrayBuffer {
+  if (data.byteOffset === 0 && data.byteLength === data.buffer.byteLength) {
+    return data.buffer as ArrayBuffer;
+  }
+
+  return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
 }
 
 interface PipelineResources {
@@ -514,36 +524,7 @@ function createPipeline(
     vertex: {
       module: shader,
       entryPoint: 'vertex_main',
-      buffers: [
-        {
-          arrayStride: MESH_VERTEX_FLOATS * Float32Array.BYTES_PER_ELEMENT,
-          attributes: [
-            { shaderLocation: 0, offset: 0, format: 'float32x3' },
-            { shaderLocation: 1, offset: 3 * Float32Array.BYTES_PER_ELEMENT, format: 'float32x3' }
-          ]
-        },
-        {
-          arrayStride: MESH_INSTANCE_FLOATS * Float32Array.BYTES_PER_ELEMENT,
-          stepMode: 'instance',
-          attributes: [
-            { shaderLocation: 2, offset: 0, format: 'float32x3' },
-            { shaderLocation: 3, offset: 3 * Float32Array.BYTES_PER_ELEMENT, format: 'float32' },
-            { shaderLocation: 4, offset: 4 * Float32Array.BYTES_PER_ELEMENT, format: 'float32x4' },
-            { shaderLocation: 5, offset: 8 * Float32Array.BYTES_PER_ELEMENT, format: 'float32x4' },
-            { shaderLocation: 6, offset: 12 * Float32Array.BYTES_PER_ELEMENT, format: 'float32' },
-            {
-              shaderLocation: 7,
-              offset: MESH_ROTATION_OFFSET * Float32Array.BYTES_PER_ELEMENT,
-              format: 'float32x3'
-            },
-            {
-              shaderLocation: 8,
-              offset: MESH_ROUGHNESS_OFFSET * Float32Array.BYTES_PER_ELEMENT,
-              format: 'float32x2'
-            }
-          ]
-        }
-      ]
+      buffers: [meshVertexLayout.vertexLayout, meshInstanceLayout.vertexLayout]
     },
     fragment: {
       module: shader,
