@@ -72,13 +72,29 @@ const BOX_FACES: Array<{
   }
 ];
 
+const FACE_UVS: Array<[number, number]> = [
+  [0, 0],
+  [1, 0],
+  [1, 1],
+  [0, 1]
+];
+
 export function createBoxVertexData(): Float32Array {
   const data: number[] = [];
 
   for (const face of BOX_FACES) {
     const [a, b, c, d] = face.corners;
-    for (const vertex of [a, b, c, a, c, d]) {
-      data.push(...vertex, ...face.normal);
+    const [uvA, uvB, uvC, uvD] = FACE_UVS;
+
+    for (const [vertex, uv] of [
+      [a, uvA],
+      [b, uvB],
+      [c, uvC],
+      [a, uvA],
+      [c, uvC],
+      [d, uvD]
+    ] as const) {
+      data.push(...vertex, ...face.normal, ...uv);
     }
   }
 

@@ -1,6 +1,6 @@
 import type { TypeGpuMeshDrawItem } from './types';
 
-export const MESH_VERTEX_FLOATS = 6;
+export const MESH_VERTEX_FLOATS = 8;
 export const MESH_INSTANCE_FLOATS = 20;
 export const MESH_SPIN_SPEED_OFFSET = 11;
 export const MESH_SPIN_OFFSET_OFFSET = 12;

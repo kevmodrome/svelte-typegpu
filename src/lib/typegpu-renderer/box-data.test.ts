@@ -9,12 +9,13 @@ import {
 } from './box-data';
 
 describe('TypeGPU box data', () => {
-  it('creates indexed box triangle vertices with positions and normals', () => {
+  it('creates indexed box triangle vertices with positions, normals, and UVs', () => {
     const vertices = createBoxVertexData();
 
     expect(vertices).toBeInstanceOf(Float32Array);
     expect(vertices.length).toBe(36 * BOX_VERTEX_FLOATS);
-    expect(Array.from(vertices.slice(0, 6))).toEqual([-0.5, -0.5, 0.5, 0, 0, 1]);
+    expect(Array.from(vertices.slice(0, 8))).toEqual([-0.5, -0.5, 0.5, 0, 0, 1, 0, 0]);
+    expect(Array.from(vertices.slice(8, 16))).toEqual([0.5, -0.5, 0.5, 0, 0, 1, 1, 0]);
   });
 
   it('aliases the packed mesh instance fields used by box batches', () => {
