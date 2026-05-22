@@ -20,15 +20,15 @@ export function createSphereVertexData(
       const phiB = ((segment + 1) / segments) * Math.PI * 2;
 
       if (ring > 0) {
-        pushSphereVertex(data, thetaA, phiA);
-        pushSphereVertex(data, thetaB, phiA);
-        pushSphereVertex(data, thetaA, phiB);
+        pushSphereVertex(data, thetaA, phiA, segment / segments, ring / rings);
+        pushSphereVertex(data, thetaB, phiA, segment / segments, (ring + 1) / rings);
+        pushSphereVertex(data, thetaA, phiB, (segment + 1) / segments, ring / rings);
       }
 
       if (ring < rings - 1) {
-        pushSphereVertex(data, thetaB, phiA);
-        pushSphereVertex(data, thetaB, phiB);
-        pushSphereVertex(data, thetaA, phiB);
+        pushSphereVertex(data, thetaB, phiA, segment / segments, (ring + 1) / rings);
+        pushSphereVertex(data, thetaB, phiB, (segment + 1) / segments, (ring + 1) / rings);
+        pushSphereVertex(data, thetaA, phiB, (segment + 1) / segments, ring / rings);
       }
     }
   }
@@ -45,11 +45,11 @@ export function createSphereGeometryData(): TypeGpuGeometryData {
   };
 }
 
-function pushSphereVertex(data: number[], theta: number, phi: number): void {
+function pushSphereVertex(data: number[], theta: number, phi: number, u: number, v: number): void {
   const sinTheta = Math.sin(theta);
   const x = sinTheta * Math.cos(phi);
   const y = Math.cos(theta);
   const z = sinTheta * Math.sin(phi);
 
-  data.push(x * 0.5, y * 0.5, z * 0.5, x, y, z);
+  data.push(x * 0.5, y * 0.5, z * 0.5, x, y, z, u, v);
 }

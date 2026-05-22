@@ -27,5 +27,10 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     expect(wgsl).toContain('var spot_falloff = step(outer_cos, spot_cos);');
     expect(wgsl).toContain('if (penumbra > 0.0001)');
     expect(wgsl).toContain('spot_falloff = smoothstep(outer_cos, inner_cos, spot_cos);');
+    expect(wgsl).toContain('@group(2)');
+    expect(wgsl).toContain('baseColorTexture');
+    expect(wgsl).toContain('baseColorSampler');
+    expect(wgsl).toContain('textureSample');
+    expect(wgsl).toContain('in.uv');
   });
 });

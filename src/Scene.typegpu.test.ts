@@ -33,6 +33,7 @@ describe('TypeGPU demo scene authoring API', () => {
     expect(source).toContain('colorShift={controls.hue}');
     expect(source).toContain('demoColorForIndex(index, 0)');
     expect(source).toContain('demoColorForIndex(index + 7, 28)');
+    expect(source).toContain('/textures/checker.svg');
     expect(source).not.toContain('demoColorForIndex(index, controls.hue)');
     expect(source).not.toContain('demoColorForIndex(index + 7, controls.hue + 28)');
   });
@@ -77,6 +78,7 @@ describe('TypeGPU demo scene authoring API', () => {
     const spotLight = onlyNamed(scene, 'spotLight');
     const meshes = namedChildren(scene, 'mesh');
     const boxMesh = meshes[0];
+    const laterBoxMesh = meshes[1];
     const sphereMesh = meshes[5];
 
     expect(scene.attributes).toMatchObject({
@@ -119,6 +121,7 @@ describe('TypeGPU demo scene authoring API', () => {
 
     const boxGeometry = onlyNamed(boxMesh, 'boxGeometry');
     const boxMaterial = onlyNamed(boxMesh, 'standardMaterial');
+    const laterBoxMaterial = onlyNamed(laterBoxMesh, 'standardMaterial');
     const sphereGeometry = onlyNamed(sphereMesh, 'sphereGeometry');
     const sphereMaterial = onlyNamed(sphereMesh, 'standardMaterial');
 
@@ -128,9 +131,11 @@ describe('TypeGPU demo scene authoring API', () => {
       depth: 0.348
     });
     expect(boxMaterial.attributes).toMatchObject({
+      map: '/textures/checker.svg',
       roughness: 0.62,
       metalness: 0.04
     });
+    expect(laterBoxMaterial.attributes.map).toBeUndefined();
     expectNumberAttribute(sphereGeometry, 'radius', 0.138);
     expectNumberAttribute(sphereGeometry, 'width', 0.276);
     expectNumberAttribute(sphereGeometry, 'height', 0.276);

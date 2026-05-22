@@ -2,6 +2,7 @@ import tgpu, { d, type TgpuRenderPipeline, type TgpuRoot } from 'typegpu';
 import { DEPTH_FORMAT } from './render-constants';
 import {
   lightingBindGroupLayout,
+  materialBindGroupLayout,
   meshInstanceLayout,
   meshVertexLayout,
   sceneBindGroupLayout
@@ -56,20 +57,22 @@ const meshVertexMain = tgpu
     in: {
       position: d.vec3f,
       normal: d.vec3f,
+      uv: d.vec2f,
       instance_position: d.vec3f,
       phase: d.f32,
       color: d.vec4f,
       shape: d.vec4f,
       spin_offset: d.f32,
       world_rotation: d.vec3f,
-      material: d.vec2f
+      material: d.vec4f
     },
     out: {
       position: d.builtin.position,
       color: d.location(0, d.vec4f),
       normal: d.location(1, d.vec3f),
-      material: d.location(2, d.vec2f),
-      world_position: d.location(3, d.vec3f)
+      material: d.location(2, d.vec4f),
+      world_position: d.location(3, d.vec3f),
+      uv: d.location(4, d.vec2f)
     }
   })/* wgsl */ `{
     let spin = (
@@ -98,6 +101,7 @@ const meshVertexMain = tgpu
     output.normal = rotated_normal;
     output.material = material;
     output.world_position = world_position;
+    output.uv = uv;
 
     return output;
   }`
@@ -227,15 +231,21 @@ export const meshFragmentMain = tgpu
     in: {
       color: d.location(0, d.vec4f),
       normal: d.location(1, d.vec3f),
-      material: d.location(2, d.vec2f),
-      world_position: d.location(3, d.vec3f)
+      material: d.location(2, d.vec4f),
+      world_position: d.location(3, d.vec3f),
+      uv: d.location(4, d.vec2f)
     },
     out: d.vec4f
   })/* wgsl */ `{
     let roughness = clamp(in.material.x, 0.0, 1.0);
     let metalness = clamp(in.material.y, 0.0, 1.0);
+    let texel = textureSample(
+      materialBindGroupLayout.$.baseColorTexture,
+      materialBindGroupLayout.$.baseColorSampler,
+      in.uv
+    );
     let shifted_color = rotate_hue(
-      in.color.rgb,
+      (texel * in.color).rgb,
       sceneBindGroupLayout.$.scene.color_transform.x
     );
     let lit_color = evaluate_lighting(
@@ -246,21 +256,23 @@ export const meshFragmentMain = tgpu
       metalness
     );
 
-    return vec4(lit_color, in.color.a);
+    return vec4(lit_color, texel.a * in.color.a * in.material.z);
   }`
   .$uses({
     evaluate_lighting: evaluateLighting,
     rotate_hue: rotateHue,
-    sceneBindGroupLayout
+    sceneBindGroupLayout,
+    materialBindGroupLayout
   })
   .$name('meshFragmentMain');
 
-export function createMeshPipeline(root: TgpuRoot, format: GPUTextureFormat): TgpuRenderPipeline {
+export function createMeshPipeline(root: TgpuRoot, format: GPUTextureFormat): TgpuRenderPipeline<d.v4f> {
   return root
     .createRenderPipeline({
       attribs: {
         position: meshVertexLayout.attrib.position,
         normal: meshVertexLayout.attrib.normal,
+        uv: meshVertexLayout.attrib.uv,
         instance_position: meshInstanceLayout.attrib.position,
         phase: meshInstanceLayout.attrib.phase,
         color: meshInstanceLayout.attrib.color,

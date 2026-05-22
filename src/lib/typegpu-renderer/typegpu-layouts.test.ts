@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { d } from 'typegpu';
 import {
   lightingBindGroupLayout,
+  materialBindGroupLayout,
   MAX_TYPEGPU_LIGHTS,
   TYPEGPU_LIGHT_RECORD_BYTES,
   TYPEGPU_LIGHTING_BYTES,
@@ -47,6 +48,11 @@ describe('TypeGPU layout schemas', () => {
           shaderLocation: 1,
           offset: 3 * Float32Array.BYTES_PER_ELEMENT,
           format: 'float32x3'
+        },
+        {
+          shaderLocation: 2,
+          offset: 6 * Float32Array.BYTES_PER_ELEMENT,
+          format: 'float32x2'
         }
       ]
     });
@@ -62,20 +68,20 @@ describe('TypeGPU layout schemas', () => {
       arrayStride: MESH_INSTANCE_FLOATS * Float32Array.BYTES_PER_ELEMENT,
       stepMode: 'instance',
       attributes: [
-        { shaderLocation: 2, offset: 0, format: 'float32x3' },
-        { shaderLocation: 3, offset: 3 * Float32Array.BYTES_PER_ELEMENT, format: 'float32' },
-        { shaderLocation: 4, offset: 4 * Float32Array.BYTES_PER_ELEMENT, format: 'float32x4' },
-        { shaderLocation: 5, offset: 8 * Float32Array.BYTES_PER_ELEMENT, format: 'float32x4' },
-        { shaderLocation: 6, offset: 12 * Float32Array.BYTES_PER_ELEMENT, format: 'float32' },
+        { shaderLocation: 3, offset: 0, format: 'float32x3' },
+        { shaderLocation: 4, offset: 3 * Float32Array.BYTES_PER_ELEMENT, format: 'float32' },
+        { shaderLocation: 5, offset: 4 * Float32Array.BYTES_PER_ELEMENT, format: 'float32x4' },
+        { shaderLocation: 6, offset: 8 * Float32Array.BYTES_PER_ELEMENT, format: 'float32x4' },
+        { shaderLocation: 7, offset: 12 * Float32Array.BYTES_PER_ELEMENT, format: 'float32' },
         {
-          shaderLocation: 7,
+          shaderLocation: 8,
           offset: MESH_ROTATION_OFFSET * Float32Array.BYTES_PER_ELEMENT,
           format: 'float32x3'
         },
         {
-          shaderLocation: 8,
+          shaderLocation: 9,
           offset: MESH_ROUGHNESS_OFFSET * Float32Array.BYTES_PER_ELEMENT,
-          format: 'float32x2'
+          format: 'float32x4'
         }
       ]
     });
@@ -129,5 +135,11 @@ describe('TypeGPU layout schemas', () => {
     expect(d.memoryLayoutOf(typegpuLightingSchema, (lighting) => lighting.lights).offset).toBe(
       TYPEGPU_LIGHT_HEADER_BYTES
     );
+  });
+
+  it('describes the standard material texture bind group with current TypeGPU texture APIs', () => {
+    expect(materialBindGroupLayout.index).toBe(2);
+    expect(materialBindGroupLayout.entries.baseColorTexture?.texture.type).toBe('texture_2d');
+    expect(materialBindGroupLayout.entries.baseColorSampler?.sampler).toBe('filtering');
   });
 });

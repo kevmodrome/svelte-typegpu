@@ -1,6 +1,7 @@
 import { createBoxGeometryData } from './box-data';
 import { collectMeshDrawItems } from './components/mesh';
 import { MESH_INSTANCE_FLOATS, packMeshInstance } from './instance-data';
+import { textureKeyForMaterial } from './materials';
 import { createSphereGeometryData } from './sphere-data';
 import type {
   TypeGpuDrawBatch,
@@ -12,7 +13,7 @@ import type {
 } from './types';
 import type { TypeGpuNode } from './core';
 
-type DrawBatchKey = `mesh:${TypeGpuGeometryKind}:${TypeGpuMaterialKind}`;
+type DrawBatchKey = `mesh:${TypeGpuGeometryKind}:${TypeGpuMaterialKind}:${string}`;
 
 interface DrawBatchState {
   itemIds: number[];
@@ -38,13 +39,24 @@ export function createDrawBatchCache(): TypeGpuDrawBatchCache {
 
       for (const [key, items] of groupedItems) {
         const geometryKind = items[0].geometry.kind;
-        const batch = readDrawBatch(key, geometries[geometryKind], items, previousBatches.get(key));
+        const material = items[0].material;
+        const batch = readDrawBatch(
+          key,
+          geometries[geometryKind],
+          material,
+          items,
+          previousBatches.get(key)
+        );
         previousBatches.set(key, {
           itemIds: batch.instanceIds,
           itemRevisions: items.map((item) => item.revision),
           instances: batch.instances
         });
         batches.push(batch);
+      }
+
+      for (const key of previousBatches.keys()) {
+        if (!groupedItems.has(key)) previousBatches.delete(key);
       }
 
       return batches;
@@ -56,7 +68,7 @@ function groupMeshDrawItems(items: TypeGpuMeshDrawItem[]): Map<DrawBatchKey, Typ
   const groupedItems = new Map<DrawBatchKey, TypeGpuMeshDrawItem[]>();
 
   for (const item of items) {
-    const key: DrawBatchKey = `mesh:${item.geometry.kind}:${item.material.kind}`;
+    const key: DrawBatchKey = `mesh:${item.geometry.kind}:${item.material.kind}:${textureKeyForMaterial(item.material)}`;
     const group = groupedItems.get(key);
 
     if (group) {
@@ -72,6 +84,7 @@ function groupMeshDrawItems(items: TypeGpuMeshDrawItem[]): Map<DrawBatchKey, Typ
 function readDrawBatch(
   key: DrawBatchKey,
   geometry: TypeGpuGeometryData,
+  material: TypeGpuMeshDrawItem['material'],
   items: TypeGpuMeshDrawItem[],
   previous: DrawBatchState | undefined
 ): TypeGpuDrawBatch {
@@ -87,6 +100,7 @@ function readDrawBatch(
     return {
       key,
       geometry,
+      material,
       floatsPerInstance: MESH_INSTANCE_FLOATS,
       instances,
       instanceIds: itemIds,
@@ -108,6 +122,7 @@ function readDrawBatch(
   return {
     key,
     geometry,
+    material,
     floatsPerInstance: MESH_INSTANCE_FLOATS,
     instances: previous.instances,
     instanceIds: previous.itemIds,

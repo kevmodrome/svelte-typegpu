@@ -5,17 +5,18 @@ export { MAX_TYPEGPU_LIGHTS };
 
 export const typegpuMeshVertexSchema = d.unstruct({
   position: d.location(0, d.float32x3),
-  normal: d.location(1, d.float32x3)
+  normal: d.location(1, d.float32x3),
+  uv: d.location(2, d.float32x2)
 });
 
 export const typegpuMeshInstanceSchema = d.unstruct({
-  position: d.location(2, d.float32x3),
-  phase: d.location(3, d.float32),
-  color: d.location(4, d.float32x4),
-  shape: d.location(5, d.float32x4),
-  spinOffset: d.location(6, d.float32),
-  worldRotation: d.location(7, d.float32x3),
-  material: d.location(8, d.size(16, d.float32x2))
+  position: d.location(3, d.float32x3),
+  phase: d.location(4, d.float32),
+  color: d.location(5, d.float32x4),
+  shape: d.location(6, d.float32x4),
+  spinOffset: d.location(7, d.float32),
+  worldRotation: d.location(8, d.float32x3),
+  material: d.location(9, d.float32x4)
 });
 
 export const meshVertexLayout = tgpu.vertexLayout(d.disarrayOf(typegpuMeshVertexSchema), 'vertex');
@@ -76,3 +77,11 @@ export const lightingBindGroupLayout = tgpu
   })
   .$idx(1)
   .$name('TypeGPU lighting bind group layout');
+
+export const materialBindGroupLayout = tgpu
+  .bindGroupLayout({
+    baseColorTexture: { texture: d.texture2d(), visibility: ['fragment'] },
+    baseColorSampler: { sampler: 'filtering', visibility: ['fragment'] }
+  })
+  .$idx(2)
+  .$name('TypeGPU standard material bind group layout');

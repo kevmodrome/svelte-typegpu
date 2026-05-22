@@ -1,12 +1,14 @@
 import type { TypeGpuMeshDrawItem } from './types';
 
-export const MESH_VERTEX_FLOATS = 6;
+export const MESH_VERTEX_FLOATS = 8;
 export const MESH_INSTANCE_FLOATS = 20;
 export const MESH_SPIN_SPEED_OFFSET = 11;
 export const MESH_SPIN_OFFSET_OFFSET = 12;
 export const MESH_ROTATION_OFFSET = 13;
-export const MESH_ROUGHNESS_OFFSET = 16;
-export const MESH_METALNESS_OFFSET = 17;
+export const MESH_MATERIAL_PARAMS_OFFSET = 16;
+export const MESH_ROUGHNESS_OFFSET = MESH_MATERIAL_PARAMS_OFFSET;
+export const MESH_METALNESS_OFFSET = MESH_MATERIAL_PARAMS_OFFSET + 1;
+export const MESH_OPACITY_OFFSET = MESH_MATERIAL_PARAMS_OFFSET + 2;
 
 export function packMeshInstance(
   item: TypeGpuMeshDrawItem,
@@ -31,6 +33,6 @@ export function packMeshInstance(
   instances[offset + MESH_ROTATION_OFFSET + 2] = item.transform.rotation[2];
   instances[offset + MESH_ROUGHNESS_OFFSET] = item.material.roughness;
   instances[offset + MESH_METALNESS_OFFSET] = item.material.metalness;
-  instances[offset + 18] = 0;
-  instances[offset + 19] = 0;
+  instances[offset + MESH_OPACITY_OFFSET] = item.material.opacity;
+  instances[offset + MESH_MATERIAL_PARAMS_OFFSET + 3] = 0;
 }

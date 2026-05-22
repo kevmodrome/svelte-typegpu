@@ -22,6 +22,7 @@ describe('TypeGPU component renderer integration', () => {
         width: 4,
         height: 5,
         depth: 6,
+        map: '/textures/checker.svg',
         spinSpeed: 1.4,
         onclick: vi.fn()
       }
@@ -47,6 +48,7 @@ describe('TypeGPU component renderer integration', () => {
     });
     expect(material.name).toBe('standardMaterial');
     expect(material.attributes.color).toBe(color);
+    expect(material.attributes.map).toBe('/textures/checker.svg');
   });
 
   it('renders Sphere as a mesh with sphere geometry and standard material', () => {
@@ -62,6 +64,7 @@ describe('TypeGPU component renderer integration', () => {
         phase: 0.75,
         color,
         radius: 2,
+        map: '/textures/checker.svg',
         spinSpeed: 0.8,
         onclick: vi.fn()
       }
@@ -85,6 +88,7 @@ describe('TypeGPU component renderer integration', () => {
     });
     expect(material.name).toBe('standardMaterial');
     expect(material.attributes.color).toBe(color);
+    expect(material.attributes.map).toBe('/textures/checker.svg');
   });
 });
 

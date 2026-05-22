@@ -5,6 +5,7 @@
     position: Vector3Tuple;
     phase?: number;
     color?: RgbaTuple;
+    map?: string;
     width?: number;
     height?: number;
     depth?: number;
@@ -16,6 +17,7 @@
     position,
     phase = 0,
     color = [1, 1, 1, 1],
+    map = undefined,
     width = 1,
     height = 1,
     depth = 1,
@@ -41,5 +43,5 @@
   onkeydown={activateFromKeyboard}
 >
   <boxGeometry {width} {height} {depth}></boxGeometry>
-  <standardMaterial {color}></standardMaterial>
+  <standardMaterial {color} {map}></standardMaterial>
 </mesh>

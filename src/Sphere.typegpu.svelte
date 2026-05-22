@@ -5,6 +5,7 @@
     position: Vector3Tuple;
     phase?: number;
     color?: RgbaTuple;
+    map?: string;
     radius?: number;
     width?: number;
     height?: number;
@@ -17,6 +18,7 @@
     position,
     phase = 0,
     color = [1, 1, 1, 1],
+    map = undefined,
     radius = 0.5,
     width = radius * 2,
     height = radius * 2,
@@ -43,5 +45,5 @@
   onkeydown={activateFromKeyboard}
 >
   <sphereGeometry {radius} {width} {height} {depth}></sphereGeometry>
-  <standardMaterial {color}></standardMaterial>
+  <standardMaterial {color} {map}></standardMaterial>
 </mesh>

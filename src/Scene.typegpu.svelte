@@ -13,6 +13,7 @@
   let frame = $derived(sceneCameraForCount(controls.cubeCount));
   let baseSize = $derived(frame.cubeSize);
   let animationSpeed = $derived(controls.spinEnabled ? controls.spinSpeed : 0);
+  const checkerTexture = '/textures/checker.svg';
   const spinFactors = [0.35, 0.55, 0.8, 1, 1.25, 1.55, 1.85];
 
   function boxWidth(index: number) {
@@ -25,6 +26,10 @@
 
   function boxDepth(index: number) {
     return baseSize * (index % 13 === 0 ? 1.45 : 1);
+  }
+
+  function boxTextureMap(index: number) {
+    return index % 17 === 0 ? checkerTexture : undefined;
   }
 
   function isRoundShape(index: number) {
@@ -131,6 +136,7 @@
         ></boxGeometry>
         <standardMaterial
           color={demoColorForIndex(index, 0)}
+          map={boxTextureMap(index)}
           roughness={0.62}
           metalness={0.04}
         ></standardMaterial>
