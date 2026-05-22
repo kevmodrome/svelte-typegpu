@@ -185,6 +185,7 @@ describe('TypeGPU camera interaction controller', () => {
     expect(windowTarget.listenerCount('mouseup')).toBe(1);
     expect(windowTarget.listenerCount('touchmove')).toBe(1);
     expect(windowTarget.listenerCount('touchend')).toBe(1);
+    expect(windowTarget.listenerCount('touchcancel')).toBe(1);
     expect(canvas.listenerOptions('wheel')).toEqual({ passive: false });
     expect(canvas.listenerOptions('mousedown')).toEqual({ passive: false });
     expect(canvas.listenerOptions('touchstart')).toEqual({ passive: false });
@@ -204,7 +205,7 @@ describe('TypeGPU camera interaction controller', () => {
 
     controller.reconcile(sceneState());
     expect(canvas.listenerCount()).toBe(4);
-    expect(windowTarget.listenerCount()).toBe(4);
+    expect(windowTarget.listenerCount()).toBe(5);
 
     controller.reconcile(sceneState({ pointer: null }));
 
@@ -223,7 +224,7 @@ describe('TypeGPU camera interaction controller', () => {
 
     controller.reconcile(sceneState());
     expect(canvas.listenerCount()).toBe(4);
-    expect(windowTarget.listenerCount()).toBe(4);
+    expect(windowTarget.listenerCount()).toBe(5);
 
     controller.dispose();
 
@@ -409,10 +410,46 @@ describe('TypeGPU camera interaction controller', () => {
       MouseEvent
     >);
     controller.reconcile(secondScene);
-    windowTarget.dispatch<MouseEvent>('mousemove', { clientX: 110, clientY: 20 } as Partial<
+    windowTarget.dispatch<MouseEvent>('mousemove', {
+      buttons: 1,
+      clientX: 110,
+      clientY: 20
+    } as Partial<MouseEvent>);
+
+    expect(renderer.setCamera).not.toHaveBeenCalled();
+  });
+
+  it('stops mouse drag if the button is no longer pressed', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    controller.reconcile(sceneState({ pointer: true }));
+    canvas.dispatch<MouseEvent>('mousedown', { button: 0, clientX: 10, clientY: 20 } as Partial<
       MouseEvent
     >);
+    const releasedMove = windowTarget.dispatch<MouseEvent>('mousemove', {
+      buttons: 0,
+      clientX: 110,
+      clientY: 20,
+      preventDefault: vi.fn()
+    } as Partial<MouseEvent>);
+    windowTarget.dispatch<MouseEvent>('mousemove', {
+      buttons: 1,
+      clientX: 130,
+      clientY: 20
+    } as Partial<MouseEvent>);
 
+    expect(releasedMove.preventDefault).not.toHaveBeenCalled();
     expect(renderer.setCamera).not.toHaveBeenCalled();
   });
 
@@ -434,9 +471,11 @@ describe('TypeGPU camera interaction controller', () => {
     canvas.dispatch<MouseEvent>('mousedown', { button: 0, clientX: 10, clientY: 20 } as Partial<
       MouseEvent
     >);
-    windowTarget.dispatch<MouseEvent>('mousemove', { clientX: 110, clientY: 20 } as Partial<
-      MouseEvent
-    >);
+    windowTarget.dispatch<MouseEvent>('mousemove', {
+      buttons: 1,
+      clientX: 110,
+      clientY: 20
+    } as Partial<MouseEvent>);
 
     expect(renderer.setCamera).toHaveBeenCalledOnce();
     const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
@@ -618,6 +657,36 @@ describe('TypeGPU camera interaction controller', () => {
       touches: [{ clientX: 10, clientY: 20 }]
     } as unknown as Partial<TouchEvent>);
     windowTarget.dispatch<TouchEvent>('touchend', {
+      touches: []
+    } as unknown as Partial<TouchEvent>);
+    const touchMove = windowTarget.dispatch<TouchEvent>('touchmove', {
+      touches: [{ clientX: 40, clientY: 20 }],
+      preventDefault: vi.fn()
+    } as unknown as Partial<TouchEvent>);
+
+    expect(touchMove.preventDefault).not.toHaveBeenCalled();
+    expect(frames.requestFrame).not.toHaveBeenCalled();
+    expect(renderer.setCamera).not.toHaveBeenCalled();
+  });
+
+  it('clears touch gesture state on touchcancel', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const frames = fakeFrameScheduler();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: frames.requestFrame,
+      cancelFrame: frames.cancelFrame
+    });
+
+    controller.reconcile(sceneState({ pointer: true }));
+    canvas.dispatch<TouchEvent>('touchstart', {
+      touches: [{ clientX: 10, clientY: 20 }]
+    } as unknown as Partial<TouchEvent>);
+    windowTarget.dispatch<TouchEvent>('touchcancel', {
       touches: []
     } as unknown as Partial<TouchEvent>);
     const touchMove = windowTarget.dispatch<TouchEvent>('touchmove', {

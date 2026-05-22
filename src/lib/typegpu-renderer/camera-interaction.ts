@@ -173,6 +173,12 @@ export function createCameraInteractionController({
       return;
     }
 
+    if ((mouseEvent.buttons & buttonMask(activePointerControls.dragButton)) === 0) {
+      dragging = false;
+      previousPointerPosition = null;
+      return;
+    }
+
     mouseEvent.preventDefault();
     const dx = mouseEvent.clientX - previousPointerPosition.x;
     const dy = mouseEvent.clientY - previousPointerPosition.y;
@@ -286,7 +292,8 @@ export function createCameraInteractionController({
     ['mousemove', onMouseMove, { passive: false }],
     ['mouseup', onMouseUp],
     ['touchmove', onTouchMove, { passive: false }],
-    ['touchend', onTouchEnd]
+    ['touchend', onTouchEnd],
+    ['touchcancel', onTouchEnd]
   ];
 
   function attach(): void {
@@ -373,6 +380,10 @@ function buttonNumber(button: TypeGpuPointerDragButton): number {
     default:
       return 0;
   }
+}
+
+function buttonMask(button: TypeGpuPointerDragButton): number {
+  return 1 << buttonNumber(button);
 }
 
 function hasSameInteractiveCameraState(
