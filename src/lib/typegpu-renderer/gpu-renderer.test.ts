@@ -5,6 +5,10 @@ import { MESH_INSTANCE_FLOATS, MESH_ROTATION_OFFSET } from './instance-data';
 
 describe('TypeGPU GPU renderer', () => {
   const rendererSource = readFileSync('src/lib/typegpu-renderer/gpu-renderer.ts', 'utf8');
+  const svelteRendererSource = readFileSync(
+    'src/lib/typegpu-renderer/svelte-renderer.ts',
+    'utf8'
+  );
   const pipelineSource = readFileSync('src/lib/typegpu-renderer/typegpu-pipeline.ts', 'utf8');
   const layoutsSource = readFileSync('src/lib/typegpu-renderer/typegpu-layouts.ts', 'utf8');
   const source = [rendererSource, pipelineSource, layoutsSource].join('\n');
@@ -51,5 +55,15 @@ describe('TypeGPU GPU renderer', () => {
     expect(rendererSource).toContain('pass.setBindGroup(1, this.#rawLightingBindGroup)');
     expect(source).not.toContain('device.createBindGroup');
     expect(source).not.toContain('device.createRenderPipeline');
+  });
+
+  it('loads renderer runtime source for lighting dirtiness assertions', () => {
+    expect(svelteRendererSource).toContain('reuseLights: !lightsDirty');
+  });
+
+  it('treats lighting changes as buffer writes separate from mesh uploads', () => {
+    expect(rendererSource).toContain('if (scene.lightsChanged)');
+    expect(rendererSource).toContain('this.#lightingBuffer.write(packLightingState(scene.lights))');
+    expect(rendererSource).not.toContain('packMeshInstance(scene.lights');
   });
 });

@@ -285,6 +285,32 @@ describe('TypeGPU renderer core', () => {
     expect(secondState.lightsChanged).toBe(false);
   });
 
+  it('propagates light attribute updates through scene state without repacking meshes', () => {
+    const cache = createTypeGpuSceneCache();
+    const root = createFragment();
+    const scene = createElement('scene');
+    const light = createElement('pointLight');
+    const mesh = createElement('mesh');
+    const geometry = createElement('boxGeometry');
+
+    setAttribute(light, 'intensity', 1);
+    insert(mesh, geometry, null);
+    insert(scene, mesh, null);
+    insert(scene, light, null);
+    insert(root, scene, null);
+
+    const firstState = createSceneState(root, cache);
+    const firstBoxBatch = drawBatch(firstState, 'mesh:box:standard');
+    setAttribute(light, 'intensity', 4);
+    const secondState = createSceneState(root, cache, { reuseDrawBatches: true });
+    const secondBoxBatch = drawBatch(secondState, 'mesh:box:standard');
+
+    expect(secondState.lightsChanged).toBe(true);
+    expect(secondState.lights[0].intensity).toBe(4);
+    expect(secondBoxBatch.instances).toBe(firstBoxBatch.instances);
+    expect(secondBoxBatch.instancesChanged).toBe(false);
+  });
+
   it('marks lighting dirty for light changes and parent group transforms', () => {
     const root = createFragment();
     const scene = createElement('scene');
@@ -317,6 +343,22 @@ describe('TypeGPU renderer core', () => {
     setAttribute(scene, 'scale', 1.5);
 
     expect(scheduleSync).toHaveBeenLastCalledWith(root, scene);
+  });
+
+  it('passes updated light nodes to runtime sync scheduling', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const light = createElement('pointLight');
+    const scheduleSync = vi.fn();
+
+    root.runtime = { scheduleSync };
+    insert(scene, light, null);
+    insert(root, scene, null);
+    scheduleSync.mockClear();
+
+    setAttribute(light, 'position', [2, 3, 4]);
+
+    expect(scheduleSync).toHaveBeenLastCalledWith(root, light);
   });
 
   it('re-packs only changed mesh nodes when the mesh structure is stable', () => {
