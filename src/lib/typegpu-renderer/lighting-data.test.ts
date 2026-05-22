@@ -1,6 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { TYPEGPU_LIGHT_RECORD_BYTES } from './typegpu-layouts';
-import { packLightingState, TYPEGPU_LIGHT_KIND } from './lighting-data';
+import {
+  MAX_TYPEGPU_LIGHTS,
+  TYPEGPU_LIGHTING_BYTES,
+  TYPEGPU_LIGHT_RECORD_BYTES
+} from './typegpu-layouts';
+import {
+  packLightingState,
+  TYPEGPU_LIGHT_COLOR_OFFSET,
+  TYPEGPU_LIGHT_DIRECTION_OFFSET,
+  TYPEGPU_LIGHT_FLAGS_OFFSET,
+  TYPEGPU_LIGHT_HEADER_BYTES,
+  TYPEGPU_LIGHT_KIND,
+  TYPEGPU_LIGHT_KIND_NONE,
+  TYPEGPU_LIGHT_KIND_OFFSET,
+  TYPEGPU_LIGHT_PARAMS_OFFSET,
+  TYPEGPU_LIGHT_POSITION_OFFSET,
+  TYPEGPU_LIGHT_SECONDARY_COLOR_OFFSET,
+  TYPEGPU_LIGHT_SHADOW_INDEX_OFFSET
+} from './lighting-data';
 import type { TypeGpuLight } from './types';
 
 describe('TypeGPU lighting data packing', () => {
@@ -9,11 +26,15 @@ describe('TypeGPU lighting data packing', () => {
       light({
         kind: 'point',
         position: [2, 3, 4],
+        direction: [0.25, -0.5, -1],
         color: [1, 0.5, 0.25],
         intensity: 6,
         range: 12,
         decay: 2,
-        penumbra: 0.25
+        angle: Math.PI / 4,
+        penumbra: 0.25,
+        castsShadow: true,
+        shadowIndex: 3
       }),
       light({
         kind: 'hemisphere',
@@ -23,26 +44,60 @@ describe('TypeGPU lighting data packing', () => {
       })
     ]);
     const view = new DataView(buffer);
-    const firstOffset = 16;
+    const f32 = Float32Array.BYTES_PER_ELEMENT;
+    const firstOffset = TYPEGPU_LIGHT_HEADER_BYTES;
     const secondOffset = firstOffset + TYPEGPU_LIGHT_RECORD_BYTES;
+    const thirdOffset = secondOffset + TYPEGPU_LIGHT_RECORD_BYTES;
 
+    expect(buffer.byteLength).toBe(TYPEGPU_LIGHTING_BYTES);
     expect(view.getUint32(0, true)).toBe(2);
-    expect(view.getUint32(firstOffset, true)).toBe(TYPEGPU_LIGHT_KIND.point);
-    expect(view.getFloat32(firstOffset + 16, true)).toBeCloseTo(2);
-    expect(view.getFloat32(firstOffset + 20, true)).toBeCloseTo(3);
-    expect(view.getFloat32(firstOffset + 24, true)).toBeCloseTo(4);
-    expect(view.getFloat32(firstOffset + 28, true)).toBeCloseTo(12);
-    expect(view.getFloat32(firstOffset + 48, true)).toBeCloseTo(1);
-    expect(view.getFloat32(firstOffset + 52, true)).toBeCloseTo(0.5);
-    expect(view.getFloat32(firstOffset + 56, true)).toBeCloseTo(0.25);
-    expect(view.getFloat32(firstOffset + 60, true)).toBeCloseTo(6);
-    expect(view.getFloat32(firstOffset + 80, true)).toBeCloseTo(2);
-    expect(view.getFloat32(firstOffset + 84, true)).toBeCloseTo(0.25);
+    expect(view.getUint32(firstOffset + TYPEGPU_LIGHT_KIND_OFFSET, true)).toBe(
+      TYPEGPU_LIGHT_KIND.point
+    );
+    expect(view.getUint32(firstOffset + TYPEGPU_LIGHT_FLAGS_OFFSET, true)).toBe(1);
+    expect(view.getUint32(firstOffset + TYPEGPU_LIGHT_SHADOW_INDEX_OFFSET, true)).toBe(3);
+    expect(view.getFloat32(firstOffset + TYPEGPU_LIGHT_POSITION_OFFSET, true)).toBeCloseTo(2);
+    expect(view.getFloat32(firstOffset + TYPEGPU_LIGHT_POSITION_OFFSET + f32, true)).toBeCloseTo(3);
+    expect(view.getFloat32(firstOffset + TYPEGPU_LIGHT_POSITION_OFFSET + 2 * f32, true)).toBeCloseTo(4);
+    expect(view.getFloat32(firstOffset + TYPEGPU_LIGHT_POSITION_OFFSET + 3 * f32, true)).toBeCloseTo(12);
+    expect(view.getFloat32(firstOffset + TYPEGPU_LIGHT_DIRECTION_OFFSET, true)).toBeCloseTo(0.25);
+    expect(view.getFloat32(firstOffset + TYPEGPU_LIGHT_DIRECTION_OFFSET + f32, true)).toBeCloseTo(-0.5);
+    expect(view.getFloat32(firstOffset + TYPEGPU_LIGHT_DIRECTION_OFFSET + 2 * f32, true)).toBeCloseTo(-1);
+    expect(view.getFloat32(firstOffset + TYPEGPU_LIGHT_DIRECTION_OFFSET + 3 * f32, true)).toBeCloseTo(
+      Math.PI / 4
+    );
+    expect(view.getFloat32(firstOffset + TYPEGPU_LIGHT_COLOR_OFFSET, true)).toBeCloseTo(1);
+    expect(view.getFloat32(firstOffset + TYPEGPU_LIGHT_COLOR_OFFSET + f32, true)).toBeCloseTo(0.5);
+    expect(view.getFloat32(firstOffset + TYPEGPU_LIGHT_COLOR_OFFSET + 2 * f32, true)).toBeCloseTo(0.25);
+    expect(view.getFloat32(firstOffset + TYPEGPU_LIGHT_COLOR_OFFSET + 3 * f32, true)).toBeCloseTo(6);
+    expect(view.getFloat32(firstOffset + TYPEGPU_LIGHT_PARAMS_OFFSET, true)).toBeCloseTo(2);
+    expect(view.getFloat32(firstOffset + TYPEGPU_LIGHT_PARAMS_OFFSET + f32, true)).toBeCloseTo(0.25);
 
-    expect(view.getUint32(secondOffset, true)).toBe(TYPEGPU_LIGHT_KIND.hemisphere);
-    expect(view.getFloat32(secondOffset + 64, true)).toBeCloseTo(0.1);
-    expect(view.getFloat32(secondOffset + 68, true)).toBeCloseTo(0.08);
-    expect(view.getFloat32(secondOffset + 72, true)).toBeCloseTo(0.04);
+    expect(view.getUint32(secondOffset + TYPEGPU_LIGHT_KIND_OFFSET, true)).toBe(
+      TYPEGPU_LIGHT_KIND.hemisphere
+    );
+    expect(view.getFloat32(secondOffset + TYPEGPU_LIGHT_SECONDARY_COLOR_OFFSET, true)).toBeCloseTo(
+      0.1
+    );
+    expect(
+      view.getFloat32(secondOffset + TYPEGPU_LIGHT_SECONDARY_COLOR_OFFSET + f32, true)
+    ).toBeCloseTo(0.08);
+    expect(
+      view.getFloat32(secondOffset + TYPEGPU_LIGHT_SECONDARY_COLOR_OFFSET + 2 * f32, true)
+    ).toBeCloseTo(0.04);
+    expect(view.getUint32(thirdOffset + TYPEGPU_LIGHT_KIND_OFFSET, true)).toBe(
+      TYPEGPU_LIGHT_KIND_NONE
+    );
+  });
+
+  it('caps packed light count to the TypeGPU lighting capacity', () => {
+    const lights = Array.from({ length: MAX_TYPEGPU_LIGHTS + 1 }, (_, index) =>
+      light({ id: index + 1 })
+    );
+    const buffer = packLightingState(lights);
+    const view = new DataView(buffer);
+
+    expect(view.getUint32(0, true)).toBe(MAX_TYPEGPU_LIGHTS);
   });
 });
 

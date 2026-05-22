@@ -5,6 +5,18 @@ import {
   TYPEGPU_LIGHT_RECORD_BYTES
 } from './typegpu-layouts';
 
+export const TYPEGPU_LIGHT_KIND_NONE = 0;
+export const TYPEGPU_LIGHT_HEADER_BYTES = 16;
+export const TYPEGPU_LIGHT_KIND_OFFSET = 0;
+export const TYPEGPU_LIGHT_FLAGS_OFFSET = 4;
+export const TYPEGPU_LIGHT_SHADOW_INDEX_OFFSET = 8;
+export const TYPEGPU_LIGHT_RESERVED0_OFFSET = 12;
+export const TYPEGPU_LIGHT_POSITION_OFFSET = 16;
+export const TYPEGPU_LIGHT_DIRECTION_OFFSET = 32;
+export const TYPEGPU_LIGHT_COLOR_OFFSET = 48;
+export const TYPEGPU_LIGHT_SECONDARY_COLOR_OFFSET = 64;
+export const TYPEGPU_LIGHT_PARAMS_OFFSET = 80;
+
 export const TYPEGPU_LIGHT_KIND: Record<TypeGpuLightKind, number> = {
   ambient: 1,
   hemisphere: 2,
@@ -12,8 +24,6 @@ export const TYPEGPU_LIGHT_KIND: Record<TypeGpuLightKind, number> = {
   point: 4,
   spot: 5
 };
-
-const HEADER_BYTES = 16;
 
 export function packLightingState(lights: TypeGpuLight[]): ArrayBuffer {
   const buffer = new ArrayBuffer(TYPEGPU_LIGHTING_BYTES);
@@ -23,30 +33,55 @@ export function packLightingState(lights: TypeGpuLight[]): ArrayBuffer {
   view.setUint32(0, count, true);
 
   for (let index = 0; index < count; index += 1) {
-    writeLight(view, HEADER_BYTES + index * TYPEGPU_LIGHT_RECORD_BYTES, lights[index]);
+    writeLight(view, TYPEGPU_LIGHT_HEADER_BYTES + index * TYPEGPU_LIGHT_RECORD_BYTES, lights[index]);
   }
 
   return buffer;
 }
 
 function writeLight(view: DataView, offset: number, light: TypeGpuLight): void {
-  view.setUint32(offset, TYPEGPU_LIGHT_KIND[light.kind], true);
-  view.setUint32(offset + 4, light.castsShadow ? 1 : 0, true);
-  view.setUint32(offset + 8, Math.max(0, light.shadowIndex), true);
-  view.setUint32(offset + 12, 0, true);
+  view.setUint32(offset + TYPEGPU_LIGHT_KIND_OFFSET, TYPEGPU_LIGHT_KIND[light.kind], true);
+  view.setUint32(offset + TYPEGPU_LIGHT_FLAGS_OFFSET, light.castsShadow ? 1 : 0, true);
+  view.setUint32(
+    offset + TYPEGPU_LIGHT_SHADOW_INDEX_OFFSET,
+    Math.max(0, light.shadowIndex),
+    true
+  );
+  view.setUint32(offset + TYPEGPU_LIGHT_RESERVED0_OFFSET, 0, true);
 
-  writeVec4(view, offset + 16, light.position[0], light.position[1], light.position[2], light.range);
-  writeVec4(view, offset + 32, light.direction[0], light.direction[1], light.direction[2], light.angle);
-  writeVec4(view, offset + 48, light.color[0], light.color[1], light.color[2], light.intensity);
   writeVec4(
     view,
-    offset + 64,
+    offset + TYPEGPU_LIGHT_POSITION_OFFSET,
+    light.position[0],
+    light.position[1],
+    light.position[2],
+    light.range
+  );
+  writeVec4(
+    view,
+    offset + TYPEGPU_LIGHT_DIRECTION_OFFSET,
+    light.direction[0],
+    light.direction[1],
+    light.direction[2],
+    light.angle
+  );
+  writeVec4(
+    view,
+    offset + TYPEGPU_LIGHT_COLOR_OFFSET,
+    light.color[0],
+    light.color[1],
+    light.color[2],
+    light.intensity
+  );
+  writeVec4(
+    view,
+    offset + TYPEGPU_LIGHT_SECONDARY_COLOR_OFFSET,
     light.groundColor[0],
     light.groundColor[1],
     light.groundColor[2],
     0
   );
-  writeVec4(view, offset + 80, light.decay, light.penumbra, 0, 0);
+  writeVec4(view, offset + TYPEGPU_LIGHT_PARAMS_OFFSET, light.decay, light.penumbra, 0, 0);
 }
 
 function writeVec4(
