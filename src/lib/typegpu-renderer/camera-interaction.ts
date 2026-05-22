@@ -18,6 +18,7 @@ import type {
 type RequestFrame = (callback: FrameRequestCallback) => number;
 type CancelFrame = (handle: number) => void;
 type ListenerTarget = Pick<Window, 'addEventListener' | 'removeEventListener'>;
+type ListenerRegistration = [string, EventListener, AddEventListenerOptions?];
 type TypeGpuCameraRenderer = Pick<TypeGpuRenderer, 'setCamera'>;
 
 const defaultRequestFrame: RequestFrame = (callback) => {
@@ -111,6 +112,17 @@ export function createCameraInteractionController({
     if (framePending) {
       frame = nextFrame;
     }
+  };
+
+  const cancelPendingCameraUpdate = () => {
+    if (framePending && frame !== null) {
+      cancelFrame(frame);
+    }
+
+    frame = null;
+    framePending = false;
+    nextCamera = null;
+    lastEvent = undefined;
   };
 
   const onWheel = (event: Event) => {
@@ -256,45 +268,38 @@ export function createCameraInteractionController({
     lastPinchDistance = null;
   };
 
-  const canvasListeners: [string, EventListener][] = [
-    ['wheel', onWheel],
+  const canvasListeners: ListenerRegistration[] = [
+    ['wheel', onWheel, { passive: false }],
     ['mousedown', onMouseDown],
-    ['touchstart', onTouchStart],
-    ['touchmove', onTouchMove]
+    ['touchstart', onTouchStart, { passive: false }],
+    ['touchmove', onTouchMove, { passive: false }]
   ];
-  const windowListeners: [string, EventListener][] = [
+  const windowListeners: ListenerRegistration[] = [
     ['mousemove', onMouseMove],
     ['mouseup', onMouseUp],
-    ['touchmove', onTouchMove],
+    ['touchmove', onTouchMove, { passive: false }],
     ['touchend', onTouchEnd]
   ];
 
   function attach(): void {
     if (attached) return;
 
-    for (const [type, listener] of canvasListeners) {
-      canvas.addEventListener(type, listener);
+    for (const [type, listener, options] of canvasListeners) {
+      canvas.addEventListener(type, listener, options);
     }
 
-    for (const [type, listener] of windowListeners) {
-      windowTarget.addEventListener(type, listener);
+    for (const [type, listener, options] of windowListeners) {
+      windowTarget.addEventListener(type, listener, options);
     }
 
     attached = true;
   }
 
   function detach(): void {
-    if (framePending && frame !== null) {
-      cancelFrame(frame);
-    }
-
-    frame = null;
-    framePending = false;
+    cancelPendingCameraUpdate();
     activeScene = null;
     activePointerControls = null;
     orbit = null;
-    nextCamera = null;
-    lastEvent = undefined;
     dragging = false;
     previousPointerPosition = null;
     lastPinchDistance = null;
@@ -322,6 +327,10 @@ export function createCameraInteractionController({
         cameraController?.kind === 'orbit' &&
         cameraController.pointer !== null
       ) {
+        if (activeScene !== null && activeScene !== nextScene) {
+          cancelPendingCameraUpdate();
+        }
+
         activeScene = nextScene;
         activePointerControls = cameraController.pointer;
         orbit = deriveOrbitState(nextScene.camera, {

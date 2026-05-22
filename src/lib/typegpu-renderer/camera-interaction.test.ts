@@ -9,8 +9,13 @@ import { addEventListener, createElement, type TypeGpuNode } from './core';
 
 class FakeEventTarget {
   #listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
+  #listenerOptions = new Map<string, AddEventListenerOptions | boolean | undefined>();
 
-  addEventListener(type: string, listener: EventListenerOrEventListenerObject | null): void {
+  addEventListener(
+    type: string,
+    listener: EventListenerOrEventListenerObject | null,
+    options?: AddEventListenerOptions | boolean
+  ): void {
     if (!listener) return;
 
     let listeners = this.#listeners.get(type);
@@ -20,6 +25,7 @@ class FakeEventTarget {
     }
 
     listeners.add(listener);
+    this.#listenerOptions.set(type, options);
   }
 
   removeEventListener(type: string, listener: EventListenerOrEventListenerObject | null): void {
@@ -47,6 +53,10 @@ class FakeEventTarget {
     if (type) return this.#listeners.get(type)?.size ?? 0;
 
     return [...this.#listeners.values()].reduce((count, listeners) => count + listeners.size, 0);
+  }
+
+  listenerOptions(type: string): AddEventListenerOptions | boolean | undefined {
+    return this.#listenerOptions.get(type);
   }
 }
 
@@ -175,6 +185,10 @@ describe('TypeGPU camera interaction controller', () => {
     expect(windowTarget.listenerCount('mouseup')).toBe(1);
     expect(windowTarget.listenerCount('touchmove')).toBe(1);
     expect(windowTarget.listenerCount('touchend')).toBe(1);
+    expect(canvas.listenerOptions('wheel')).toEqual({ passive: false });
+    expect(canvas.listenerOptions('touchstart')).toEqual({ passive: false });
+    expect(canvas.listenerOptions('touchmove')).toEqual({ passive: false });
+    expect(windowTarget.listenerOptions('touchmove')).toEqual({ passive: false });
   });
 
   it('removes listeners when reconciled with no active pointer controls', () => {
@@ -261,12 +275,13 @@ describe('TypeGPU camera interaction controller', () => {
     });
 
     controller.reconcile(sceneState({ cameraNode, pointer: true }));
-    canvas.dispatch<WheelEvent>('wheel', {
+    const wheelEvent = canvas.dispatch<WheelEvent>('wheel', {
       deltaY: 60,
       deltaMode: 0,
       preventDefault: vi.fn()
     } as Partial<WheelEvent>);
 
+    expect(wheelEvent.preventDefault).toHaveBeenCalledOnce();
     expect(renderer.setCamera).toHaveBeenCalledOnce();
     const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
     expect(nextCamera.lookAt).toEqual(camera.lookAt);
@@ -278,6 +293,7 @@ describe('TypeGPU camera interaction controller', () => {
     expect(cameraChanges).toHaveLength(1);
     expect(cameraChanges[0]).toMatchObject({
       type: 'camerachange',
+      originalEvent: wheelEvent,
       detail: {
         camera: nextCamera,
         orbit: {
@@ -287,6 +303,38 @@ describe('TypeGPU camera interaction controller', () => {
         }
       }
     });
+  });
+
+  it('cancels pending camera work when replaced by another active scene', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const frames = fakeFrameScheduler();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: frames.requestFrame,
+      cancelFrame: frames.cancelFrame
+    });
+    const firstScene = sceneState();
+    const secondScene = sceneState({
+      cameraNode: createElement('camera'),
+      pointer: true
+    });
+    secondScene.camera = {
+      ...camera,
+      position: [0, 0, 12],
+      far: 250
+    };
+
+    controller.reconcile(firstScene);
+    canvas.dispatch<WheelEvent>('wheel', { deltaY: 60, deltaMode: 0 } as Partial<WheelEvent>);
+    controller.reconcile(secondScene);
+    frames.runFrame();
+
+    expect(frames.cancelFrame).toHaveBeenCalledWith(42);
+    expect(renderer.setCamera).not.toHaveBeenCalled();
   });
 
   it('rotates the camera from primary mouse drag', () => {
@@ -344,6 +392,34 @@ describe('TypeGPU camera interaction controller', () => {
     frames.runFrame();
 
     expect(renderer.setCamera).toHaveBeenCalledWith(scene.camera);
+  });
+
+  it('ignores touch input when touch controls are disabled', () => {
+    const canvas = new FakeEventTarget();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const frames = fakeFrameScheduler();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: frames.requestFrame,
+      cancelFrame: frames.cancelFrame
+    });
+    const disabledTouch = { ...pointerControls, touch: 'none' as const };
+
+    controller.reconcile(sceneState({ pointer: disabledTouch }));
+    const touchStart = canvas.dispatch<TouchEvent>('touchstart', {
+      touches: [{ clientX: 10, clientY: 20 }]
+    } as unknown as Partial<TouchEvent>);
+    const touchMove = windowTarget.dispatch<TouchEvent>('touchmove', {
+      touches: [{ clientX: 30, clientY: 20 }]
+    } as unknown as Partial<TouchEvent>);
+
+    expect(touchStart.preventDefault).not.toHaveBeenCalled();
+    expect(touchMove.preventDefault).not.toHaveBeenCalled();
+    expect(frames.requestFrame).not.toHaveBeenCalled();
+    expect(renderer.setCamera).not.toHaveBeenCalled();
   });
 
   it('cancels a pending camera update when controls become inactive', () => {
