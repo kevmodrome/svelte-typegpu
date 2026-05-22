@@ -341,7 +341,7 @@ describe('TypeGPU camera interaction controller', () => {
     expect(renderer.setCamera).not.toHaveBeenCalled();
   });
 
-  it('keeps pending orbit state when the same scene reconciles before frame flush', () => {
+  it('keeps pending orbit state when the same camera reconciles before frame flush', () => {
     const canvas = fakeCanvas();
     const windowTarget = new FakeEventTarget();
     const renderer = fakeRenderer();
@@ -363,7 +363,13 @@ describe('TypeGPU camera interaction controller', () => {
 
     controller.reconcile(scene);
     canvas.dispatch<WheelEvent>('wheel', { deltaY: 60, deltaMode: 0 } as Partial<WheelEvent>);
-    controller.reconcile(scene);
+    controller.reconcile({
+      ...scene,
+      cameraController: {
+        ...scene.cameraController!,
+        pointer: { ...pointerControls }
+      }
+    });
     frames.runFrame();
 
     expect(renderer.setCamera).toHaveBeenCalledOnce();

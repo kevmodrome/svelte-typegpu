@@ -333,16 +333,17 @@ export function createCameraInteractionController({
         cameraController?.kind === 'orbit' &&
         cameraController.pointer !== null
       ) {
-        const sameScene = activeScene === nextScene;
+        const sameCameraState =
+          activeScene !== null && hasSameInteractiveCameraState(activeScene, nextScene);
 
-        if (activeScene !== null && !sameScene) {
+        if (activeScene !== null && !sameCameraState) {
           cancelPendingCameraUpdate();
           resetGestureState();
         }
 
         activeScene = nextScene;
         activePointerControls = cameraController.pointer;
-        if (!sameScene || !framePending) {
+        if (!sameCameraState || !framePending) {
           orbit = deriveOrbitState(nextScene.camera, {
             minDistance: cameraController.minDistance,
             maxDistance: cameraController.maxDistance
@@ -372,6 +373,58 @@ function buttonNumber(button: TypeGpuPointerDragButton): number {
     default:
       return 0;
   }
+}
+
+function hasSameInteractiveCameraState(
+  previous: TypeGpuSceneState,
+  next: TypeGpuSceneState
+): boolean {
+  return (
+    previous.cameraNode === next.cameraNode &&
+    cameraSettingsEqual(previous.camera, next.camera) &&
+    previous.cameraController?.kind === 'orbit' &&
+    next.cameraController?.kind === 'orbit' &&
+    previous.cameraController.minDistance === next.cameraController.minDistance &&
+    previous.cameraController.maxDistance === next.cameraController.maxDistance &&
+    previous.cameraController.invert === next.cameraController.invert &&
+    pointerControlsEqual(previous.cameraController.pointer, next.cameraController.pointer)
+  );
+}
+
+function cameraSettingsEqual(
+  previous: TypeGpuCameraSettings,
+  next: TypeGpuCameraSettings
+): boolean {
+  return (
+    vectorEqual(previous.position, next.position) &&
+    vectorEqual(previous.lookAt, next.lookAt) &&
+    previous.fov === next.fov &&
+    previous.near === next.near &&
+    previous.far === next.far
+  );
+}
+
+function pointerControlsEqual(
+  previous: TypeGpuPointerControls | null,
+  next: TypeGpuPointerControls | null
+): boolean {
+  if (previous === next) return true;
+  if (!previous || !next) return false;
+
+  return (
+    previous.dragButton === next.dragButton &&
+    previous.rotateSpeed === next.rotateSpeed &&
+    previous.wheel === next.wheel &&
+    previous.zoomSpeed === next.zoomSpeed &&
+    previous.touch === next.touch
+  );
+}
+
+function vectorEqual(
+  previous: [number, number, number],
+  next: [number, number, number]
+): boolean {
+  return previous[0] === next[0] && previous[1] === next[1] && previous[2] === next[2];
 }
 
 function allowsTouchOrbit(pointer: TypeGpuPointerControls): boolean {
