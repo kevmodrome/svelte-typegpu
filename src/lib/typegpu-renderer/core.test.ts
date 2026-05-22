@@ -194,7 +194,7 @@ describe('TypeGPU renderer core', () => {
     expect(secondBoxBatch.dirtyRanges).toEqual([]);
   });
 
-  it('keeps global scene scale and animation speed out of mesh instance data', () => {
+  it('keeps global scene settings out of mesh instance data', () => {
     const cache = createTypeGpuSceneCache();
     const root = createFragment();
     const scene = createElement('scene');
@@ -204,6 +204,7 @@ describe('TypeGPU renderer core', () => {
 
     setAttribute(scene, 'scale', 1);
     setAttribute(scene, 'animationSpeed', 1);
+    setAttribute(scene, 'colorShift', 0);
     setAttribute(mesh, 'position', [1, 2, 3]);
     setAttribute(geometry, 'width', 2);
     insert(mesh, geometry, null);
@@ -215,11 +216,13 @@ describe('TypeGPU renderer core', () => {
     const firstBoxBatch = drawBatch(firstState, 'mesh:box:standard');
     setAttribute(scene, 'scale', 1.5);
     setAttribute(scene, 'animationSpeed', 0.35);
+    setAttribute(scene, 'colorShift', 47);
     const secondState = createSceneState(root, cache);
     const secondBoxBatch = drawBatch(secondState, 'mesh:box:standard');
 
     expect(secondState.scale).toBe(1.5);
     expect(secondState.animationSpeed).toBe(0.35);
+    expect(secondState.colorShift).toBe(47);
     expect(secondBoxBatch.instances).toBe(firstBoxBatch.instances);
     expect(secondBoxBatch.instancesChanged).toBe(false);
     expect(secondBoxBatch.dirtyRanges).toEqual([]);
@@ -243,12 +246,14 @@ describe('TypeGPU renderer core', () => {
 
     setAttribute(scene, 'scale', 1.5);
     setAttribute(scene, 'animationSpeed', 0.35);
+    setAttribute(scene, 'colorShift', 47);
 
     const secondState = createSceneState(root, cache, { reuseDrawBatches: true });
 
     expect(readDrawBatches).not.toHaveBeenCalled();
     expect(secondState.scale).toBe(1.5);
     expect(secondState.animationSpeed).toBe(0.35);
+    expect(secondState.colorShift).toBe(47);
     expect(secondState.drawBatches).toHaveLength(firstState.drawBatches.length);
     expect(secondState.drawBatches[0].instances).toBe(firstState.drawBatches[0].instances);
     expect(secondState.drawBatches[0].instancesChanged).toBe(false);

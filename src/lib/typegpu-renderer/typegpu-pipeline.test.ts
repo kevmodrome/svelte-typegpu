@@ -10,5 +10,7 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     expect(wgsl).toContain('in.color');
     expect(wgsl).toContain('in.normal');
     expect(wgsl).toContain('in.material');
+    expect(wgsl).toContain('color_transform');
+    expect(wgsl).toContain('rotate_hue');
   });
 });

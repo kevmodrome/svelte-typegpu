@@ -38,6 +38,7 @@ export function createSceneState(
     camera: readPerspectiveCamera(root),
     scale: scene.scale,
     animationSpeed: scene.animationSpeed,
+    colorShift: scene.colorShift,
     drawBatches
   };
 }

@@ -67,5 +67,6 @@ export interface TypeGpuSceneState {
   camera: TypeGpuCameraSettings;
   scale: number;
   animationSpeed: number;
+  colorShift: number;
   drawBatches: TypeGpuDrawBatch[];
 }

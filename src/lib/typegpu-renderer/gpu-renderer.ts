@@ -32,6 +32,7 @@ import type {
 
 // Keep the TypeGPU scene uniform buffer at 96 bytes, matching the explicit padding schema.
 export const SCENE_UNIFORM_FLOATS = TYPEGPU_SCENE_UNIFORM_FLOATS;
+const DEGREES_TO_RADIANS = Math.PI / 180;
 const MAX_DEVICE_PIXEL_RATIO = 1.5;
 const DEFAULT_TYPEGPU_CAMERA: TypeGpuCameraSettings = {
   position: [9, 7, 13],
@@ -96,10 +97,13 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #fpsMeter;
   #pipeline: TgpuRenderPipeline;
   #projectionDirty = true;
+  #rawBindGroup: GPUBindGroup;
+  #rawPipeline: GPURenderPipeline;
   #renderSize = { width: 0, height: 0 };
   #scale = 1;
   #animationSpeed = 1;
   #animationOffset = 0;
+  #colorShift = 0;
   #time = 0;
   #uniformData = new Float32Array(SCENE_UNIFORM_FLOATS);
   #uniformBuffer: TypeGpuSceneUniformBuffer;
@@ -123,10 +127,13 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       .$name('TypeGPU scene uniforms');
     this.#bindGroup = root.createBindGroup(sceneBindGroupLayout, { scene: this.#uniformBuffer });
     this.#pipeline = createMeshPipeline(root, format);
+    this.#rawBindGroup = root.unwrap(this.#bindGroup);
+    this.#rawPipeline = root.unwrap(this.#pipeline);
     this.setScene({
       camera: DEFAULT_TYPEGPU_CAMERA,
       scale: 1,
       animationSpeed: 1,
+      colorShift: 0,
       drawBatches: []
     });
   }
@@ -138,6 +145,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#projectionDirty = true;
     this.#scale = scene.scale;
     this.#setAnimationSpeed(scene.animationSpeed);
+    this.#colorShift = scene.colorShift;
     this.#drawBatches = scene.drawBatches;
     this.#pruneBatchBuffers(scene.drawBatches);
 
@@ -307,16 +315,16 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
         }
       });
 
-      const framePipeline = this.#pipeline.with(pass).with(this.#bindGroup);
+      pass.setPipeline(this.#rawPipeline);
+      pass.setBindGroup(0, this.#rawBindGroup);
 
       for (const batch of this.#drawBatches) {
         const buffers = this.#batchBuffers.get(batch.key);
         if (!buffers?.instanceBuffer || buffers.instanceCount === 0) continue;
 
-        framePipeline
-          .with(meshVertexLayout, buffers.vertexBuffer.buffer)
-          .with(meshInstanceLayout, buffers.instanceBuffer.buffer)
-          .draw(batch.geometry.vertexCount, buffers.instanceCount);
+        pass.setVertexBuffer(0, buffers.vertexBuffer.buffer);
+        pass.setVertexBuffer(1, buffers.instanceBuffer.buffer);
+        pass.draw(batch.geometry.vertexCount, buffers.instanceCount);
       }
 
       pass.end();
@@ -358,6 +366,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#uniformData[17] = this.#scale;
     this.#uniformData[18] = this.#animationSpeed;
     this.#uniformData[19] = this.#animationOffset;
+    this.#uniformData[20] = this.#colorShift * DEGREES_TO_RADIANS;
     this.#uniformBuffer.write(arrayBufferFor(this.#uniformData));
   }
 }

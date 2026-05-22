@@ -29,6 +29,14 @@ describe('TypeGPU demo scene authoring API', () => {
     expect(source).toContain('<standardMaterial');
   });
 
+  it('keeps demo hue changes out of per-instance material props', () => {
+    expect(source).toContain('colorShift={controls.hue}');
+    expect(source).toContain('demoColorForIndex(index, 0)');
+    expect(source).toContain('demoColorForIndex(index + 7, 28)');
+    expect(source).not.toContain('demoColorForIndex(index, controls.hue)');
+    expect(source).not.toContain('demoColorForIndex(index + 7, controls.hue + 28)');
+  });
+
   it('renders the direct mesh API into TypeGPU scene nodes', () => {
     const root = createFragment();
     const Scene = loadTypeGpuSceneComponent(source);
@@ -59,7 +67,8 @@ describe('TypeGPU demo scene authoring API', () => {
 
     expect(scene.attributes).toMatchObject({
       scale: 1.35,
-      animationSpeed: 1.25
+      animationSpeed: 1.25,
+      colorShift: 120
     });
     expect(camera.attributes).toMatchObject({
       position: controls.camera.position,

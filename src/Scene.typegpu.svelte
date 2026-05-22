@@ -46,7 +46,7 @@
   }
 </script>
 
-<scene scale={controls.cubeScale} {animationSpeed}>
+<scene scale={controls.cubeScale} {animationSpeed} colorShift={controls.hue}>
   <perspectiveCamera
     position={controls.camera.position}
     lookAt={cameraLookAt(controls.camera)}
@@ -74,7 +74,7 @@
           depth={sphereSize(index)}
         ></sphereGeometry>
         <standardMaterial
-          color={demoColorForIndex(index + 7, controls.hue + 28)}
+          color={demoColorForIndex(index + 7, 28)}
           roughness={0.18}
           metalness={0.28}
         ></standardMaterial>
@@ -96,7 +96,7 @@
           depth={boxDepth(index)}
         ></boxGeometry>
         <standardMaterial
-          color={demoColorForIndex(index, controls.hue)}
+          color={demoColorForIndex(index, 0)}
           roughness={0.62}
           metalness={0.04}
         ></standardMaterial>

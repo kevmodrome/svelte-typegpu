@@ -26,6 +26,26 @@ const rotateZ = tgpu
   }`
   .$name('rotateZ');
 
+const rotateHue = tgpu
+  .fn([d.vec3f, d.f32], d.vec3f)/* wgsl */ `(color, angle) {
+    let c = cos(angle);
+    let s = sin(angle);
+    let shifted = vec3(
+      color.r * (0.213 + c * 0.787 - s * 0.213) +
+        color.g * (0.715 - c * 0.715 - s * 0.715) +
+        color.b * (0.072 - c * 0.072 + s * 0.928),
+      color.r * (0.213 - c * 0.213 + s * 0.143) +
+        color.g * (0.715 + c * 0.285 + s * 0.140) +
+        color.b * (0.072 - c * 0.072 - s * 0.283),
+      color.r * (0.213 - c * 0.213 - s * 0.787) +
+        color.g * (0.715 - c * 0.715 + s * 0.715) +
+        color.b * (0.072 + c * 0.928 + s * 0.072)
+    );
+
+    return clamp(shifted, vec3(0.0), vec3(1.0));
+  }`
+  .$name('rotate_hue');
+
 const meshVertexMain = tgpu
   .vertexFn({
     in: {
@@ -92,9 +112,14 @@ export const meshFragmentMain = tgpu
     let diffuse = max(dot(normalize(in.normal), light), 0.0);
     let shade = 0.24 + diffuse * mix(0.78, 0.58, roughness);
     let lift = metalness * 0.08;
+    let shifted_color = rotate_hue(
+      in.color.rgb,
+      sceneBindGroupLayout.$.scene.color_transform.x
+    );
 
-    return vec4(in.color.rgb * shade + lift, in.color.a);
+    return vec4(shifted_color * shade + lift, in.color.a);
   }`
+  .$uses({ rotate_hue: rotateHue, sceneBindGroupLayout })
   .$name('meshFragmentMain');
 
 export function createMeshPipeline(root: TgpuRoot, format: GPUTextureFormat): TgpuRenderPipeline {

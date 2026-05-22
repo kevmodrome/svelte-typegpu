@@ -29,7 +29,7 @@ export const typegpuSceneUniformSchema = d
     scale: d.f32,
     animation_speed: d.f32,
     animation_offset: d.f32,
-    padding: d.vec4f
+    color_transform: d.vec4f
   })
   .$name('SceneUniforms');
 

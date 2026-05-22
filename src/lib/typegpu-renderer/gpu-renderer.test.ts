@@ -22,8 +22,8 @@ describe('TypeGPU GPU renderer', () => {
     expect(layoutsSource).toContain('tgpu.vertexLayout');
     expect(rendererSource).toContain('.createBuffer(d.arrayOf(d.f32');
     expect(rendererSource).toMatch(/\.\$usage\('vertex'(?: as never)?\)/);
-    expect(rendererSource).toContain('.with(meshVertexLayout');
-    expect(rendererSource).toContain('.with(meshInstanceLayout');
+    expect(rendererSource).toContain('pass.setVertexBuffer(0, buffers.vertexBuffer.buffer)');
+    expect(rendererSource).toContain('pass.setVertexBuffer(1, buffers.instanceBuffer.buffer)');
     expect(pipelineSource).toContain('meshVertexLayout.attrib.position');
     expect(pipelineSource).toContain('meshInstanceLayout.attrib.position');
     expect(source).not.toContain('arrayStride: MESH_VERTEX_FLOATS');
@@ -33,7 +33,11 @@ describe('TypeGPU GPU renderer', () => {
   it('uses TypeGPU pipeline and bind group resources for rendering', () => {
     expect(rendererSource).toContain('root.createBindGroup(sceneBindGroupLayout');
     expect(pipelineSource).toMatch(/root\s*\.\s*createRenderPipeline/);
-    expect(rendererSource).toContain('.with(this.#bindGroup)');
+    expect(rendererSource).toContain('root.unwrap(this.#pipeline)');
+    expect(rendererSource).toContain('root.unwrap(this.#bindGroup)');
+    expect(rendererSource).not.toContain('.with(this.#bindGroup)');
+    expect(rendererSource).not.toContain('.with(meshVertexLayout');
+    expect(rendererSource).not.toContain('.with(meshInstanceLayout');
     expect(source).not.toContain('device.createBindGroup');
     expect(source).not.toContain('device.createRenderPipeline');
   });
