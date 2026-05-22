@@ -18,6 +18,8 @@ The renderer already supports a declarative scene graph:
 
 Internally, material values are packed into per-instance data and rendered through one TypeGPU mesh pipeline. Geometry currently carries positions and normals only. There is no texture resource layer, material bind group, or UV data.
 
+The current renderer already uses TypeGPU schemas, bind group layouts, buffers, and render pipelines, but it also unwraps some resources and drives the render pass through raw WebGPU calls. The material texture work should not expand that escape hatch. Where TypeGPU exposes an API for a resource or draw step, the implementation should use the TypeGPU API.
+
 ## Recommended Approach
 
 Implement texture support as a first material-system step, not as arbitrary shader authoring.
@@ -30,8 +32,27 @@ The first version should:
 - Move geometry and instance layouts directly to the material-ready shape.
 - Treat texture identity as a batching boundary.
 - Use one unified texture-capable standard shader path for textured and untextured materials.
+- Prefer TypeGPU-managed textures, samplers, bind groups, pipeline binding, and draw calls over raw WebGPU equivalents.
 
 Custom shader materials, normal maps, direct `GPUTexture` inputs, and additional material models are later features.
+
+## TypeGPU Usage Boundary
+
+The implementation should stay TypeGPU-first.
+
+Use TypeGPU for:
+
+- Vertex and instance layouts through `tgpu.vertexLayout(...)`.
+- Uniform, texture, and sampler bind group layouts through `tgpu.bindGroupLayout(...)`.
+- Texture schema entries through the current texture API, such as `d.texture2d()`, not deprecated legacy texture strings.
+- Buffers through `root.createBuffer(...)`.
+- Textures through `root.createTexture(...)`.
+- Samplers through `root.createSampler(...)`.
+- Bind groups through `root.createBindGroup(...)`.
+- Shader texture sampling through TypeGPU functions and TypeGPU-resolved WGSL dependencies.
+- Render pipeline binding and draw orchestration through `TgpuRenderPipeline.with(...)`, `withColorAttachment(...)`, `withDepthStencilAttachment(...)`, and `draw(...)` where the API supports the needed behavior.
+
+Raw WebGPU should be limited to browser/platform boundaries that TypeGPU does not abstract, such as `navigator.gpu` availability checks, canvas context acquisition where required, image decoding APIs, and any narrow fallback that is documented in code because TypeGPU lacks the needed surface. Do not create material textures with `device.createTexture`, material samplers with `device.createSampler`, material bind groups with `device.createBindGroup`, or material render pipelines with `device.createRenderPipeline`.
 
 ## Public API
 
@@ -133,18 +154,31 @@ Per-instance values such as color, roughness, metalness, and opacity stay in the
 
 Untextured materials use an internal 1x1 white texture. That is not a compatibility path; it is the clean representation of a standard material with no base-color map. The standard shader always samples a texture.
 
-## GPU Resource Model
+## TypeGPU Resource Model
 
-The GPU renderer owns texture loading and GPU resource lifetime.
+The TypeGPU renderer owns texture loading and resource lifetime.
 
 Add a material resource cache inside `TypeGpuSceneRenderer` that:
 
 - Caches texture resources by stable texture key.
 - Loads URL textures asynchronously.
-- Creates a shared sampler.
-- Creates a material bind group for each texture resource.
+- Creates textures with `root.createTexture(...)` and marks them for sampled usage.
+- Uploads decoded image data through the `TgpuTexture.write(...)` API.
+- Creates a shared sampler with `root.createSampler(...)`.
+- Creates a material bind group for each texture resource with `root.createBindGroup(...)`.
 - Provides a shared white fallback texture for untextured, loading, or failed textures.
-- Disposes owned GPU textures when the renderer is disposed.
+- Disposes owned TypeGPU textures when the renderer is disposed.
+
+The material bind group layout should use TypeGPU's current texture entries instead of deprecated legacy strings:
+
+```ts
+export const materialBindGroupLayout = tgpu
+  .bindGroupLayout({
+    baseColorTexture: { texture: d.texture2d(), visibility: ['fragment'] },
+    baseColorSampler: { sampler: 'filtering', visibility: ['fragment'] }
+  })
+  .$idx(1);
+```
 
 The render pass should use:
 
@@ -153,6 +187,8 @@ The render pass should use:
 3. Material bind group at index `1`.
 4. Geometry and instance vertex buffers.
 5. Instanced draw call.
+
+Prefer the TypeGPU pipeline flow for those steps, for example binding the scene/material bind groups and vertex buffers with `pipeline.with(...)`, attaching color/depth targets with `withColorAttachment(...)` and `withDepthStencilAttachment(...)`, then issuing `draw(...)`. If an implementation detail still requires a raw WebGPU pass, keep it isolated, explain why TypeGPU cannot cover that part yet, and do not use raw WebGPU for material resource creation.
 
 While an image is loading or has failed, the batch renders with the white fallback texture. Scene rendering should not block on image loading.
 
@@ -193,7 +229,9 @@ Add or update tests for:
 - Box and sphere geometry UV data.
 - TypeGPU vertex layout including UV attributes.
 - Standard shader WGSL including texture, sampler, and UV sampling.
-- GPU renderer setting scene bind group `0` and material bind group `1`.
+- Renderer setting scene bind group `0` and material bind group `1`.
+- Material resources being created through TypeGPU APIs rather than raw `device.createTexture`, `device.createSampler`, or `device.createBindGroup`.
+- Render-pipeline usage preferring TypeGPU `.with(...)` and `.draw(...)` APIs where practical.
 - Loading or failed textures using fallback resources.
 - Dirty-range behavior repacking only changed mesh/material instances.
 
@@ -211,6 +249,7 @@ This design does not include:
 - Mip generation controls.
 - Material diagnostics UI.
 - Backward compatibility with current temporary instance or vertex layouts.
+- A broad raw-WebGPU renderer rewrite.
 
 ## Implementation Direction
 
@@ -222,6 +261,7 @@ This should be implemented as a single cohesive material-ready migration:
 4. Update instance packing to the new material parameter layout.
 5. Split draw batches by texture identity.
 6. Add material bind group layout and standard shader texture sampling.
-7. Add renderer-side material resource cache and fallback texture.
-8. Update the demo to show at least one textured mesh.
-9. Update tests to assert the final material-ready shape.
+7. Add renderer-side TypeGPU material resource cache and fallback texture.
+8. Replace raw WebGPU material/rendering escape hatches with TypeGPU APIs where the installed TypeGPU surface supports it.
+9. Update the demo to show at least one textured mesh.
+10. Update tests to assert the final material-ready shape and TypeGPU-first boundary.
