@@ -1,14 +1,28 @@
-import tgpu, { d, type TgpuRoot, type TgpuVertexLayout } from 'typegpu';
+import tgpu, {
+  d,
+  type TgpuBindGroup,
+  type TgpuBuffer,
+  type TgpuRenderPipeline,
+  type TgpuRoot,
+  type TgpuVertexLayout,
+  type UniformFlag
+} from 'typegpu';
 import { createFpsMeter } from '../fps-meter';
 import {
-  MESH_ROUGHNESS_OFFSET,
-  MESH_ROTATION_OFFSET,
   MESH_SPIN_OFFSET_OFFSET,
   MESH_SPIN_SPEED_OFFSET
 } from './instance-data';
 import { createViewProjectionMatrix } from './camera-math';
 import { createContinuityTracker } from './continuity';
-import { meshInstanceLayout, meshVertexLayout } from './typegpu-layouts';
+import { DEPTH_FORMAT } from './render-constants';
+import { createMeshPipeline } from './typegpu-pipeline';
+import {
+  meshInstanceLayout,
+  meshVertexLayout,
+  sceneBindGroupLayout,
+  TYPEGPU_SCENE_UNIFORM_FLOATS,
+  typegpuSceneUniformSchema
+} from './typegpu-layouts';
 import type {
   TypeGpuCameraSettings,
   TypeGpuDrawBatch,
@@ -16,10 +30,9 @@ import type {
   TypeGpuSceneState
 } from './types';
 
-// WGSL aligns the trailing vec3 padding to its own 16-byte slot, so the struct is 96 bytes.
-export const SCENE_UNIFORM_FLOATS = 24;
+// Keep the TypeGPU scene uniform buffer at 96 bytes, matching the explicit padding schema.
+export const SCENE_UNIFORM_FLOATS = TYPEGPU_SCENE_UNIFORM_FLOATS;
 const MAX_DEVICE_PIXEL_RATIO = 1.5;
-const DEPTH_FORMAT: GPUTextureFormat = 'depth24plus';
 const DEFAULT_TYPEGPU_CAMERA: TypeGpuCameraSettings = {
   position: [9, 7, 13],
   lookAt: [0, 0, 0],
@@ -41,6 +54,8 @@ interface TypeGpuVertexBuffer {
   write(data: ArrayBuffer, options?: { startOffset?: number; endOffset?: number }): void;
   destroy(): void;
 }
+
+type TypeGpuSceneUniformBuffer = TgpuBuffer<typeof typegpuSceneUniformSchema> & UniformFlag;
 
 export interface TypeGpuRenderer {
   setScene(scene: TypeGpuSceneState): void;
@@ -77,9 +92,9 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #frame = 0;
   #batchBuffers = new Map<string, TypeGpuBatchBuffers>();
   #lastTimestamp = 0;
-  #bindGroup: GPUBindGroup;
+  #bindGroup: TgpuBindGroup;
   #fpsMeter;
-  #pipeline: GPURenderPipeline;
+  #pipeline: TgpuRenderPipeline;
   #projectionDirty = true;
   #renderSize = { width: 0, height: 0 };
   #scale = 1;
@@ -87,7 +102,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #animationOffset = 0;
   #time = 0;
   #uniformData = new Float32Array(SCENE_UNIFORM_FLOATS);
-  #uniformBuffer: GPUBuffer;
+  #uniformBuffer: TypeGpuSceneUniformBuffer;
 
   constructor(
     private readonly root: TgpuRoot,
@@ -95,7 +110,6 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     private readonly onFps: (fps: number) => void
   ) {
     const format = navigator.gpu.getPreferredCanvasFormat();
-    const device = root.device;
 
     this.#fpsMeter = createFpsMeter((fps) => onFps(fps));
     this.#context = root.configureContext({
@@ -103,14 +117,12 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       format,
       alphaMode: 'premultiplied'
     });
-    this.#uniformBuffer = device.createBuffer({
-      label: 'TypeGPU scene uniforms',
-      size: SCENE_UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-    });
-    const pipelineResources = createPipeline(device, format, this.#uniformBuffer);
-    this.#bindGroup = pipelineResources.bindGroup;
-    this.#pipeline = pipelineResources.pipeline;
+    this.#uniformBuffer = root
+      .createBuffer(typegpuSceneUniformSchema)
+      .$usage('uniform')
+      .$name('TypeGPU scene uniforms');
+    this.#bindGroup = root.createBindGroup(sceneBindGroupLayout, { scene: this.#uniformBuffer });
+    this.#pipeline = createMeshPipeline(root, format);
     this.setScene({
       camera: DEFAULT_TYPEGPU_CAMERA,
       scale: 1,
@@ -295,16 +307,16 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
         }
       });
 
-      pass.setPipeline(this.#pipeline);
-      pass.setBindGroup(0, this.#bindGroup);
+      const framePipeline = this.#pipeline.with(pass).with(this.#bindGroup);
 
       for (const batch of this.#drawBatches) {
         const buffers = this.#batchBuffers.get(batch.key);
         if (!buffers?.instanceBuffer || buffers.instanceCount === 0) continue;
 
-        pass.setVertexBuffer(0, buffers.vertexBuffer.buffer);
-        pass.setVertexBuffer(1, buffers.instanceBuffer.buffer);
-        pass.draw(batch.geometry.vertexCount, buffers.instanceCount);
+        framePipeline
+          .with(meshVertexLayout, buffers.vertexBuffer.buffer)
+          .with(meshInstanceLayout, buffers.instanceBuffer.buffer)
+          .draw(batch.geometry.vertexCount, buffers.instanceCount);
       }
 
       pass.end();
@@ -346,7 +358,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#uniformData[17] = this.#scale;
     this.#uniformData[18] = this.#animationSpeed;
     this.#uniformData[19] = this.#animationOffset;
-    writeFloat32Buffer(this.root.device, this.#uniformBuffer, this.#uniformData);
+    this.#uniformBuffer.write(arrayBufferFor(this.#uniformData));
   }
 }
 
@@ -367,10 +379,6 @@ function createAndUploadBuffer(
   }
 
   return buffer;
-}
-
-function writeFloat32Buffer(device: GPUDevice, buffer: GPUBuffer, data: Float32Array): void {
-  device.queue.writeBuffer(buffer, 0, data.buffer as ArrayBuffer, data.byteOffset, data.byteLength);
 }
 
 function writeFloat32BufferRange(
@@ -396,151 +404,4 @@ function arrayBufferFor(data: Float32Array): ArrayBuffer {
   }
 
   return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
-}
-
-interface PipelineResources {
-  bindGroup: GPUBindGroup;
-  pipeline: GPURenderPipeline;
-}
-
-function createPipeline(
-  device: GPUDevice,
-  format: GPUTextureFormat,
-  uniformBuffer: GPUBuffer
-): PipelineResources {
-  const shader = device.createShaderModule({
-    label: 'TypeGPU box shader',
-    code: `
-      struct SceneUniforms {
-        view_projection: mat4x4<f32>,
-        time: f32,
-        scale: f32,
-        animation_speed: f32,
-        animation_offset: f32,
-      };
-
-      @group(0) @binding(0) var<uniform> scene: SceneUniforms;
-
-      struct VertexInput {
-        @location(0) position: vec3<f32>,
-        @location(1) normal: vec3<f32>,
-        @location(2) instance_position: vec3<f32>,
-        @location(3) phase: f32,
-        @location(4) color: vec4<f32>,
-        @location(5) shape: vec4<f32>,
-        @location(6) spin_offset: f32,
-        @location(7) world_rotation: vec3<f32>,
-        @location(8) material: vec2<f32>,
-      };
-
-      struct VertexOutput {
-        @builtin(position) position: vec4<f32>,
-        @location(0) color: vec4<f32>,
-        @location(1) normal: vec3<f32>,
-        @location(2) material: vec2<f32>,
-      };
-
-      fn rotate_x(position: vec3<f32>, angle: f32) -> vec3<f32> {
-        let c = cos(angle);
-        let s = sin(angle);
-        return vec3(position.x, position.y * c - position.z * s, position.y * s + position.z * c);
-      }
-
-      fn rotate_y(position: vec3<f32>, angle: f32) -> vec3<f32> {
-        let c = cos(angle);
-        let s = sin(angle);
-        return vec3(position.x * c + position.z * s, position.y, -position.x * s + position.z * c);
-      }
-
-      fn rotate_z(position: vec3<f32>, angle: f32) -> vec3<f32> {
-        let c = cos(angle);
-        let s = sin(angle);
-        return vec3(position.x * c - position.y * s, position.x * s + position.y * c, position.z);
-      }
-
-      @vertex
-      fn vertex_main(input: VertexInput) -> VertexOutput {
-        let spin = (scene.time * scene.animation_speed + scene.animation_offset) * input.shape.w + input.spin_offset;
-        let pulse = 0.9 + sin(spin + input.phase) * 0.05;
-        let spin_y = spin + input.phase;
-        let spin_x = spin * 0.65 + input.phase * 0.35;
-        let local_position = input.position * input.shape.xyz * scene.scale * pulse;
-        let animated_position = rotate_x(rotate_y(local_position, spin_y), spin_x);
-        let animated_normal = normalize(rotate_x(rotate_y(input.normal, spin_y), spin_x));
-        let rotated_position = rotate_z(
-          rotate_y(rotate_x(animated_position, input.world_rotation.x), input.world_rotation.y),
-          input.world_rotation.z
-        );
-        let rotated_normal = normalize(rotate_z(
-          rotate_y(rotate_x(animated_normal, input.world_rotation.x), input.world_rotation.y),
-          input.world_rotation.z
-        ));
-        let world_position = rotated_position + input.instance_position;
-        var output: VertexOutput;
-
-        output.position = scene.view_projection * vec4(world_position, 1.0);
-        output.color = input.color;
-        output.normal = rotated_normal;
-        output.material = input.material;
-
-        return output;
-      }
-
-      @fragment
-      fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32> {
-        let roughness = clamp(input.material.x, 0.0, 1.0);
-        let metalness = clamp(input.material.y, 0.0, 1.0);
-        let light = normalize(vec3(0.45, 0.78, 0.6));
-        let diffuse = max(dot(normalize(input.normal), light), 0.0);
-        let shade = 0.24 + diffuse * mix(0.78, 0.58, roughness);
-        let lift = metalness * 0.08;
-
-        return vec4(input.color.rgb * shade + lift, input.color.a);
-      }
-    `
-  });
-  const bindGroupLayout = device.createBindGroupLayout({
-    label: 'TypeGPU uniforms layout',
-    entries: [
-      {
-        binding: 0,
-        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-        buffer: { type: 'uniform' }
-      }
-    ]
-  });
-  const bindGroup = device.createBindGroup({
-    label: 'TypeGPU uniforms',
-    layout: bindGroupLayout,
-    entries: [{ binding: 0, resource: { buffer: uniformBuffer } }]
-  });
-
-  const pipeline = device.createRenderPipeline({
-    label: 'TypeGPU box pipeline',
-    layout: device.createPipelineLayout({
-      label: 'TypeGPU box pipeline layout',
-      bindGroupLayouts: [bindGroupLayout]
-    }),
-    vertex: {
-      module: shader,
-      entryPoint: 'vertex_main',
-      buffers: [meshVertexLayout.vertexLayout, meshInstanceLayout.vertexLayout]
-    },
-    fragment: {
-      module: shader,
-      entryPoint: 'fragment_main',
-      targets: [{ format }]
-    },
-    primitive: {
-      topology: 'triangle-list',
-      cullMode: 'back'
-    },
-    depthStencil: {
-      format: DEPTH_FORMAT,
-      depthWriteEnabled: true,
-      depthCompare: 'less'
-    }
-  });
-
-  return { bindGroup, pipeline };
 }

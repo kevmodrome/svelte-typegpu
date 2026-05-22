@@ -20,3 +20,22 @@ export const meshInstanceLayout = tgpu.vertexLayout(
   d.disarrayOf(typegpuMeshInstanceSchema),
   'instance'
 );
+
+export const TYPEGPU_SCENE_UNIFORM_FLOATS = 24;
+export const typegpuSceneUniformSchema = d
+  .struct({
+    view_projection: d.mat4x4f,
+    time: d.f32,
+    scale: d.f32,
+    animation_speed: d.f32,
+    animation_offset: d.f32,
+    padding: d.vec4f
+  })
+  .$name('SceneUniforms');
+
+export const sceneBindGroupLayout = tgpu
+  .bindGroupLayout({
+    scene: { uniform: typegpuSceneUniformSchema }
+  })
+  .$idx(0)
+  .$name('TypeGPU scene bind group layout');
