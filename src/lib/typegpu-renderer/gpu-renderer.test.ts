@@ -58,7 +58,12 @@ describe('TypeGPU GPU renderer', () => {
   });
 
   it('loads renderer runtime source for lighting dirtiness assertions', () => {
-    expect(svelteRendererSource).toContain('reuseLights: !lightsDirty');
+    expect(svelteRendererSource).toMatch(
+      /lightsDirty\s*\|\|=\s*invalidatesLights\(root,\s*dirtyNode,\s*syncedTreeRevision\)/
+    );
+    expect(svelteRendererSource).toMatch(
+      /createSceneState\(\s*root,\s*sceneCache,\s*{[\s\S]*reuseLights:\s*!lightsDirty[\s\S]*}\s*\)/
+    );
   });
 
   it('treats lighting changes as buffer writes separate from mesh uploads', () => {
