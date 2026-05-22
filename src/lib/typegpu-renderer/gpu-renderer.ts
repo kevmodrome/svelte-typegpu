@@ -14,13 +14,16 @@ import {
 } from './instance-data';
 import { createViewProjectionMatrix } from './camera-math';
 import { createContinuityTracker } from './continuity';
+import { packLightingState } from './lighting-data';
 import { DEPTH_FORMAT } from './render-constants';
 import { createMeshPipeline } from './typegpu-pipeline';
 import {
+  lightingBindGroupLayout,
   meshInstanceLayout,
   meshVertexLayout,
   sceneBindGroupLayout,
   TYPEGPU_SCENE_UNIFORM_FLOATS,
+  typegpuLightingSchema,
   typegpuSceneUniformSchema
 } from './typegpu-layouts';
 import type {
@@ -57,6 +60,7 @@ interface TypeGpuVertexBuffer {
 }
 
 type TypeGpuSceneUniformBuffer = TgpuBuffer<typeof typegpuSceneUniformSchema> & UniformFlag;
+type TypeGpuLightingUniformBuffer = TgpuBuffer<typeof typegpuLightingSchema> & UniformFlag;
 
 export interface TypeGpuRenderer {
   setScene(scene: TypeGpuSceneState): void;
@@ -95,9 +99,12 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #lastTimestamp = 0;
   #bindGroup: TgpuBindGroup;
   #fpsMeter;
+  #lightingBindGroup: TgpuBindGroup;
+  #lightingBuffer: TypeGpuLightingUniformBuffer;
   #pipeline: TgpuRenderPipeline;
   #projectionDirty = true;
   #rawBindGroup: GPUBindGroup;
+  #rawLightingBindGroup: GPUBindGroup;
   #rawPipeline: GPURenderPipeline;
   #renderSize = { width: 0, height: 0 };
   #scale = 1;
@@ -126,8 +133,13 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       .$usage('uniform')
       .$name('TypeGPU scene uniforms');
     this.#bindGroup = root.createBindGroup(sceneBindGroupLayout, { scene: this.#uniformBuffer });
+    this.#lightingBuffer = root.createBuffer(typegpuLightingSchema).$usage('uniform').$name('TypeGPU lighting uniforms');
+    this.#lightingBindGroup = root.createBindGroup(lightingBindGroupLayout, {
+      lighting: this.#lightingBuffer
+    });
     this.#pipeline = createMeshPipeline(root, format);
     this.#rawBindGroup = root.unwrap(this.#bindGroup);
+    this.#rawLightingBindGroup = root.unwrap(this.#lightingBindGroup);
     this.#rawPipeline = root.unwrap(this.#pipeline);
     this.setScene({
       camera: DEFAULT_TYPEGPU_CAMERA,
@@ -150,6 +162,10 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#colorShift = scene.colorShift;
     this.#drawBatches = scene.drawBatches;
     this.#pruneBatchBuffers(scene.drawBatches);
+
+    if (scene.lightsChanged) {
+      this.#lightingBuffer.write(packLightingState(scene.lights));
+    }
 
     for (const batch of scene.drawBatches) {
       const buffers = this.#ensureBatchBuffers(batch);
@@ -182,6 +198,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       buffers.instanceBuffer?.destroy();
       buffers.vertexBuffer.destroy();
     }
+    this.#lightingBuffer.destroy();
     this.#uniformBuffer.destroy();
     this.root.destroy();
   }
@@ -319,6 +336,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
       pass.setPipeline(this.#rawPipeline);
       pass.setBindGroup(0, this.#rawBindGroup);
+      pass.setBindGroup(1, this.#rawLightingBindGroup);
 
       for (const batch of this.#drawBatches) {
         const buffers = this.#batchBuffers.get(batch.key);

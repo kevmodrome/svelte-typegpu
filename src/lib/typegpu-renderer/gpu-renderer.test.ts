@@ -41,4 +41,15 @@ describe('TypeGPU GPU renderer', () => {
     expect(source).not.toContain('device.createBindGroup');
     expect(source).not.toContain('device.createRenderPipeline');
   });
+
+  it('uses a TypeGPU lighting bind group without raw lighting resource creation', () => {
+    expect(layoutsSource).toContain('lightingBindGroupLayout');
+    expect(rendererSource).toContain('root.createBindGroup(lightingBindGroupLayout');
+    expect(rendererSource).toContain('root.createBuffer(typegpuLightingSchema)');
+    expect(rendererSource).toContain(".$usage('uniform')");
+    expect(rendererSource).toContain('packLightingState(scene.lights)');
+    expect(rendererSource).toContain('pass.setBindGroup(1, this.#rawLightingBindGroup)');
+    expect(source).not.toContain('device.createBindGroup');
+    expect(source).not.toContain('device.createRenderPipeline');
+  });
 });
