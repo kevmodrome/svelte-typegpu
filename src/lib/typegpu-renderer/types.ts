@@ -88,5 +88,7 @@ export interface TypeGpuSceneState {
   scale: number;
   animationSpeed: number;
   colorShift: number;
+  lights: TypeGpuLight[];
+  lightsChanged: boolean;
   drawBatches: TypeGpuDrawBatch[];
 }

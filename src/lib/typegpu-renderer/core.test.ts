@@ -13,6 +13,7 @@ import {
 import { collectLights } from './components/lights';
 import { collectMeshDrawItems, findFirstInteractiveMesh } from './components/mesh';
 import { readPerspectiveCamera } from './components/perspective-camera';
+import { invalidatesDrawBatches, invalidatesLights } from './scene-dirtiness';
 import { createSceneState, createTypeGpuSceneCache } from './scene-state';
 import { MAX_TYPEGPU_LIGHTS } from './types';
 
@@ -260,6 +261,46 @@ describe('TypeGPU renderer core', () => {
     expect(secondState.drawBatches[0].instances).toBe(firstState.drawBatches[0].instances);
     expect(secondState.drawBatches[0].instancesChanged).toBe(false);
     expect(secondState.drawBatches[0].dirtyRanges).toEqual([]);
+  });
+
+  it('includes lighting state and reuses it for scene-only updates', () => {
+    const cache = createTypeGpuSceneCache();
+    const root = createFragment();
+    const scene = createElement('scene');
+    const light = createElement('pointLight');
+
+    setAttribute(light, 'position', [1, 2, 3]);
+    insert(scene, light, null);
+    insert(root, scene, null);
+
+    const firstState = createSceneState(root, cache);
+    setAttribute(scene, 'colorShift', 45);
+    const secondState = createSceneState(root, cache, {
+      reuseDrawBatches: true,
+      reuseLights: true
+    });
+
+    expect(firstState.lightsChanged).toBe(true);
+    expect(secondState.lights).toBe(firstState.lights);
+    expect(secondState.lightsChanged).toBe(false);
+  });
+
+  it('marks lighting dirty for light changes and parent group transforms', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const group = createElement('group');
+    const light = createElement('pointLight');
+    const mesh = createElement('mesh');
+
+    insert(group, light, null);
+    insert(scene, group, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+
+    expect(invalidatesLights(root, light, root.treeRevision)).toBe(true);
+    expect(invalidatesLights(root, group, root.treeRevision)).toBe(true);
+    expect(invalidatesLights(root, mesh, root.treeRevision)).toBe(false);
+    expect(invalidatesDrawBatches(root, light, root.treeRevision)).toBe(false);
   });
 
   it('passes the invalidated node to runtime sync scheduling', () => {

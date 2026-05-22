@@ -23,6 +23,7 @@ import {
   type TypeGpuNode,
   type TypeGpuRuntime
 } from './core';
+import { invalidatesDrawBatches, invalidatesLights } from './scene-dirtiness';
 import { createSceneState, createTypeGpuSceneCache } from './scene-state';
 
 export interface TypeGpuRootOptions {
@@ -97,21 +98,29 @@ function createRuntime(
 ): RuntimeState {
   let queued = false;
   let drawBatchesDirty = true;
+  let lightsDirty = true;
   let syncedTreeRevision = -1;
   const sceneCache = createTypeGpuSceneCache();
 
   function scheduleSync(nextRoot: TypeGpuNode, dirtyNode?: TypeGpuNode) {
     root = nextRoot;
     drawBatchesDirty ||= invalidatesDrawBatches(root, dirtyNode, syncedTreeRevision);
+    lightsDirty ||= invalidatesLights(root, dirtyNode, syncedTreeRevision);
 
     if (queued) return;
 
     queued = true;
     queueMicrotask(() => {
       queued = false;
-      gpu.setScene(createSceneState(root, sceneCache, { reuseDrawBatches: !drawBatchesDirty }));
+      gpu.setScene(
+        createSceneState(root, sceneCache, {
+          reuseDrawBatches: !drawBatchesDirty,
+          reuseLights: !lightsDirty
+        })
+      );
       syncedTreeRevision = root.treeRevision;
       drawBatchesDirty = false;
+      lightsDirty = false;
     });
   }
 
@@ -133,15 +142,4 @@ function createRuntime(
       gpu.dispose();
     }
   };
-}
-
-function invalidatesDrawBatches(
-  root: TypeGpuNode,
-  dirtyNode: TypeGpuNode | undefined,
-  syncedTreeRevision: number
-): boolean {
-  if (!dirtyNode) return true;
-  if (root.treeRevision !== syncedTreeRevision) return true;
-
-  return dirtyNode.name !== 'scene' && dirtyNode.name !== 'perspectiveCamera';
 }
