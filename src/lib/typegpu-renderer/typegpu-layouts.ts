@@ -40,3 +40,11 @@ export const sceneBindGroupLayout = tgpu
   })
   .$idx(0)
   .$name('TypeGPU scene bind group layout');
+
+export const materialBindGroupLayout = tgpu
+  .bindGroupLayout({
+    baseColorTexture: { texture: d.texture2d(), visibility: ['fragment'] },
+    baseColorSampler: { sampler: 'filtering', visibility: ['fragment'] }
+  })
+  .$idx(1)
+  .$name('TypeGPU standard material bind group layout');

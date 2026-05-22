@@ -1,6 +1,11 @@
 import tgpu, { d, type TgpuRenderPipeline, type TgpuRoot } from 'typegpu';
 import { DEPTH_FORMAT } from './render-constants';
-import { meshInstanceLayout, meshVertexLayout, sceneBindGroupLayout } from './typegpu-layouts';
+import {
+  materialBindGroupLayout,
+  meshInstanceLayout,
+  meshVertexLayout,
+  sceneBindGroupLayout
+} from './typegpu-layouts';
 
 const rotateX = tgpu
   .fn([d.vec3f, d.f32], d.vec3f)/* wgsl */ `(position, angle) {
@@ -51,19 +56,21 @@ const meshVertexMain = tgpu
     in: {
       position: d.vec3f,
       normal: d.vec3f,
+      uv: d.vec2f,
       instance_position: d.vec3f,
       phase: d.f32,
       color: d.vec4f,
       shape: d.vec4f,
       spin_offset: d.f32,
       world_rotation: d.vec3f,
-      material: d.vec2f
+      material: d.vec4f
     },
     out: {
       position: d.builtin.position,
       color: d.location(0, d.vec4f),
       normal: d.location(1, d.vec3f),
-      material: d.location(2, d.vec2f)
+      material: d.location(2, d.vec4f),
+      uv: d.location(3, d.vec2f)
     }
   })/* wgsl */ `{
     let spin = (
@@ -91,6 +98,7 @@ const meshVertexMain = tgpu
     output.color = color;
     output.normal = rotated_normal;
     output.material = material;
+    output.uv = uv;
 
     return output;
   }`
@@ -102,7 +110,8 @@ export const meshFragmentMain = tgpu
     in: {
       color: d.location(0, d.vec4f),
       normal: d.location(1, d.vec3f),
-      material: d.location(2, d.vec2f)
+      material: d.location(2, d.vec4f),
+      uv: d.location(3, d.vec2f)
     },
     out: d.vec4f
   })/* wgsl */ `{
@@ -112,14 +121,19 @@ export const meshFragmentMain = tgpu
     let diffuse = max(dot(normalize(in.normal), light), 0.0);
     let shade = 0.24 + diffuse * mix(0.78, 0.58, roughness);
     let lift = metalness * 0.08;
+    let texel = textureSample(
+      materialBindGroupLayout.$.baseColorTexture,
+      materialBindGroupLayout.$.baseColorSampler,
+      in.uv
+    );
     let shifted_color = rotate_hue(
-      in.color.rgb,
+      (texel * in.color).rgb,
       sceneBindGroupLayout.$.scene.color_transform.x
     );
 
-    return vec4(shifted_color * shade + lift, in.color.a);
+    return vec4(shifted_color * shade + lift, texel.a * in.color.a * in.material.z);
   }`
-  .$uses({ rotate_hue: rotateHue, sceneBindGroupLayout })
+  .$uses({ rotate_hue: rotateHue, sceneBindGroupLayout, materialBindGroupLayout })
   .$name('meshFragmentMain');
 
 export function createMeshPipeline(root: TgpuRoot, format: GPUTextureFormat): TgpuRenderPipeline {
@@ -128,6 +142,7 @@ export function createMeshPipeline(root: TgpuRoot, format: GPUTextureFormat): Tg
       attribs: {
         position: meshVertexLayout.attrib.position,
         normal: meshVertexLayout.attrib.normal,
+        uv: meshVertexLayout.attrib.uv,
         instance_position: meshInstanceLayout.attrib.position,
         phase: meshInstanceLayout.attrib.phase,
         color: meshInstanceLayout.attrib.color,

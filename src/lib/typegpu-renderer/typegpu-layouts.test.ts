@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { d } from 'typegpu';
 import {
+  materialBindGroupLayout,
   sceneBindGroupLayout,
   TYPEGPU_SCENE_UNIFORM_FLOATS,
   meshInstanceLayout,
@@ -75,5 +76,11 @@ describe('TypeGPU layout schemas', () => {
     expect(typegpuSceneUniformSchema.propTypes.color_transform).toBeDefined();
     expect(sceneBindGroupLayout.index).toBe(0);
     expect(sceneBindGroupLayout.entries.scene?.uniform).toBe(typegpuSceneUniformSchema);
+  });
+
+  it('describes the standard material texture bind group with current TypeGPU texture APIs', () => {
+    expect(materialBindGroupLayout.index).toBe(1);
+    expect(materialBindGroupLayout.entries.baseColorTexture?.texture.type).toBe('texture_2d');
+    expect(materialBindGroupLayout.entries.baseColorSampler?.sampler).toBe('filtering');
   });
 });
