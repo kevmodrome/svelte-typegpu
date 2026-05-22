@@ -12,7 +12,8 @@ describe('TypeGPU lighting data packing', () => {
         color: [1, 0.5, 0.25],
         intensity: 6,
         range: 12,
-        decay: 2
+        decay: 2,
+        penumbra: 0.25
       }),
       light({
         kind: 'hemisphere',
@@ -35,7 +36,8 @@ describe('TypeGPU lighting data packing', () => {
     expect(view.getFloat32(firstOffset + 52, true)).toBeCloseTo(0.5);
     expect(view.getFloat32(firstOffset + 56, true)).toBeCloseTo(0.25);
     expect(view.getFloat32(firstOffset + 60, true)).toBeCloseTo(6);
-    expect(view.getFloat32(firstOffset + 84, true)).toBeCloseTo(2);
+    expect(view.getFloat32(firstOffset + 80, true)).toBeCloseTo(2);
+    expect(view.getFloat32(firstOffset + 84, true)).toBeCloseTo(0.25);
 
     expect(view.getUint32(secondOffset, true)).toBe(TYPEGPU_LIGHT_KIND.hemisphere);
     expect(view.getFloat32(secondOffset + 64, true)).toBeCloseTo(0.1);

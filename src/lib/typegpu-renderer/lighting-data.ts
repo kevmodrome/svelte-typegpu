@@ -46,7 +46,7 @@ function writeLight(view: DataView, offset: number, light: TypeGpuLight): void {
     light.groundColor[2],
     0
   );
-  writeVec4(view, offset + 80, 0, light.decay, light.penumbra, 0);
+  writeVec4(view, offset + 80, light.decay, light.penumbra, 0, 0);
 }
 
 function writeVec4(
