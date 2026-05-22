@@ -52,11 +52,52 @@ describe('TypeGPU orbit camera math', () => {
     expect(rotated.pitch).toBeCloseTo(0.0730);
   });
 
+  it('clamps orbit pitch at both vertical boundaries', () => {
+    const state = deriveOrbitState(camera, { minDistance: 1, maxDistance: 100 });
+    const options = {
+      invert: false,
+      rotateSpeed: 1,
+      minDistance: 1,
+      maxDistance: 100
+    };
+
+    expect(rotateOrbit(state, 0, 10_000, options).pitch).toBeCloseTo(Math.PI / 2 - 0.01);
+    expect(rotateOrbit(state, 0, -10_000, options).pitch).toBeCloseTo(-Math.PI / 2 + 0.01);
+  });
+
   it('zooms orbit radius within constraints', () => {
     const state = deriveOrbitState(camera, { minDistance: 4, maxDistance: 6 });
 
     expect(zoomOrbit(state, 100, { minDistance: 4, maxDistance: 6, zoomSpeed: 1 }).radius).toBe(6);
     expect(zoomOrbit(state, -100, { minDistance: 4, maxDistance: 6, zoomSpeed: 1 }).radius).toBe(4);
+  });
+
+  it('falls back to default constraints when constraints are invalid', () => {
+    const state = deriveOrbitState(camera, { minDistance: 10, maxDistance: 2 });
+
+    expect(state.radius).toBeCloseTo(5.1923);
+    expect(zoomOrbit(state, 10_000, { minDistance: 10, maxDistance: 2, zoomSpeed: 1 }).radius).toBe(
+      100
+    );
+  });
+
+  it('derives stable orbit state from zero and near-zero camera offsets', () => {
+    const exact = deriveOrbitState(
+      { ...camera, position: [1, 1, 1], lookAt: [1, 1, 1] },
+      { minDistance: 4, maxDistance: 10 }
+    );
+    const nearZero = deriveOrbitState(
+      { ...camera, position: [1.0000001, 1, 1], lookAt: [1, 1, 1] },
+      { minDistance: 4, maxDistance: 10 }
+    );
+    const nonFinite = deriveOrbitState(
+      { ...camera, position: [Number.POSITIVE_INFINITY, 1, 1], lookAt: [1, 1, 1] },
+      { minDistance: 4, maxDistance: 10 }
+    );
+
+    expect(exact).toMatchObject({ lookAt: [1, 1, 1], radius: 4, yaw: 0, pitch: 0 });
+    expect(nearZero).toMatchObject({ lookAt: [1, 1, 1], radius: 4, yaw: 0, pitch: 0 });
+    expect(nonFinite).toMatchObject({ lookAt: [1, 1, 1], radius: 4, yaw: 0, pitch: 0 });
   });
 
   it('normalizes and clamps wheel deltas', () => {

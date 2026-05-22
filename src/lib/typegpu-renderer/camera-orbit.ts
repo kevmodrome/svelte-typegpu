@@ -7,6 +7,10 @@ const ZOOM_SENSITIVITY = 0.05;
 const MIN_PITCH = -Math.PI / 2 + 0.01;
 const MAX_PITCH = Math.PI / 2 - 0.01;
 const MAX_WHEEL_DELTA = 60;
+const ZERO_RADIUS_EPSILON = 1e-6;
+const WHEEL_DELTA_MODE_PIXEL = 0;
+const WHEEL_DELTA_MODE_LINE = 1;
+const WHEEL_DELTA_MODE_PAGE = 2;
 
 export interface TypeGpuOrbitConstraints {
   minDistance: number;
@@ -39,7 +43,7 @@ export function deriveOrbitState(
   const dz = camera.position[2] - camera.lookAt[2];
   const rawRadius = Math.hypot(dx, dy, dz);
 
-  if (rawRadius === 0) {
+  if (!Number.isFinite(rawRadius) || rawRadius <= ZERO_RADIUS_EPSILON) {
     return {
       lookAt: [...camera.lookAt],
       radius: validConstraints.minDistance,
@@ -115,7 +119,21 @@ export function zoomOrbit(
 }
 
 export function normalizeWheelDelta(deltaY: number, deltaMode: number, pageHeight: number): number {
-  const multiplier = deltaMode === 1 ? 16 : deltaMode === 2 ? pageHeight : 1;
+  let multiplier: number;
+
+  switch (deltaMode) {
+    case WHEEL_DELTA_MODE_LINE:
+      multiplier = 16;
+      break;
+    case WHEEL_DELTA_MODE_PAGE:
+      multiplier = pageHeight;
+      break;
+    case WHEEL_DELTA_MODE_PIXEL:
+    default:
+      multiplier = 1;
+      break;
+  }
+
   const delta = deltaY * multiplier;
 
   return clamp(delta, -MAX_WHEEL_DELTA, MAX_WHEEL_DELTA);
