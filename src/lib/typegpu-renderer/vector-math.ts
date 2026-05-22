@@ -6,7 +6,17 @@ export function normalizeVector(vector: Vector3Tuple, fallback: Vector3Tuple): V
   const length = Math.hypot(vector[0], vector[1], vector[2]);
 
   if (length <= 1e-6) {
-    return [...fallback];
+    const fallbackLength = Math.hypot(fallback[0], fallback[1], fallback[2]);
+
+    if (fallbackLength <= 1e-6) {
+      return [...fallback];
+    }
+
+    return [
+      fallback[0] / fallbackLength,
+      fallback[1] / fallbackLength,
+      fallback[2] / fallbackLength
+    ];
   }
 
   return [vector[0] / length, vector[1] / length, vector[2] / length];

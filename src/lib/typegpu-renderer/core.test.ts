@@ -583,6 +583,22 @@ describe('TypeGPU renderer core', () => {
     expect(spotLight.direction).toEqual([-1, 0, 0]);
   });
 
+  it('derives directional light direction from rotation when lookAt is absent', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const directional = createElement('directionalLight');
+
+    setAttribute(directional, 'rotation', [Math.PI / 2, 0, 0]);
+    insert(scene, directional, null);
+    insert(root, scene, null);
+
+    const [light] = collectLights(root);
+
+    expect(light.direction[0]).toBeCloseTo(0);
+    expect(light.direction[1]).toBeCloseTo(1);
+    expect(light.direction[2]).toBeCloseTo(0);
+  });
+
   it('clamps malformed light props and limits the scene to MAX_TYPEGPU_LIGHTS', () => {
     const root = createFragment();
     const scene = createElement('scene');

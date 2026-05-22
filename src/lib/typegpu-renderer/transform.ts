@@ -1,6 +1,7 @@
 import { scaleTuple, vectorTuple } from './attributes';
 import type { TypeGpuNode } from './core';
 import type { TypeGpuTransform, Vector3Tuple } from './types';
+import { rotateVectorXyz } from './vector-math';
 
 type Matrix3 = [Vector3Tuple, Vector3Tuple, Vector3Tuple];
 
@@ -102,27 +103,4 @@ function matrixToEulerXyz(matrix: Matrix3): Vector3Tuple {
 
 function normalizeZero(value: number): number {
   return Math.abs(value) < 1e-12 ? 0 : value;
-}
-
-function rotateVectorXyz(vector: Vector3Tuple, rotation: Vector3Tuple): Vector3Tuple {
-  const [sinX, cosX] = [Math.sin(rotation[0]), Math.cos(rotation[0])];
-  const [sinY, cosY] = [Math.sin(rotation[1]), Math.cos(rotation[1])];
-  const [sinZ, cosZ] = [Math.sin(rotation[2]), Math.cos(rotation[2])];
-
-  const afterX: Vector3Tuple = [
-    vector[0],
-    vector[1] * cosX - vector[2] * sinX,
-    vector[1] * sinX + vector[2] * cosX
-  ];
-  const afterY: Vector3Tuple = [
-    afterX[0] * cosY + afterX[2] * sinY,
-    afterX[1],
-    -afterX[0] * sinY + afterX[2] * cosY
-  ];
-
-  return [
-    afterY[0] * cosZ - afterY[1] * sinZ,
-    afterY[0] * sinZ + afterY[1] * cosZ,
-    afterY[2]
-  ];
 }
