@@ -1,4 +1,7 @@
 import tgpu, { d } from 'typegpu';
+import { MAX_TYPEGPU_LIGHTS } from './types';
+
+export { MAX_TYPEGPU_LIGHTS };
 
 export const typegpuMeshVertexSchema = d.unstruct({
   position: d.location(0, d.float32x3),
@@ -39,3 +42,37 @@ export const sceneBindGroupLayout = tgpu
   })
   .$idx(0)
   .$name('TypeGPU scene bind group layout');
+
+export const TYPEGPU_LIGHT_RECORD_BYTES = 96;
+export const TYPEGPU_LIGHTING_BYTES = 16 + MAX_TYPEGPU_LIGHTS * TYPEGPU_LIGHT_RECORD_BYTES;
+
+export const typegpuLightSchema = d
+  .struct({
+    kind: d.u32,
+    flags: d.u32,
+    shadowIndex: d.u32,
+    reserved0: d.u32,
+    position_range: d.vec4f,
+    direction_angle: d.vec4f,
+    color_intensity: d.vec4f,
+    secondary_color: d.vec4f,
+    params: d.vec4f
+  })
+  .$name('TypeGpuLight');
+
+export const typegpuLightingSchema = d
+  .struct({
+    count: d.u32,
+    reserved0: d.u32,
+    reserved1: d.u32,
+    reserved2: d.u32,
+    lights: d.arrayOf(typegpuLightSchema, MAX_TYPEGPU_LIGHTS)
+  })
+  .$name('TypeGpuLighting');
+
+export const lightingBindGroupLayout = tgpu
+  .bindGroupLayout({
+    lighting: { uniform: typegpuLightingSchema }
+  })
+  .$idx(1)
+  .$name('TypeGPU lighting bind group layout');

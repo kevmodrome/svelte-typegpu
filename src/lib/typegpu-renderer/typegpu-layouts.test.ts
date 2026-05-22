@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { d } from 'typegpu';
 import {
+  lightingBindGroupLayout,
+  MAX_TYPEGPU_LIGHTS,
+  TYPEGPU_LIGHT_RECORD_BYTES,
+  TYPEGPU_LIGHTING_BYTES,
   sceneBindGroupLayout,
   TYPEGPU_SCENE_UNIFORM_FLOATS,
   meshInstanceLayout,
   meshVertexLayout,
+  typegpuLightSchema,
+  typegpuLightingSchema,
   typegpuSceneUniformSchema,
   typegpuMeshInstanceSchema,
   typegpuMeshVertexSchema
@@ -70,5 +76,14 @@ describe('TypeGPU layout schemas', () => {
     expect(typegpuSceneUniformSchema.propTypes.color_transform).toBeDefined();
     expect(sceneBindGroupLayout.index).toBe(0);
     expect(sceneBindGroupLayout.entries.scene?.uniform).toBe(typegpuSceneUniformSchema);
+  });
+
+  it('describes lighting uniforms with a TypeGPU bind group layout', () => {
+    expect(MAX_TYPEGPU_LIGHTS).toBe(32);
+    expect(TYPEGPU_LIGHT_RECORD_BYTES).toBe(96);
+    expect(d.sizeOf(typegpuLightSchema)).toBe(TYPEGPU_LIGHT_RECORD_BYTES);
+    expect(d.sizeOf(typegpuLightingSchema)).toBe(TYPEGPU_LIGHTING_BYTES);
+    expect(lightingBindGroupLayout.index).toBe(1);
+    expect(lightingBindGroupLayout.entries.lighting?.uniform).toBe(typegpuLightingSchema);
   });
 });
