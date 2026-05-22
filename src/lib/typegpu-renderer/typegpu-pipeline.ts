@@ -136,7 +136,7 @@ export const meshFragmentMain = tgpu
   .$uses({ rotate_hue: rotateHue, sceneBindGroupLayout, materialBindGroupLayout })
   .$name('meshFragmentMain');
 
-export function createMeshPipeline(root: TgpuRoot, format: GPUTextureFormat): TgpuRenderPipeline {
+export function createMeshPipeline(root: TgpuRoot, format: GPUTextureFormat): TgpuRenderPipeline<d.v4f> {
   return root
     .createRenderPipeline({
       attribs: {

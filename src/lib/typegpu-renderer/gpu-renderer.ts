@@ -3,7 +3,6 @@ import tgpu, {
   type TgpuBindGroup,
   type TgpuBuffer,
   type TgpuFixedSampler,
-  type TgpuRenderPipeline,
   type TgpuRoot,
   type TgpuTexture,
   type TgpuVertexLayout,
@@ -65,7 +64,7 @@ interface TypeGpuVertexBuffer {
 type TypeGpuSceneUniformBuffer = TgpuBuffer<typeof typegpuSceneUniformSchema> & UniformFlag;
 type TypeGpuMaterialTexture = TgpuTexture & SampledFlag;
 type TypeGpuDepthTexture = TgpuTexture & RenderFlag;
-type TypeGpuMeshPipeline = TgpuRenderPipeline<d.v4f>;
+type TypeGpuMeshPipeline = ReturnType<typeof createMeshPipeline>;
 
 interface TypeGpuMaterialResource {
   key: string;
@@ -150,7 +149,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       addressModeV: 'repeat'
     });
     this.#sceneBindGroup = root.createBindGroup(sceneBindGroupLayout, { scene: this.#uniformBuffer });
-    this.#pipeline = createMeshPipeline(root, format) as TypeGpuMeshPipeline;
+    this.#pipeline = createMeshPipeline(root, format);
     this.#fallbackMaterial = this.#createFallbackMaterial();
     this.setScene({
       camera: DEFAULT_TYPEGPU_CAMERA,
@@ -432,33 +431,21 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#writeUniforms();
 
     if (this.#depthTexture) {
-      const framePipeline = this.#pipeline
-        .with(this.#sceneBindGroup)
-        .withColorAttachment({
-          view: this.#context,
-          loadOp: 'clear',
-          storeOp: 'store',
-          clearValue: { r: 0.067, g: 0.078, b: 0.102, a: 1 }
-        })
-        .withDepthStencilAttachment({
-          view: this.#depthTexture,
-          depthClearValue: 1,
-          depthLoadOp: 'clear',
-          depthStoreOp: 'store'
-        });
+      beginTypeGpuRenderPass({
+        root: this.root,
+        context: this.#context,
+        depthTexture: this.#depthTexture,
+        pipeline: this.#pipeline,
+        sceneBindGroup: this.#sceneBindGroup,
+        draw: (passPipeline) => {
+          for (const batch of this.#drawBatches) {
+            const buffers = this.#batchBuffers.get(batch.key);
+            if (!buffers?.instanceBuffer || buffers.instanceCount === 0) continue;
 
-      for (const batch of this.#drawBatches) {
-        const buffers = this.#batchBuffers.get(batch.key);
-        if (!buffers?.instanceBuffer || buffers.instanceCount === 0) continue;
-
-        const material = this.#materialForBatch(batch);
-
-        framePipeline
-          .with(material.bindGroup)
-          .with(meshVertexLayout, buffers.vertexBuffer.buffer)
-          .with(meshInstanceLayout, buffers.instanceBuffer.buffer)
-          .draw(batch.geometry.vertexCount, buffers.instanceCount);
-      }
+            drawTypeGpuMaterialBatch(passPipeline, buffers, this.#materialForBatch(batch), batch);
+          }
+        }
+      });
     }
 
     this.#fpsMeter.record(timestamp);
@@ -501,6 +488,71 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#uniformData[20] = this.#colorShift * DEGREES_TO_RADIANS;
     this.#uniformBuffer.write(arrayBufferFor(this.#uniformData));
   }
+}
+
+function beginTypeGpuRenderPass({
+  root,
+  context,
+  depthTexture,
+  pipeline,
+  sceneBindGroup,
+  draw
+}: {
+  root: TgpuRoot;
+  context: GPUCanvasContext;
+  depthTexture: TypeGpuDepthTexture;
+  pipeline: TypeGpuMeshPipeline;
+  sceneBindGroup: TgpuBindGroup<typeof sceneBindGroupLayout.entries>;
+  draw(passPipeline: TypeGpuMeshPipeline): void;
+}): void {
+  const commandEncoder = root.device.createCommandEncoder();
+  const pass = commandEncoder.beginRenderPass({
+    colorAttachments: [
+      {
+        view: context.getCurrentTexture().createView(),
+        loadOp: 'clear',
+        storeOp: 'store',
+        clearValue: { r: 0.067, g: 0.078, b: 0.102, a: 1 }
+      }
+    ],
+    depthStencilAttachment: {
+      view: root.unwrap(depthTexture).createView(),
+      depthClearValue: 1,
+      depthLoadOp: 'clear',
+      depthStoreOp: 'store'
+    }
+  });
+  let shouldSubmit = false;
+
+  // Bare TypeGPU draw() creates and submits a render pass per call. This helper owns
+  // the raw pass lifetime so a frame gets one color clear, one depth clear, and many
+  // pass-bound TypeGPU draws without using raw WebGPU for material resources.
+  try {
+    const passPipeline = pipeline.with(pass).with(sceneBindGroup);
+    draw(passPipeline);
+    shouldSubmit = true;
+  } finally {
+    pass.end();
+  }
+
+  if (shouldSubmit) {
+    root.device.queue.submit([commandEncoder.finish()]);
+  }
+}
+
+function drawTypeGpuMaterialBatch(
+  passPipeline: TypeGpuMeshPipeline,
+  buffers: TypeGpuBatchBuffers,
+  material: TypeGpuMaterialResource,
+  batch: TypeGpuDrawBatch
+): void {
+  if (!buffers.instanceBuffer) return;
+
+  passPipeline
+    .with(material.bindGroup)
+    .with(meshVertexLayout, buffers.vertexBuffer.buffer)
+    .with(meshInstanceLayout, buffers.instanceBuffer.buffer)
+    .draw(batch.geometry.vertexCount, buffers.instanceCount);
 }
 
 function createAndUploadBuffer(

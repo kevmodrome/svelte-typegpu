@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import { SCENE_UNIFORM_FLOATS } from './gpu-renderer';
 import { MESH_INSTANCE_FLOATS, MESH_ROTATION_OFFSET } from './instance-data';
@@ -42,14 +43,47 @@ describe('TypeGPU GPU renderer', () => {
   it('uses TypeGPU pipeline binding for material draws', () => {
     expect(rendererSource).toContain('root.createBindGroup(sceneBindGroupLayout');
     expect(pipelineSource).toMatch(/root\s*\.\s*createRenderPipeline/);
-    expect(rendererSource).toContain('.with(this.#sceneBindGroup)');
+    expect(rendererSource).toContain('.with(sceneBindGroup)');
     expect(rendererSource).toContain('.with(material.bindGroup)');
     expect(rendererSource).toContain('.with(meshVertexLayout');
     expect(rendererSource).toContain('.with(meshInstanceLayout');
-    expect(rendererSource).toContain('.withColorAttachment');
-    expect(rendererSource).toContain('.withDepthStencilAttachment');
+    expect(rendererSource).toContain('commandEncoder.beginRenderPass');
+    expect(rendererSource).not.toContain('.withColorAttachment');
+    expect(rendererSource).not.toContain('.withDepthStencilAttachment');
     expect(rendererSource).toContain('.draw(');
     expect(source).not.toContain('device.createBindGroup');
     expect(source).not.toContain('device.createRenderPipeline');
+  });
+
+  it('keeps TypeGPU material draws inside a shared render pass helper', () => {
+    const sourceFile = ts.createSourceFile(
+      'gpu-renderer.ts',
+      rendererSource,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TS
+    );
+    const drawCallScopes: string[] = [];
+
+    function visit(node: ts.Node, functionScope = ''): void {
+      const nextScope =
+        ts.isFunctionDeclaration(node) && node.name ? node.name.text : functionScope;
+
+      if (
+        ts.isCallExpression(node) &&
+        ts.isPropertyAccessExpression(node.expression) &&
+        node.expression.name.text === 'draw'
+      ) {
+        drawCallScopes.push(nextScope);
+      }
+
+      node.forEachChild((child) => visit(child, nextScope));
+    }
+
+    visit(sourceFile);
+
+    expect(rendererSource).toContain('beginTypeGpuRenderPass');
+    expect(rendererSource).toContain('pipeline.with(pass).with(sceneBindGroup)');
+    expect(drawCallScopes).toEqual(['drawTypeGpuMaterialBatch']);
   });
 });
