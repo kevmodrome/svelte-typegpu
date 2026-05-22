@@ -12,5 +12,17 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     expect(wgsl).toContain('in.material');
     expect(wgsl).toContain('color_transform');
     expect(wgsl).toContain('rotate_hue');
+
+    const requiredLightingShaderSources = [
+      'lightingBindGroupLayout',
+      'evaluate_light',
+      'evaluate_lighting',
+      'in.world_position'
+    ];
+    const missingLightingShaderSources = requiredLightingShaderSources.filter(
+      (source) => !wgsl.includes(source)
+    );
+
+    expect(missingLightingShaderSources).toEqual([]);
   });
 });
