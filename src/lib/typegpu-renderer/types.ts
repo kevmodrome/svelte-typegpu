@@ -66,6 +66,7 @@ export interface TypeGpuMeshDrawItem {
 export interface TypeGpuDrawBatch {
   key: string;
   geometry: TypeGpuGeometryData;
+  material: TypeGpuMaterialDescriptor;
   floatsPerInstance: number;
   instances: Float32Array;
   instanceIds: number[];

@@ -63,8 +63,8 @@ describe('TypeGPU renderer core', () => {
     insert(root, scene, null);
 
     const state = createSceneState(root);
-    const boxBatch = drawBatch(state, 'mesh:box:standard');
-    const sphereBatch = drawBatch(state, 'mesh:sphere:standard');
+    const boxBatch = drawBatch(state, 'mesh:box:standard:solid:white');
+    const sphereBatch = drawBatch(state, 'mesh:sphere:standard:solid:white');
 
     expect(state).toMatchObject({
       camera: {
@@ -90,6 +90,8 @@ describe('TypeGPU renderer core', () => {
     expect(Array.from(boxBatch.instances.slice(13, 16))).toEqual([0, 0, 0]);
     expect(boxBatch.instances[16]).toBeCloseTo(0.7);
     expect(boxBatch.instances[17]).toBeCloseTo(0.2);
+    expect(boxBatch.instances[18]).toBeCloseTo(1);
+    expect(boxBatch.instances[19]).toBeCloseTo(0);
     expect(Array.from(boxBatch.instances.slice(20, 24))).toEqual([-1, -2, -3, 0.5]);
     expect(boxBatch.instances[24]).toBeCloseTo(0.4);
     expect(boxBatch.instances[25]).toBeCloseTo(0.5);
@@ -176,6 +178,28 @@ describe('TypeGPU renderer core', () => {
     });
   });
 
+  it('splits draw batches by texture identity while preserving same-texture batching', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const first = createTexturedBox('/textures/a.png');
+    const second = createTexturedBox('/textures/a.png');
+    const third = createTexturedBox('/textures/b.png');
+
+    insert(scene, first, null);
+    insert(scene, second, null);
+    insert(scene, third, null);
+    insert(root, scene, null);
+
+    const state = createSceneState(root);
+    const firstBatch = drawBatch(state, 'mesh:box:standard:url:/textures/a.png');
+    const secondBatch = drawBatch(state, 'mesh:box:standard:url:/textures/b.png');
+
+    expect(firstBatch.instanceCount).toBe(2);
+    expect(secondBatch.instanceCount).toBe(1);
+    expect(firstBatch.material.map).toEqual({ kind: 'url', src: '/textures/a.png' });
+    expect(secondBatch.material.map).toEqual({ kind: 'url', src: '/textures/b.png' });
+  });
+
   it('stores and dispatches element events', () => {
     const box = createElement('box');
     const handler = vi.fn();
@@ -234,8 +258,8 @@ describe('TypeGPU renderer core', () => {
     const firstState = createSceneState(root, cache);
     setAttribute(camera, 'fov', 35);
     const secondState = createSceneState(root, cache);
-    const firstBoxBatch = drawBatch(firstState, 'mesh:box:standard');
-    const secondBoxBatch = drawBatch(secondState, 'mesh:box:standard');
+    const firstBoxBatch = drawBatch(firstState, 'mesh:box:standard:solid:white');
+    const secondBoxBatch = drawBatch(secondState, 'mesh:box:standard:solid:white');
 
     expect(firstBoxBatch.instancesChanged).toBe(true);
     expect(secondBoxBatch.instances).toBe(firstBoxBatch.instances);
@@ -262,12 +286,12 @@ describe('TypeGPU renderer core', () => {
     insert(root, scene, null);
 
     const firstState = createSceneState(root, cache);
-    const firstBoxBatch = drawBatch(firstState, 'mesh:box:standard');
+    const firstBoxBatch = drawBatch(firstState, 'mesh:box:standard:solid:white');
     setAttribute(scene, 'scale', 1.5);
     setAttribute(scene, 'animationSpeed', 0.35);
     setAttribute(scene, 'colorShift', 47);
     const secondState = createSceneState(root, cache);
-    const secondBoxBatch = drawBatch(secondState, 'mesh:box:standard');
+    const secondBoxBatch = drawBatch(secondState, 'mesh:box:standard:solid:white');
 
     expect(secondState.scale).toBe(1.5);
     expect(secondState.animationSpeed).toBe(0.35);
@@ -349,8 +373,8 @@ describe('TypeGPU renderer core', () => {
     const firstState = createSceneState(root, cache);
     setAttribute(secondMaterial, 'color', [0.2, 0.3, 0.4, 1]);
     const secondState = createSceneState(root, cache);
-    const firstBoxBatch = drawBatch(firstState, 'mesh:box:standard');
-    const secondBoxBatch = drawBatch(secondState, 'mesh:box:standard');
+    const firstBoxBatch = drawBatch(firstState, 'mesh:box:standard:solid:white');
+    const secondBoxBatch = drawBatch(secondState, 'mesh:box:standard:solid:white');
 
     expect(secondBoxBatch.instances).toBe(firstBoxBatch.instances);
     expect(secondBoxBatch.instancesChanged).toBe(true);
@@ -546,4 +570,16 @@ function drawBatch(state: ReturnType<typeof createSceneState>, key: string) {
   }
 
   return batch;
+}
+
+function createTexturedBox(map: string) {
+  const mesh = createElement('mesh');
+  const geometry = createElement('boxGeometry');
+  const material = createElement('standardMaterial');
+
+  setAttribute(material, 'map', map);
+  insert(mesh, geometry, null);
+  insert(mesh, material, null);
+
+  return mesh;
 }
