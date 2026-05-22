@@ -203,6 +203,59 @@ describe('TypeGPU renderer core', () => {
     expect(sceneState.cameraController).toEqual(state.controller);
   });
 
+  it('falls back and clamps invalid camera-control options', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const camera = createElement('perspectiveCamera');
+    const orbit = createElement('orbitControls');
+    const pointer = createElement('pointerControls');
+    const keyboard = createElement('keyboardControls');
+
+    setAttribute(orbit, 'minDistance', 50);
+    setAttribute(orbit, 'maxDistance', 10);
+    setAttribute(pointer, 'dragButton', 'auxiliary');
+    setAttribute(pointer, 'rotateSpeed', -1);
+    setAttribute(pointer, 'wheel', 'pan');
+    setAttribute(pointer, 'zoomSpeed', -2);
+    setAttribute(pointer, 'touch', 'swipe');
+    setAttribute(keyboard, 'rotateLeft', '');
+    setAttribute(keyboard, 'rotateRight', '');
+    setAttribute(keyboard, 'rotateUp', '');
+    setAttribute(keyboard, 'rotateDown', '');
+    setAttribute(keyboard, 'zoomIn', '');
+    setAttribute(keyboard, 'zoomOut', '');
+    setAttribute(keyboard, 'step', -0.5);
+
+    insert(orbit, pointer, null);
+    insert(orbit, keyboard, null);
+    insert(camera, orbit, null);
+    insert(scene, camera, null);
+    insert(root, scene, null);
+
+    expect(readPerspectiveCameraState(root).controller).toEqual({
+      kind: 'orbit',
+      minDistance: 1,
+      maxDistance: 100,
+      invert: false,
+      pointer: {
+        dragButton: 'primary',
+        rotateSpeed: 0,
+        wheel: 'zoom',
+        zoomSpeed: 0,
+        touch: 'orbit-pinch'
+      },
+      keyboard: {
+        rotateLeft: 'ArrowLeft',
+        rotateRight: 'ArrowRight',
+        rotateUp: 'ArrowUp',
+        rotateDown: 'ArrowDown',
+        zoomIn: '+',
+        zoomOut: '-',
+        step: 0
+      }
+    });
+  });
+
   it('keeps orbitControls inert until it has supported input children', () => {
     const root = createFragment();
     const scene = createElement('scene');
@@ -657,6 +710,66 @@ describe('TypeGPU renderer core', () => {
     expect(scheduleSync).toHaveBeenLastCalledWith(root, mesh);
     expect(invalidatesDrawBatches(root, mesh, syncedTreeRevision)).toBe(true);
     expect(invalidatesLights(root, mesh, syncedTreeRevision)).toBe(false);
+  });
+
+  it('marks draw batches and lights dirty for structural scene subtree insertions', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const mesh = createElement('mesh');
+    const light = createElement('pointLight');
+    const scheduleSync = vi.fn();
+
+    insert(scene, mesh, null);
+    insert(scene, light, null);
+    root.runtime = { scheduleSync };
+    const syncedTreeRevision = root.treeRevision;
+
+    insert(root, scene, null);
+
+    expect(scheduleSync).toHaveBeenLastCalledWith(root, scene);
+    expect(invalidatesDrawBatches(root, scene, syncedTreeRevision)).toBe(true);
+    expect(invalidatesLights(root, scene, syncedTreeRevision)).toBe(true);
+  });
+
+  it('marks draw batches and lights dirty for structural scene subtree removals', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const mesh = createElement('mesh');
+    const light = createElement('pointLight');
+    const scheduleSync = vi.fn();
+
+    insert(scene, mesh, null);
+    insert(scene, light, null);
+    insert(root, scene, null);
+    root.runtime = { scheduleSync };
+    const syncedTreeRevision = root.treeRevision;
+
+    remove(scene);
+
+    expect(scheduleSync).toHaveBeenLastCalledWith(root, scene);
+    expect(invalidatesDrawBatches(root, scene, syncedTreeRevision)).toBe(true);
+    expect(invalidatesLights(root, scene, syncedTreeRevision)).toBe(true);
+  });
+
+  it('marks draw batches dirty for malformed structural camera-control subtrees with meshes', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const camera = createElement('perspectiveCamera');
+    const orbit = createElement('orbitControls');
+    const mesh = createElement('mesh');
+    const scheduleSync = vi.fn();
+
+    insert(scene, camera, null);
+    insert(root, scene, null);
+    insert(orbit, mesh, null);
+    root.runtime = { scheduleSync };
+    const syncedTreeRevision = root.treeRevision;
+
+    insert(camera, orbit, null);
+
+    expect(scheduleSync).toHaveBeenLastCalledWith(root, orbit);
+    expect(invalidatesDrawBatches(root, orbit, syncedTreeRevision)).toBe(true);
+    expect(invalidatesLights(root, orbit, syncedTreeRevision)).toBe(false);
   });
 
   it('passes the invalidated node to runtime sync scheduling', () => {

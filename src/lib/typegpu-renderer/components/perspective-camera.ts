@@ -104,9 +104,19 @@ function readPointerControls(node: TypeGpuNode): TypeGpuPointerControls {
       ['primary', 'middle', 'secondary'],
       DEFAULT_POINTER_CONTROLS.dragButton
     ),
-    rotateSpeed: clampedNumberArg(node.attributes.rotateSpeed, 1, 0, 100),
+    rotateSpeed: clampedNumberArg(
+      node.attributes.rotateSpeed,
+      DEFAULT_POINTER_CONTROLS.rotateSpeed,
+      0,
+      100
+    ),
     wheel: stringOption(node.attributes.wheel, ['zoom', 'none'], DEFAULT_POINTER_CONTROLS.wheel),
-    zoomSpeed: clampedNumberArg(node.attributes.zoomSpeed, 1, 0, 100),
+    zoomSpeed: clampedNumberArg(
+      node.attributes.zoomSpeed,
+      DEFAULT_POINTER_CONTROLS.zoomSpeed,
+      0,
+      100
+    ),
     touch: stringOption(
       node.attributes.touch,
       ['orbit-pinch', 'orbit', 'pinch', 'none'],
