@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createCameraInteractionController } from './camera-interaction';
-import type { TypeGpuRenderer } from './gpu-renderer';
 import type {
   TypeGpuCameraSettings,
   TypeGpuPointerControls,
@@ -28,6 +27,18 @@ class FakeEventTarget {
 
     const listeners = this.#listeners.get(type);
     listeners?.delete(listener);
+  }
+
+  dispatch(type: string): void {
+    const event = { type } as Event;
+
+    for (const listener of this.#listeners.get(type) ?? []) {
+      if (typeof listener === 'function') {
+        listener(event);
+      } else {
+        listener.handleEvent(event);
+      }
+    }
   }
 
   listenerCount(type?: string): number {
@@ -85,11 +96,32 @@ function sceneState({
   };
 }
 
-function fakeRenderer(): TypeGpuRenderer {
+function fakeRenderer(): { setCamera: ReturnType<typeof vi.fn> } {
   return {
-    setScene: vi.fn(),
-    setCamera: vi.fn(),
-    dispose: vi.fn()
+    setCamera: vi.fn()
+  };
+}
+
+function fakeFrameScheduler(): {
+  requestFrame: ReturnType<typeof vi.fn>;
+  cancelFrame: ReturnType<typeof vi.fn>;
+  runFrame(): void;
+} {
+  let callback: FrameRequestCallback | null = null;
+  const requestFrame = vi.fn((nextCallback: FrameRequestCallback) => {
+    callback = nextCallback;
+    return 42;
+  });
+  const cancelFrame = vi.fn(() => {
+    callback = null;
+  });
+
+  return {
+    requestFrame,
+    cancelFrame,
+    runFrame() {
+      callback?.(100);
+    }
   };
 }
 
@@ -171,5 +203,103 @@ describe('TypeGPU camera interaction controller', () => {
 
     expect(canvas.listenerCount()).toBe(0);
     expect(windowTarget.listenerCount()).toBe(0);
+  });
+
+  it('schedules a camera update from wheel input', () => {
+    const canvas = new FakeEventTarget();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const frames = fakeFrameScheduler();
+    const scene = sceneState();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: frames.requestFrame,
+      cancelFrame: frames.cancelFrame
+    });
+
+    controller.reconcile(scene);
+    canvas.dispatch('wheel');
+
+    expect(frames.requestFrame).toHaveBeenCalledOnce();
+    expect(renderer.setCamera).not.toHaveBeenCalled();
+
+    frames.runFrame();
+
+    expect(renderer.setCamera).toHaveBeenCalledWith(scene.camera);
+  });
+
+  it('schedules a camera update from touchmove input', () => {
+    const canvas = new FakeEventTarget();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const frames = fakeFrameScheduler();
+    const scene = sceneState();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: frames.requestFrame,
+      cancelFrame: frames.cancelFrame
+    });
+
+    controller.reconcile(scene);
+    windowTarget.dispatch('touchmove');
+
+    expect(frames.requestFrame).toHaveBeenCalledOnce();
+    expect(renderer.setCamera).not.toHaveBeenCalled();
+
+    frames.runFrame();
+
+    expect(renderer.setCamera).toHaveBeenCalledWith(scene.camera);
+  });
+
+  it('cancels a pending camera update when controls become inactive', () => {
+    const canvas = new FakeEventTarget();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const frames = fakeFrameScheduler();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: frames.requestFrame,
+      cancelFrame: frames.cancelFrame
+    });
+
+    controller.reconcile(sceneState());
+    canvas.dispatch('wheel');
+    controller.reconcile(sceneState({ pointer: null }));
+
+    expect(frames.cancelFrame).toHaveBeenCalledWith(42);
+
+    frames.runFrame();
+
+    expect(renderer.setCamera).not.toHaveBeenCalled();
+  });
+
+  it('cancels a pending camera update on dispose', () => {
+    const canvas = new FakeEventTarget();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const frames = fakeFrameScheduler();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: frames.requestFrame,
+      cancelFrame: frames.cancelFrame
+    });
+
+    controller.reconcile(sceneState());
+    canvas.dispatch('wheel');
+    controller.dispose();
+
+    expect(frames.cancelFrame).toHaveBeenCalledWith(42);
+
+    frames.runFrame();
+
+    expect(renderer.setCamera).not.toHaveBeenCalled();
   });
 });

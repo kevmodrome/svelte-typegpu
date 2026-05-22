@@ -4,6 +4,7 @@ import type { TypeGpuSceneState } from './types';
 type RequestFrame = (callback: FrameRequestCallback) => number;
 type CancelFrame = (handle: number) => void;
 type ListenerTarget = Pick<Window, 'addEventListener' | 'removeEventListener'>;
+type TypeGpuCameraRenderer = Pick<TypeGpuRenderer, 'setCamera'>;
 
 const defaultRequestFrame: RequestFrame = (callback) => {
   if (typeof globalThis.requestAnimationFrame === 'function') {
@@ -24,7 +25,7 @@ const defaultCancelFrame: CancelFrame = (handle) => {
 
 export interface TypeGpuCameraInteractionOptions {
   canvas: HTMLCanvasElement;
-  renderer: TypeGpuRenderer;
+  renderer: TypeGpuCameraRenderer;
   windowTarget?: ListenerTarget;
   requestFrame?: RequestFrame;
   cancelFrame?: CancelFrame;
@@ -52,7 +53,7 @@ export function createCameraInteractionController({
 
     frame = requestFrame(() => {
       frame = null;
-      if (disposed || !scene) return;
+      if (disposed || !attached || !scene) return;
 
       renderer.setCamera(scene.camera);
     });
@@ -88,6 +89,13 @@ export function createCameraInteractionController({
   }
 
   function detach(): void {
+    if (frame !== null) {
+      cancelFrame(frame);
+      frame = null;
+    }
+
+    scene = null;
+
     if (!attached) return;
 
     for (const [type, listener] of canvasListeners) {
@@ -118,13 +126,6 @@ export function createCameraInteractionController({
 
       disposed = true;
       detach();
-
-      if (frame !== null) {
-        cancelFrame(frame);
-        frame = null;
-      }
-
-      scene = null;
     }
   };
 }
