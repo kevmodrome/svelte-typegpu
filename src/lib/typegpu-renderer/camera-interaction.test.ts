@@ -341,6 +341,40 @@ describe('TypeGPU camera interaction controller', () => {
     expect(renderer.setCamera).not.toHaveBeenCalled();
   });
 
+  it('keeps pending orbit state when the same scene reconciles before frame flush', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const frames = fakeFrameScheduler();
+    const cameraNode = createElement('camera');
+    const cameraChanges: unknown[] = [];
+    const scene = sceneState({ cameraNode, pointer: true });
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: frames.requestFrame,
+      cancelFrame: frames.cancelFrame
+    });
+
+    addEventListener(cameraNode, 'camerachange', (event) => {
+      cameraChanges.push(event);
+    });
+
+    controller.reconcile(scene);
+    canvas.dispatch<WheelEvent>('wheel', { deltaY: 60, deltaMode: 0 } as Partial<WheelEvent>);
+    controller.reconcile(scene);
+    frames.runFrame();
+
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+    const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+    expect(nextCamera.position[2]).toBeGreaterThan(5);
+    expect(cameraChanges).toHaveLength(1);
+    expect(
+      (cameraChanges[0] as { detail: { orbit: { radius: number } } }).detail.orbit.radius
+    ).toBeGreaterThan(5);
+  });
+
   it('resets stale drag state when replaced by another active scene', () => {
     const canvas = fakeCanvas();
     const windowTarget = new FakeEventTarget();
@@ -582,6 +616,39 @@ describe('TypeGPU camera interaction controller', () => {
     } as unknown as Partial<TouchEvent>);
     const touchMove = windowTarget.dispatch<TouchEvent>('touchmove', {
       touches: [{ clientX: 40, clientY: 20 }],
+      preventDefault: vi.fn()
+    } as unknown as Partial<TouchEvent>);
+
+    expect(touchMove.preventDefault).not.toHaveBeenCalled();
+    expect(frames.requestFrame).not.toHaveBeenCalled();
+    expect(renderer.setCamera).not.toHaveBeenCalled();
+  });
+
+  it('does not continue pinch as orbit after touchend leaves one touch', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const frames = fakeFrameScheduler();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: frames.requestFrame,
+      cancelFrame: frames.cancelFrame
+    });
+
+    controller.reconcile(sceneState({ pointer: true }));
+    canvas.dispatch<TouchEvent>('touchstart', {
+      touches: [
+        { clientX: 0, clientY: 0 },
+        { clientX: 100, clientY: 0 }
+      ]
+    } as unknown as Partial<TouchEvent>);
+    windowTarget.dispatch<TouchEvent>('touchend', {
+      touches: [{ clientX: 0, clientY: 0 }]
+    } as unknown as Partial<TouchEvent>);
+    const touchMove = windowTarget.dispatch<TouchEvent>('touchmove', {
+      touches: [{ clientX: 40, clientY: 0 }],
       preventDefault: vi.fn()
     } as unknown as Partial<TouchEvent>);
 

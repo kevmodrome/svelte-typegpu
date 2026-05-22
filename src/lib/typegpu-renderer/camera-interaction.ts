@@ -272,20 +272,7 @@ export function createCameraInteractionController({
     }
   };
 
-  const onTouchEnd = (event: Event) => {
-    const touchEvent = event as TouchEvent;
-    if (
-      activePointerControls &&
-      activeTouchGesture === 'pinch' &&
-      touchEvent.touches.length === 1 &&
-      allowsTouchOrbit(activePointerControls)
-    ) {
-      activeTouchGesture = 'orbit';
-      previousPointerPosition = touchPosition(touchEvent.touches[0]);
-      lastPinchDistance = null;
-      return;
-    }
-
+  const onTouchEnd = () => {
     resetGestureState();
   };
 
@@ -346,17 +333,21 @@ export function createCameraInteractionController({
         cameraController?.kind === 'orbit' &&
         cameraController.pointer !== null
       ) {
-        if (activeScene !== null && activeScene !== nextScene) {
+        const sameScene = activeScene === nextScene;
+
+        if (activeScene !== null && !sameScene) {
           cancelPendingCameraUpdate();
           resetGestureState();
         }
 
         activeScene = nextScene;
         activePointerControls = cameraController.pointer;
-        orbit = deriveOrbitState(nextScene.camera, {
-          minDistance: cameraController.minDistance,
-          maxDistance: cameraController.maxDistance
-        });
+        if (!sameScene || !framePending) {
+          orbit = deriveOrbitState(nextScene.camera, {
+            minDistance: cameraController.minDistance,
+            maxDistance: cameraController.maxDistance
+          });
+        }
         attach();
       } else {
         detach();
