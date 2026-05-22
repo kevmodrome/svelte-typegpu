@@ -200,6 +200,34 @@ describe('TypeGPU renderer core', () => {
     expect(secondBatch.material.map).toEqual({ kind: 'url', src: '/textures/b.png' });
   });
 
+  it('drops cached draw batch state after a texture key leaves the scene', () => {
+    const cache = createTypeGpuSceneCache();
+    const root = createFragment();
+    const scene = createElement('scene');
+    const mesh = createElement('mesh');
+    const geometry = createElement('boxGeometry');
+    const material = createElement('standardMaterial');
+
+    setAttribute(material, 'map', '/textures/a.png');
+    insert(mesh, geometry, null);
+    insert(mesh, material, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+
+    const firstState = createSceneState(root, cache);
+    const firstBatch = drawBatch(firstState, 'mesh:box:standard:url:/textures/a.png');
+
+    setAttribute(material, 'map', '/textures/b.png');
+    createSceneState(root, cache);
+
+    setAttribute(material, 'map', '/textures/a.png');
+    const thirdState = createSceneState(root, cache);
+    const thirdBatch = drawBatch(thirdState, 'mesh:box:standard:url:/textures/a.png');
+
+    expect(thirdBatch.instances).not.toBe(firstBatch.instances);
+    expect(thirdBatch.instancesChanged).toBe(true);
+  });
+
   it('stores and dispatches element events', () => {
     const box = createElement('box');
     const handler = vi.fn();

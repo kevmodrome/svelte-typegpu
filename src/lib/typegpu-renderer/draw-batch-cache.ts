@@ -55,6 +55,10 @@ export function createDrawBatchCache(): TypeGpuDrawBatchCache {
         batches.push(batch);
       }
 
+      for (const key of previousBatches.keys()) {
+        if (!groupedItems.has(key)) previousBatches.delete(key);
+      }
+
       return batches;
     }
   };

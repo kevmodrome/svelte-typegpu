@@ -263,6 +263,9 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   async #loadMaterialTexture(key: string, src: string | null): Promise<void> {
     if (!src) return;
 
+    let bitmap: ImageBitmap | null = null;
+    let texture: TypeGpuMaterialTexture | null = null;
+
     try {
       const response = await fetch(src);
 
@@ -270,15 +273,14 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
         throw new Error(`Failed to load material texture ${src}: ${response.status}`);
       }
 
-      const bitmap = await createImageBitmap(await response.blob());
+      bitmap = await createImageBitmap(await response.blob());
 
       if (this.#disposed) {
-        bitmap.close();
         return;
       }
 
       const root = this.root;
-      const texture = root.createTexture({
+      texture = root.createTexture({
         size: [bitmap.width, bitmap.height],
         format: 'rgba8unorm',
         dimension: '2d'
@@ -287,13 +289,17 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
         .$name(`TypeGPU material texture ${src}`);
 
       texture.write(bitmap);
-      bitmap.close();
 
       if (this.#disposed) {
         texture.destroy();
+        texture = null;
         return;
       }
 
+      const bindGroup = root.createBindGroup(materialBindGroupLayout, {
+        baseColorTexture: texture,
+        baseColorSampler: this.#materialSampler
+      });
       const previous = this.#materialResources.get(key);
       if (previous && previous.texture !== this.#fallbackMaterial.texture) {
         previous.texture.destroy();
@@ -302,13 +308,13 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       this.#materialResources.set(key, {
         key,
         texture,
-        bindGroup: root.createBindGroup(materialBindGroupLayout, {
-          baseColorTexture: texture,
-          baseColorSampler: this.#materialSampler
-        }),
+        bindGroup,
         status: 'ready'
       });
+      texture = null;
     } catch {
+      texture?.destroy();
+
       if (this.#disposed) return;
 
       this.#materialResources.set(key, {
@@ -316,6 +322,8 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
         key,
         status: 'failed'
       });
+    } finally {
+      bitmap?.close();
     }
   }
 

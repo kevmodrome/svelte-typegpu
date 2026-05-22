@@ -40,6 +40,13 @@ describe('TypeGPU GPU renderer', () => {
     expect(rendererSource).not.toContain('device.createBindGroup');
   });
 
+  it('cleans up decoded texture assets if material loading fails mid-upload', () => {
+    expect(rendererSource).toContain('let bitmap: ImageBitmap | null = null;');
+    expect(rendererSource).toContain('let texture: TypeGpuMaterialTexture | null = null;');
+    expect(rendererSource).toMatch(/catch\s*{\s*texture\?\.destroy\(\);/s);
+    expect(rendererSource).toMatch(/finally\s*{\s*bitmap\?\.close\(\);\s*}/s);
+  });
+
   it('uses TypeGPU pipeline binding for material draws', () => {
     expect(rendererSource).toContain('root.createBindGroup(sceneBindGroupLayout');
     expect(pipelineSource).toMatch(/root\s*\.\s*createRenderPipeline/);
