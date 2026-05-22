@@ -5,7 +5,7 @@ import type {
   TypeGpuPointerControls,
   TypeGpuSceneState
 } from './types';
-import type { TypeGpuNode } from './core';
+import { addEventListener, createElement, type TypeGpuNode } from './core';
 
 class FakeEventTarget {
   #listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
@@ -29,8 +29,8 @@ class FakeEventTarget {
     listeners?.delete(listener);
   }
 
-  dispatch(type: string): void {
-    const event = { type } as Event;
+  dispatch<T extends Event>(type: string, init: Partial<T> = {}): T {
+    const event = { type, preventDefault: vi.fn(), ...init } as unknown as T;
 
     for (const listener of this.#listeners.get(type) ?? []) {
       if (typeof listener === 'function') {
@@ -39,6 +39,8 @@ class FakeEventTarget {
         listener.handleEvent(event);
       }
     }
+
+    return event;
   }
 
   listenerCount(type?: string): number {
@@ -49,7 +51,7 @@ class FakeEventTarget {
 }
 
 const camera: TypeGpuCameraSettings = {
-  position: [9, 7, 13],
+  position: [0, 0, 5],
   lookAt: [0, 0, 0],
   fov: 45,
   near: 0.1,
@@ -65,13 +67,13 @@ const pointerControls: TypeGpuPointerControls = {
 };
 
 function sceneState({
-  cameraNode = {} as TypeGpuNode,
+  cameraNode = createElement('camera'),
   controller = 'orbit',
   pointer = pointerControls
 }: {
   cameraNode?: TypeGpuNode | null;
   controller?: 'orbit' | null;
-  pointer?: TypeGpuPointerControls | null;
+  pointer?: TypeGpuPointerControls | null | true;
 } = {}): TypeGpuSceneState {
   return {
     camera,
@@ -83,7 +85,7 @@ function sceneState({
             minDistance: 1,
             maxDistance: 100,
             invert: false,
-            pointer,
+            pointer: pointer === true ? pointerControls : pointer,
             keyboard: null
           }
         : null,
@@ -96,23 +98,31 @@ function sceneState({
   };
 }
 
-function fakeRenderer(): { setCamera: ReturnType<typeof vi.fn> } {
+type SetCameraMock = ReturnType<typeof vi.fn<(camera: TypeGpuCameraSettings) => void>>;
+type TestRequestFrame = (callback: FrameRequestCallback) => number;
+type TestCancelFrame = (handle: number) => void;
+
+function fakeRenderer(): { setCamera: SetCameraMock } {
   return {
-    setCamera: vi.fn()
+    setCamera: vi.fn<(camera: TypeGpuCameraSettings) => void>()
   };
 }
 
+function fakeCanvas(): FakeEventTarget & { clientHeight: number } {
+  return Object.assign(new FakeEventTarget(), { clientHeight: 600 });
+}
+
 function fakeFrameScheduler(): {
-  requestFrame: ReturnType<typeof vi.fn>;
-  cancelFrame: ReturnType<typeof vi.fn>;
+  requestFrame: ReturnType<typeof vi.fn<TestRequestFrame>>;
+  cancelFrame: ReturnType<typeof vi.fn<TestCancelFrame>>;
   runFrame(): void;
 } {
   let callback: FrameRequestCallback | null = null;
-  const requestFrame = vi.fn((nextCallback: FrameRequestCallback) => {
+  const requestFrame = vi.fn<TestRequestFrame>((nextCallback) => {
     callback = nextCallback;
     return 42;
   });
-  const cancelFrame = vi.fn(() => {
+  const cancelFrame = vi.fn<TestCancelFrame>(() => {
     callback = null;
   });
 
@@ -220,7 +230,7 @@ describe('TypeGPU camera interaction controller', () => {
     });
 
     controller.reconcile(scene);
-    canvas.dispatch('wheel');
+    canvas.dispatch<WheelEvent>('wheel', { deltaY: 0, deltaMode: 0 } as Partial<WheelEvent>);
 
     expect(frames.requestFrame).toHaveBeenCalledOnce();
     expect(renderer.setCamera).not.toHaveBeenCalled();
@@ -228,6 +238,82 @@ describe('TypeGPU camera interaction controller', () => {
     frames.runFrame();
 
     expect(renderer.setCamera).toHaveBeenCalledWith(scene.camera);
+  });
+
+  it('zooms the camera from wheel input and dispatches camerachange', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const cameraNode = createElement('camera');
+    const cameraChanges: unknown[] = [];
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    addEventListener(cameraNode, 'camerachange', (event) => {
+      cameraChanges.push(event);
+    });
+
+    controller.reconcile(sceneState({ cameraNode, pointer: true }));
+    canvas.dispatch<WheelEvent>('wheel', {
+      deltaY: 60,
+      deltaMode: 0,
+      preventDefault: vi.fn()
+    } as Partial<WheelEvent>);
+
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+    const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+    expect(nextCamera.lookAt).toEqual(camera.lookAt);
+    expect(nextCamera.fov).toBe(camera.fov);
+    expect(nextCamera.near).toBe(camera.near);
+    expect(nextCamera.far).toBe(camera.far);
+    expect(nextCamera.position[2]).toBeGreaterThan(5);
+
+    expect(cameraChanges).toHaveLength(1);
+    expect(cameraChanges[0]).toMatchObject({
+      type: 'camerachange',
+      detail: {
+        camera: nextCamera,
+        orbit: {
+          radius: expect.any(Number),
+          yaw: expect.any(Number),
+          pitch: expect.any(Number)
+        }
+      }
+    });
+  });
+
+  it('rotates the camera from primary mouse drag', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    controller.reconcile(sceneState({ pointer: true }));
+    canvas.dispatch<MouseEvent>('mousedown', { button: 0, clientX: 10, clientY: 20 } as Partial<
+      MouseEvent
+    >);
+    windowTarget.dispatch<MouseEvent>('mousemove', { clientX: 110, clientY: 20 } as Partial<
+      MouseEvent
+    >);
+
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+    const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+    expect(nextCamera.position[0]).toBeLessThan(0);
   });
 
   it('schedules a camera update from touchmove input', () => {
@@ -245,7 +331,12 @@ describe('TypeGPU camera interaction controller', () => {
     });
 
     controller.reconcile(scene);
-    windowTarget.dispatch('touchmove');
+    canvas.dispatch<TouchEvent>('touchstart', {
+      touches: [{ clientX: 10, clientY: 20 }]
+    } as unknown as Partial<TouchEvent>);
+    windowTarget.dispatch<TouchEvent>('touchmove', {
+      touches: [{ clientX: 10, clientY: 20 }]
+    } as unknown as Partial<TouchEvent>);
 
     expect(frames.requestFrame).toHaveBeenCalledOnce();
     expect(renderer.setCamera).not.toHaveBeenCalled();
@@ -269,7 +360,7 @@ describe('TypeGPU camera interaction controller', () => {
     });
 
     controller.reconcile(sceneState());
-    canvas.dispatch('wheel');
+    canvas.dispatch<WheelEvent>('wheel', { deltaY: 0, deltaMode: 0 } as Partial<WheelEvent>);
     controller.reconcile(sceneState({ pointer: null }));
 
     expect(frames.cancelFrame).toHaveBeenCalledWith(42);
@@ -293,7 +384,7 @@ describe('TypeGPU camera interaction controller', () => {
     });
 
     controller.reconcile(sceneState());
-    canvas.dispatch('wheel');
+    canvas.dispatch<WheelEvent>('wheel', { deltaY: 0, deltaMode: 0 } as Partial<WheelEvent>);
     controller.dispose();
 
     expect(frames.cancelFrame).toHaveBeenCalledWith(42);
