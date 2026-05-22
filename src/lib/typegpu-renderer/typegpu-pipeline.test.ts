@@ -24,5 +24,8 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     );
 
     expect(missingLightingShaderSources).toEqual([]);
+    expect(wgsl).toContain('select(');
+    expect(wgsl).toContain('step(outer_cos, spot_cos)');
+    expect(wgsl).toContain('penumbra > 0.0001');
   });
 });
