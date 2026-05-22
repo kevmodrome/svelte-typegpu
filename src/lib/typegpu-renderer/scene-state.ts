@@ -1,5 +1,5 @@
 import { collectLights } from './components/lights';
-import { readPerspectiveCamera } from './components/perspective-camera';
+import { readPerspectiveCameraState } from './components/perspective-camera';
 import { readSceneSettings } from './components/scene';
 import { createDrawBatchCache, type TypeGpuDrawBatchCache } from './draw-batch-cache';
 import type { TypeGpuNode } from './core';
@@ -34,6 +34,7 @@ export function createSceneState(
     ? cache.cleanDrawBatches
     : cache.drawBatchCache.read(root);
   const lights = options.reuseLights ? cache.cleanLights : collectLights(root);
+  const camera = readPerspectiveCameraState(root);
 
   if (!options.reuseDrawBatches) {
     cache.cleanDrawBatches = cleanDrawBatches(drawBatches);
@@ -44,7 +45,9 @@ export function createSceneState(
   }
 
   return {
-    camera: readPerspectiveCamera(root),
+    camera: camera.settings,
+    cameraNode: camera.node,
+    cameraController: camera.controller,
     scale: scene.scale,
     animationSpeed: scene.animationSpeed,
     colorShift: scene.colorShift,

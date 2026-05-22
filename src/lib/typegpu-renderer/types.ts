@@ -1,3 +1,5 @@
+import type { TypeGpuNode } from './core';
+
 export type Vector3Tuple = [number, number, number];
 export type RgbaTuple = [number, number, number, number];
 
@@ -13,6 +15,45 @@ export interface TypeGpuCameraSettings {
   fov: number;
   near: number;
   far: number;
+}
+
+export type TypeGpuPointerDragButton = 'primary' | 'middle' | 'secondary';
+export type TypeGpuPointerWheelMode = 'zoom' | 'none';
+export type TypeGpuTouchMode = 'orbit-pinch' | 'orbit' | 'pinch' | 'none';
+
+export interface TypeGpuPointerControls {
+  dragButton: TypeGpuPointerDragButton;
+  rotateSpeed: number;
+  wheel: TypeGpuPointerWheelMode;
+  zoomSpeed: number;
+  touch: TypeGpuTouchMode;
+}
+
+export interface TypeGpuKeyboardControls {
+  rotateLeft: string;
+  rotateRight: string;
+  rotateUp: string;
+  rotateDown: string;
+  zoomIn: string;
+  zoomOut: string;
+  step: number;
+}
+
+export interface TypeGpuOrbitController {
+  kind: 'orbit';
+  minDistance: number;
+  maxDistance: number;
+  invert: boolean;
+  pointer: TypeGpuPointerControls | null;
+  keyboard: TypeGpuKeyboardControls | null;
+}
+
+export type TypeGpuCameraController = TypeGpuOrbitController;
+
+export interface TypeGpuCameraState {
+  node: TypeGpuNode | null;
+  settings: TypeGpuCameraSettings;
+  controller: TypeGpuCameraController | null;
 }
 
 export interface TypeGpuInstanceDirtyRange {
@@ -97,6 +138,8 @@ export interface TypeGpuDrawBatch {
 
 export interface TypeGpuSceneState {
   camera: TypeGpuCameraSettings;
+  cameraNode: TypeGpuNode | null;
+  cameraController: TypeGpuCameraController | null;
   scale: number;
   animationSpeed: number;
   colorShift: number;
