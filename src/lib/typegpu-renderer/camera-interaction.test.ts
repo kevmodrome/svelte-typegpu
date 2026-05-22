@@ -339,6 +339,41 @@ describe('TypeGPU camera interaction controller', () => {
     expect(renderer.setCamera).not.toHaveBeenCalled();
   });
 
+  it('resets stale drag state when replaced by another active scene', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+    const firstScene = sceneState();
+    const secondScene = sceneState({
+      cameraNode: createElement('camera'),
+      pointer: true
+    });
+    secondScene.camera = {
+      ...camera,
+      position: [0, 0, 12]
+    };
+
+    controller.reconcile(firstScene);
+    canvas.dispatch<MouseEvent>('mousedown', { button: 0, clientX: 10, clientY: 20 } as Partial<
+      MouseEvent
+    >);
+    controller.reconcile(secondScene);
+    windowTarget.dispatch<MouseEvent>('mousemove', { clientX: 110, clientY: 20 } as Partial<
+      MouseEvent
+    >);
+
+    expect(renderer.setCamera).not.toHaveBeenCalled();
+  });
+
   it('rotates the camera from primary mouse drag', () => {
     const canvas = fakeCanvas();
     const windowTarget = new FakeEventTarget();

@@ -125,6 +125,12 @@ export function createCameraInteractionController({
     lastEvent = undefined;
   };
 
+  const resetGestureState = () => {
+    dragging = false;
+    previousPointerPosition = null;
+    lastPinchDistance = null;
+  };
+
   const onWheel = (event: Event) => {
     const wheelEvent = event as WheelEvent;
     if (!activeScene || !activePointerControls || !orbit || activePointerControls.wheel === 'none') {
@@ -300,9 +306,7 @@ export function createCameraInteractionController({
     activeScene = null;
     activePointerControls = null;
     orbit = null;
-    dragging = false;
-    previousPointerPosition = null;
-    lastPinchDistance = null;
+    resetGestureState();
 
     if (!attached) return;
 
@@ -329,6 +333,7 @@ export function createCameraInteractionController({
       ) {
         if (activeScene !== null && activeScene !== nextScene) {
           cancelPendingCameraUpdate();
+          resetGestureState();
         }
 
         activeScene = nextScene;
