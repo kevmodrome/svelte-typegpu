@@ -73,6 +73,7 @@ export function createCameraInteractionController({
   let dragging = false;
   let previousPointerPosition: { x: number; y: number } | null = null;
   let lastPinchDistance: number | null = null;
+  let activeTouchGesture: 'orbit' | 'pinch' | null = null;
 
   const queueCameraUpdate = (event: Event) => {
     if (!activeScene || !orbit) return;
@@ -129,6 +130,7 @@ export function createCameraInteractionController({
     dragging = false;
     previousPointerPosition = null;
     lastPinchDistance = null;
+    activeTouchGesture = null;
   };
 
   const onWheel = (event: Event) => {
@@ -203,6 +205,7 @@ export function createCameraInteractionController({
 
     if (touchEvent.touches.length === 1 && allowsTouchOrbit(activePointerControls)) {
       touchEvent.preventDefault();
+      activeTouchGesture = 'orbit';
       previousPointerPosition = touchPosition(touchEvent.touches[0]);
       lastPinchDistance = null;
       return;
@@ -210,16 +213,24 @@ export function createCameraInteractionController({
 
     if (touchEvent.touches.length >= 2 && allowsTouchPinch(activePointerControls)) {
       touchEvent.preventDefault();
+      activeTouchGesture = 'pinch';
       previousPointerPosition = null;
       lastPinchDistance = pinchDistance(touchEvent.touches[0], touchEvent.touches[1]);
+      return;
     }
+
+    resetGestureState();
   };
 
   const onTouchMove = (event: Event) => {
     const touchEvent = event as TouchEvent;
     if (!activeScene || !activePointerControls || !orbit) return;
 
-    if (touchEvent.touches.length === 1 && allowsTouchOrbit(activePointerControls)) {
+    if (
+      activeTouchGesture === 'orbit' &&
+      touchEvent.touches.length === 1 &&
+      allowsTouchOrbit(activePointerControls)
+    ) {
       touchEvent.preventDefault();
       const position = touchPosition(touchEvent.touches[0]);
       if (!previousPointerPosition) {
@@ -241,7 +252,11 @@ export function createCameraInteractionController({
       return;
     }
 
-    if (touchEvent.touches.length >= 2 && allowsTouchPinch(activePointerControls)) {
+    if (
+      activeTouchGesture === 'pinch' &&
+      touchEvent.touches.length >= 2 &&
+      allowsTouchPinch(activePointerControls)
+    ) {
       touchEvent.preventDefault();
       const distance = pinchDistance(touchEvent.touches[0], touchEvent.touches[1]);
       if (lastPinchDistance !== null) {
@@ -261,9 +276,11 @@ export function createCameraInteractionController({
     const touchEvent = event as TouchEvent;
     if (
       activePointerControls &&
+      activeTouchGesture === 'pinch' &&
       touchEvent.touches.length === 1 &&
       allowsTouchOrbit(activePointerControls)
     ) {
+      activeTouchGesture = 'orbit';
       previousPointerPosition = touchPosition(touchEvent.touches[0]);
       lastPinchDistance = null;
       return;
@@ -276,12 +293,12 @@ export function createCameraInteractionController({
 
   const canvasListeners: ListenerRegistration[] = [
     ['wheel', onWheel, { passive: false }],
-    ['mousedown', onMouseDown],
+    ['mousedown', onMouseDown, { passive: false }],
     ['touchstart', onTouchStart, { passive: false }],
     ['touchmove', onTouchMove, { passive: false }]
   ];
   const windowListeners: ListenerRegistration[] = [
-    ['mousemove', onMouseMove],
+    ['mousemove', onMouseMove, { passive: false }],
     ['mouseup', onMouseUp],
     ['touchmove', onTouchMove, { passive: false }],
     ['touchend', onTouchEnd]

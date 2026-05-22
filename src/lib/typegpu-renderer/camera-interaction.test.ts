@@ -186,8 +186,10 @@ describe('TypeGPU camera interaction controller', () => {
     expect(windowTarget.listenerCount('touchmove')).toBe(1);
     expect(windowTarget.listenerCount('touchend')).toBe(1);
     expect(canvas.listenerOptions('wheel')).toEqual({ passive: false });
+    expect(canvas.listenerOptions('mousedown')).toEqual({ passive: false });
     expect(canvas.listenerOptions('touchstart')).toEqual({ passive: false });
     expect(canvas.listenerOptions('touchmove')).toEqual({ passive: false });
+    expect(windowTarget.listenerOptions('mousemove')).toEqual({ passive: false });
     expect(windowTarget.listenerOptions('touchmove')).toEqual({ passive: false });
   });
 
@@ -524,6 +526,38 @@ describe('TypeGPU camera interaction controller', () => {
     frames.runFrame();
 
     expect(renderer.setCamera).toHaveBeenCalledWith(scene.camera);
+  });
+
+  it('ignores window touchmove before a canvas touchstart starts a gesture', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const frames = fakeFrameScheduler();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: frames.requestFrame,
+      cancelFrame: frames.cancelFrame
+    });
+
+    controller.reconcile(sceneState({ pointer: true }));
+    const firstMove = windowTarget.dispatch<TouchEvent>('touchmove', {
+      touches: [{ clientX: 30, clientY: 20 }],
+      preventDefault: vi.fn()
+    } as unknown as Partial<TouchEvent>);
+    const secondMove = windowTarget.dispatch<TouchEvent>('touchmove', {
+      touches: [
+        { clientX: 0, clientY: 0 },
+        { clientX: 120, clientY: 0 }
+      ],
+      preventDefault: vi.fn()
+    } as unknown as Partial<TouchEvent>);
+
+    expect(firstMove.preventDefault).not.toHaveBeenCalled();
+    expect(secondMove.preventDefault).not.toHaveBeenCalled();
+    expect(frames.requestFrame).not.toHaveBeenCalled();
+    expect(renderer.setCamera).not.toHaveBeenCalled();
   });
 
   it('ignores touch input when touch controls are disabled', () => {
