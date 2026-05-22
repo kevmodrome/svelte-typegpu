@@ -134,6 +134,8 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       scale: 1,
       animationSpeed: 1,
       colorShift: 0,
+      lights: [],
+      lightsChanged: true,
       drawBatches: []
     });
   }
