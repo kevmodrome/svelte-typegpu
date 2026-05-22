@@ -227,6 +227,41 @@ The runtime should track lighting dirtiness separately from draw-batch dirtiness
 
 The GPU renderer owns one lighting buffer and bind group. On each scene update, it packs the current lights into a reusable typed buffer payload and writes it only when lighting data changed.
 
+## Svelte Reactivity
+
+Light props must behave like existing mesh, material, scene, and camera props. When Svelte updates a light attribute such as `position`, `color`, `intensity`, `lookAt`, `range`, `angle`, or `penumbra`, the custom renderer's normal `setAttribute(...)` path updates the underlying `TypeGpuNode`, increments its revision, and schedules a scene sync.
+
+The runtime should classify dirty nodes into at least three independent invalidation paths:
+
+- Draw-batch dirtiness for mesh, geometry, material, and transform changes that affect mesh instances.
+- Lighting dirtiness for light node changes and ancestor transform changes that affect descendant lights.
+- Scene uniform dirtiness for camera and scene-level settings.
+
+Lighting dirtiness must be raised when:
+
+- A supported light node's attributes change.
+- A supported light node is inserted, removed, or reordered.
+- A transformable ancestor such as `<group>` changes and that subtree contains one or more supported lights.
+- A `lookAt` value changes on a directional or spot light.
+
+On the next scheduled sync, `createSceneState(...)` rereads the current scene graph and returns updated `lights`. The GPU renderer then repacks and writes only the lighting buffer. This is the path that makes ordinary Svelte state changes propagate into rendered lighting:
+
+```svelte
+<script lang="ts">
+  let lightIntensity = $state(4);
+  let lightPosition = $state<[number, number, number]>([2, 3, 1]);
+</script>
+
+<pointLight
+  position={lightPosition}
+  color={[1, 0.55, 0.35]}
+  intensity={lightIntensity}
+  range={12}
+/>
+```
+
+The user should not need to call an imperative renderer API, touch TypeGPU buffers, or manually mark lights dirty.
+
 ## Batching And Performance
 
 Lights are global scene inputs for v1. They do not split draw batches by material or geometry.
@@ -268,6 +303,8 @@ Add focused tests for:
 - Resolving `lookAt` direction ahead of rotation-derived direction.
 - Clamping malformed light props without throwing.
 - Clamping scenes to `MAX_LIGHTS`.
+- Propagating Svelte-updated light attributes through `setAttribute(...)`, scene sync, and lighting buffer writes.
+- Marking lighting dirty when a parent group transform changes under a light subtree.
 - Keeping light-only changes out of mesh instance repacking.
 - Verifying TypeGPU lighting schemas, bind group layout index, and buffer sizing.
 - Resolving shader code that references the lighting bind group and light evaluator functions.
