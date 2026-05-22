@@ -11,7 +11,9 @@ import {
   setAttribute
 } from './core';
 import { collectMeshDrawItems, findFirstInteractiveMesh } from './components/mesh';
+import { readMeshMaterial } from './components/material';
 import { readPerspectiveCamera } from './components/perspective-camera';
+import { createStandardMaterial } from './materials';
 import { createSceneState, createTypeGpuSceneCache } from './scene-state';
 
 describe('TypeGPU renderer core', () => {
@@ -124,6 +126,53 @@ describe('TypeGPU renderer core', () => {
       fov: 35,
       near: 0.5,
       far: 250
+    });
+  });
+
+  it('normalizes standard material texture props from inline attributes', () => {
+    const mesh = createElement('mesh');
+    const material = createElement('standardMaterial');
+
+    setAttribute(material, 'color', [0.2, 0.3, 0.4, 0.8]);
+    setAttribute(material, 'roughness', 0.7);
+    setAttribute(material, 'metalness', 0.25);
+    setAttribute(material, 'opacity', 0.6);
+    setAttribute(material, 'map', '/textures/crate.png');
+    insert(mesh, material, null);
+
+    expect(readMeshMaterial(mesh)).toEqual({
+      kind: 'standard',
+      color: [0.2, 0.3, 0.4, 0.8],
+      roughness: 0.7,
+      metalness: 0.25,
+      opacity: 0.6,
+      map: { kind: 'url', src: '/textures/crate.png' }
+    });
+  });
+
+  it('normalizes reusable standard material objects and lets inline props override them', () => {
+    const mesh = createElement('mesh');
+    const material = createElement('standardMaterial');
+    const reusable = createStandardMaterial({
+      color: [0.9, 0.8, 0.7, 1],
+      roughness: 0.2,
+      metalness: 0.35,
+      opacity: 0.9,
+      map: '/textures/base.png'
+    });
+
+    setAttribute(material, 'material', reusable);
+    setAttribute(material, 'roughness', 0.65);
+    setAttribute(material, 'map', '/textures/override.png');
+    insert(mesh, material, null);
+
+    expect(readMeshMaterial(mesh)).toEqual({
+      kind: 'standard',
+      color: [0.9, 0.8, 0.7, 1],
+      roughness: 0.65,
+      metalness: 0.35,
+      opacity: 0.9,
+      map: { kind: 'url', src: '/textures/override.png' }
     });
   });
 

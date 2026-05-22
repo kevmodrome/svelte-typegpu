@@ -35,12 +35,23 @@ export interface TypeGpuGeometryDescriptor {
   size: Vector3Tuple;
 }
 
-export interface TypeGpuMaterialDescriptor {
-  kind: TypeGpuMaterialKind;
+export interface TypeGpuUrlTextureSource {
+  kind: 'url';
+  src: string;
+}
+
+export type TypeGpuTextureSource = TypeGpuUrlTextureSource;
+
+export interface TypeGpuStandardMaterialDescriptor {
+  kind: 'standard';
   color: RgbaTuple;
   roughness: number;
   metalness: number;
+  opacity: number;
+  map: TypeGpuTextureSource | null;
 }
+
+export type TypeGpuMaterialDescriptor = TypeGpuStandardMaterialDescriptor;
 
 export interface TypeGpuMeshDrawItem {
   id: number;
