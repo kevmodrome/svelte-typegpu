@@ -37,6 +37,15 @@ describe('TypeGPU demo scene authoring API', () => {
     expect(source).not.toContain('demoColorForIndex(index + 7, controls.hue + 28)');
   });
 
+  it('authors broad light nodes in the demo scene', () => {
+    expect(source).toContain('<ambientLight');
+    expect(source).toContain('<hemisphereLight');
+    expect(source).toContain('<directionalLight');
+    expect(source).toContain('<pointLight');
+    expect(source).toContain('<spotLight');
+    expect(source).toContain('lookAt={[0, 0, 0]}');
+  });
+
   it('renders the direct mesh API into TypeGPU scene nodes', () => {
     const root = createFragment();
     const Scene = loadTypeGpuSceneComponent(source);
@@ -61,6 +70,11 @@ describe('TypeGPU demo scene authoring API', () => {
 
     const scene = onlyElement(root, 'scene');
     const camera = onlyNamed(scene, 'perspectiveCamera');
+    const ambientLight = onlyNamed(scene, 'ambientLight');
+    const hemisphereLight = onlyNamed(scene, 'hemisphereLight');
+    const directionalLight = onlyNamed(scene, 'directionalLight');
+    const pointLight = onlyNamed(scene, 'pointLight');
+    const spotLight = onlyNamed(scene, 'spotLight');
     const meshes = namedChildren(scene, 'mesh');
     const boxMesh = meshes[0];
     const sphereMesh = meshes[5];
@@ -75,6 +89,18 @@ describe('TypeGPU demo scene authoring API', () => {
       fov: controls.camera.fov,
       near: controls.camera.near,
       far: controls.camera.far
+    });
+
+    expect(ambientLight.attributes).toMatchObject({ intensity: 0.18 });
+    expect(hemisphereLight.attributes).toMatchObject({ intensity: 0.38 });
+    expect(directionalLight.attributes).toMatchObject({ intensity: 1.45 });
+    expect(pointLight.attributes).toMatchObject({ intensity: 5.5, range: 16, decay: 2 });
+    expect(spotLight.attributes).toMatchObject({
+      lookAt: [0, 0, 0],
+      intensity: 7,
+      range: 22,
+      angle: 0.42,
+      penumbra: 0.35
     });
 
     expect(meshes).toHaveLength(10);

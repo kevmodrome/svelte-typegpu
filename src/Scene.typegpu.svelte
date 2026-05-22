@@ -55,6 +55,40 @@
     far={controls.camera.far}
   ></perspectiveCamera>
 
+  <ambientLight color={[1, 1, 1]} intensity={0.18}></ambientLight>
+
+  <hemisphereLight
+    skyColor={[0.48, 0.62, 1]}
+    groundColor={[0.18, 0.12, 0.08]}
+    intensity={0.38}
+  ></hemisphereLight>
+
+  <directionalLight
+    rotation={[-0.82, 0.35, 0]}
+    color={[1, 0.96, 0.88]}
+    intensity={1.45}
+  ></directionalLight>
+
+  <group rotation={[0, (controls.hue * Math.PI) / 180, 0]}>
+    <pointLight
+      position={[frame.floorSize * 0.35, frame.floorSize * 0.28, frame.floorSize * 0.2]}
+      color={[1, 0.52, 0.28]}
+      intensity={5.5}
+      range={16}
+      decay={2}
+    ></pointLight>
+  </group>
+
+  <spotLight
+    position={[0, frame.floorSize * 0.65, frame.floorSize * 0.55]}
+    lookAt={[0, 0, 0]}
+    color={[0.58, 0.76, 1]}
+    intensity={7}
+    range={22}
+    angle={0.42}
+    penumbra={0.35}
+  ></spotLight>
+
   {#each boxes as box, index (box.id)}
     {#if isRoundShape(index)}
       <mesh
