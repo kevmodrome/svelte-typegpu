@@ -274,7 +274,8 @@ describe('TypeGPU camera interaction controller', () => {
       cameraChanges.push(event);
     });
 
-    controller.reconcile(sceneState({ cameraNode, pointer: true }));
+    const scene = sceneState({ cameraNode, pointer: true });
+    controller.reconcile(scene);
     const wheelEvent = canvas.dispatch<WheelEvent>('wheel', {
       deltaY: 60,
       deltaMode: 0,
@@ -289,6 +290,7 @@ describe('TypeGPU camera interaction controller', () => {
     expect(nextCamera.near).toBe(camera.near);
     expect(nextCamera.far).toBe(camera.far);
     expect(nextCamera.position[2]).toBeGreaterThan(5);
+    expect(scene.camera).toEqual(nextCamera);
 
     expect(cameraChanges).toHaveLength(1);
     expect(cameraChanges[0]).toMatchObject({
@@ -362,6 +364,101 @@ describe('TypeGPU camera interaction controller', () => {
     expect(renderer.setCamera).toHaveBeenCalledOnce();
     const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
     expect(nextCamera.position[0]).toBeLessThan(0);
+  });
+
+  it('rotates the camera from one-finger touch movement', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const cameraNode = createElement('camera');
+    const cameraChanges: unknown[] = [];
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    addEventListener(cameraNode, 'camerachange', (event) => {
+      cameraChanges.push(event);
+    });
+
+    controller.reconcile(sceneState({ cameraNode, pointer: true }));
+    canvas.dispatch<TouchEvent>('touchstart', {
+      touches: [{ clientX: 10, clientY: 20 }]
+    } as unknown as Partial<TouchEvent>);
+    const touchMove = windowTarget.dispatch<TouchEvent>('touchmove', {
+      touches: [{ clientX: 110, clientY: 20 }],
+      preventDefault: vi.fn()
+    } as unknown as Partial<TouchEvent>);
+
+    expect(touchMove.preventDefault).toHaveBeenCalledOnce();
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+    const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+    expect(nextCamera.position).not.toEqual(camera.position);
+    expect(nextCamera.position[0]).toBeLessThan(0);
+    expect(cameraChanges).toHaveLength(1);
+    expect(cameraChanges[0]).toMatchObject({
+      originalEvent: touchMove,
+      detail: {
+        camera: nextCamera
+      }
+    });
+  });
+
+  it('zooms the camera from two-finger pinch movement', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const cameraNode = createElement('camera');
+    const cameraChanges: unknown[] = [];
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    addEventListener(cameraNode, 'camerachange', (event) => {
+      cameraChanges.push(event);
+    });
+
+    controller.reconcile(sceneState({ cameraNode, pointer: true }));
+    canvas.dispatch<TouchEvent>('touchstart', {
+      touches: [
+        { clientX: 0, clientY: 0 },
+        { clientX: 100, clientY: 0 }
+      ]
+    } as unknown as Partial<TouchEvent>);
+    const touchMove = windowTarget.dispatch<TouchEvent>('touchmove', {
+      touches: [
+        { clientX: 0, clientY: 0 },
+        { clientX: 140, clientY: 0 }
+      ],
+      preventDefault: vi.fn()
+    } as unknown as Partial<TouchEvent>);
+
+    expect(touchMove.preventDefault).toHaveBeenCalledOnce();
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+    const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+    expect(nextCamera.position).not.toEqual(camera.position);
+    expect(nextCamera.position[2]).toBeLessThan(5);
+    expect(cameraChanges).toHaveLength(1);
+    expect(cameraChanges[0]).toMatchObject({
+      originalEvent: touchMove,
+      detail: {
+        camera: nextCamera,
+        orbit: {
+          radius: expect.any(Number)
+        }
+      }
+    });
   });
 
   it('schedules a camera update from touchmove input', () => {
