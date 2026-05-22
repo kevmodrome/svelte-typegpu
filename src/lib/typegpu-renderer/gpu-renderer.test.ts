@@ -145,6 +145,12 @@ describe('TypeGPU GPU renderer', () => {
     expect(rendererSource).toMatch(/this\.setScene\(\{[\s\S]*cameraNode:\s*null[\s\S]*cameraController:\s*null/s);
   });
 
+  it('exposes a narrow camera update method for runtime controls', () => {
+    expect(rendererSource).toContain('setCamera(camera: TypeGpuCameraSettings): void');
+    expect(rendererSource).toContain('setCamera(camera: TypeGpuCameraSettings): void {');
+    expect(rendererSource).toContain('this.setCamera(scene.camera);');
+  });
+
   it('loads renderer runtime source for lighting dirtiness assertions', () => {
     expect(svelteRendererSource).toMatch(
       /lightsDirty\s*\|\|=\s*invalidatesLights\(root,\s*dirtyNode,\s*syncedTreeRevision\)/

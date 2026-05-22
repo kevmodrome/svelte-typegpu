@@ -86,6 +86,7 @@ interface TypeGpuMaterialResource {
 
 export interface TypeGpuRenderer {
   setScene(scene: TypeGpuSceneState): void;
+  setCamera(camera: TypeGpuCameraSettings): void;
   dispose(): void;
 }
 
@@ -184,8 +185,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   setScene(scene: TypeGpuSceneState): void {
     if (this.#disposed) return;
 
-    this.#camera = scene.camera;
-    this.#projectionDirty = true;
+    this.setCamera(scene.camera);
     this.#scale = scene.scale;
     this.#setAnimationSpeed(scene.animationSpeed);
     this.#colorShift = scene.colorShift;
@@ -211,6 +211,13 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
       buffers.instanceCount = batch.instanceCount;
     }
+  }
+
+  setCamera(camera: TypeGpuCameraSettings): void {
+    if (this.#disposed) return;
+
+    this.#camera = camera;
+    this.#projectionDirty = true;
   }
 
   start(): void {

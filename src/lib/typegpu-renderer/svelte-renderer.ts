@@ -1,5 +1,6 @@
 import { createRenderer } from 'svelte/renderer';
 import { findFirstInteractiveMesh } from './components/mesh';
+import { createCameraInteractionController } from './camera-interaction';
 import { createTypeGpuRenderer, type TypeGpuRenderer } from './gpu-renderer';
 import {
   addEventListener,
@@ -101,6 +102,7 @@ function createRuntime(
   let lightsDirty = true;
   let syncedTreeRevision = -1;
   const sceneCache = createTypeGpuSceneCache();
+  const cameraInteraction = createCameraInteractionController({ canvas, renderer: gpu });
 
   function scheduleSync(nextRoot: TypeGpuNode, dirtyNode?: TypeGpuNode) {
     root = nextRoot;
@@ -112,12 +114,12 @@ function createRuntime(
     queued = true;
     queueMicrotask(() => {
       queued = false;
-      gpu.setScene(
-        createSceneState(root, sceneCache, {
-          reuseDrawBatches: !drawBatchesDirty,
-          reuseLights: !lightsDirty
-        })
-      );
+      const scene = createSceneState(root, sceneCache, {
+        reuseDrawBatches: !drawBatchesDirty,
+        reuseLights: !lightsDirty
+      });
+      gpu.setScene(scene);
+      cameraInteraction.reconcile(scene);
       syncedTreeRevision = root.treeRevision;
       drawBatchesDirty = false;
       lightsDirty = false;
@@ -138,6 +140,7 @@ function createRuntime(
   return {
     scheduleSync,
     dispose() {
+      cameraInteraction.dispose();
       canvas.removeEventListener('click', dispatchCanvasClick);
       gpu.dispose();
     }
