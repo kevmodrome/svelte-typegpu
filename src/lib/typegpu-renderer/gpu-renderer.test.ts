@@ -62,8 +62,11 @@ describe('TypeGPU GPU renderer', () => {
   });
 
   it('treats lighting changes as buffer writes separate from mesh uploads', () => {
-    expect(rendererSource).toContain('if (scene.lightsChanged)');
-    expect(rendererSource).toContain('this.#lightingBuffer.write(packLightingState(scene.lights))');
-    expect(rendererSource).not.toContain('packMeshInstance(scene.lights');
+    expect(rendererSource).toMatch(
+      /if\s*\(scene\.lightsChanged\)\s*{\s*this\.#lightingBuffer\.write\(packLightingState\(scene\.lights\)\);?\s*}/s
+    );
+    expect(rendererSource).not.toMatch(
+      /scene\.lights[\s\S]{0,120}packMeshInstance|packMeshInstance[\s\S]{0,120}scene\.lights/
+    );
   });
 });
