@@ -163,11 +163,11 @@ const evaluateLight = tgpu
         let outer_cos = cos(spot_angle);
         let inner_cos = cos(inner_angle);
         let spot_cos = dot(spot_axis, -light_direction);
-        let spot_falloff = select(
-          step(outer_cos, spot_cos),
-          smoothstep(outer_cos, inner_cos, spot_cos),
-          penumbra > 0.0001
-        );
+        var spot_falloff = step(outer_cos, spot_cos);
+
+        if (penumbra > 0.0001) {
+          spot_falloff = smoothstep(outer_cos, inner_cos, spot_cos);
+        }
 
         attenuation = attenuation * spot_falloff;
       }
