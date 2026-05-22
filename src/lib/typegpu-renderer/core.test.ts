@@ -170,6 +170,7 @@ describe('TypeGPU renderer core', () => {
     insert(root, scene, null);
 
     const state = readPerspectiveCameraState(root);
+    const sceneState = createSceneState(root);
 
     expect(state.node).toBe(camera);
     expect(state.settings).toMatchObject({
@@ -198,6 +199,8 @@ describe('TypeGPU renderer core', () => {
         step: 0.12
       }
     });
+    expect(sceneState.cameraNode).toBe(camera);
+    expect(sceneState.cameraController).toEqual(state.controller);
   });
 
   it('keeps orbitControls inert until it has supported input children', () => {
@@ -223,6 +226,19 @@ describe('TypeGPU renderer core', () => {
     insert(orbit, pointer, null);
     insert(scene, camera, null);
     insert(scene, orbit, null);
+    insert(root, scene, null);
+
+    expect(readPerspectiveCameraState(root).controller).toBeNull();
+  });
+
+  it('ignores pointerControls directly under a perspectiveCamera node', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const camera = createElement('perspectiveCamera');
+    const pointer = createElement('pointerControls');
+
+    insert(camera, pointer, null);
+    insert(scene, camera, null);
     insert(root, scene, null);
 
     expect(readPerspectiveCameraState(root).controller).toBeNull();
@@ -581,6 +597,66 @@ describe('TypeGPU renderer core', () => {
     expect(invalidatesLights(root, camera, root.treeRevision)).toBe(false);
     expect(invalidatesLights(root, orbit, root.treeRevision)).toBe(false);
     expect(invalidatesLights(root, pointer, root.treeRevision)).toBe(false);
+  });
+
+  it('keeps structural camera-control insertions out of draw-batch and light dirtiness', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const camera = createElement('perspectiveCamera');
+    const orbit = createElement('orbitControls');
+    const pointer = createElement('pointerControls');
+    const scheduleSync = vi.fn();
+
+    insert(scene, camera, null);
+    insert(root, scene, null);
+    root.runtime = { scheduleSync };
+    const syncedTreeRevision = root.treeRevision;
+
+    insert(orbit, pointer, null);
+    insert(camera, orbit, null);
+
+    expect(scheduleSync).toHaveBeenLastCalledWith(root, orbit);
+    expect(invalidatesDrawBatches(root, orbit, syncedTreeRevision)).toBe(false);
+    expect(invalidatesLights(root, orbit, syncedTreeRevision)).toBe(false);
+  });
+
+  it('keeps structural camera-control removals out of draw-batch and light dirtiness', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const camera = createElement('perspectiveCamera');
+    const orbit = createElement('orbitControls');
+    const pointer = createElement('pointerControls');
+    const scheduleSync = vi.fn();
+
+    insert(orbit, pointer, null);
+    insert(camera, orbit, null);
+    insert(scene, camera, null);
+    insert(root, scene, null);
+    root.runtime = { scheduleSync };
+    const syncedTreeRevision = root.treeRevision;
+
+    remove(orbit);
+
+    expect(scheduleSync).toHaveBeenLastCalledWith(root, orbit);
+    expect(invalidatesDrawBatches(root, orbit, syncedTreeRevision)).toBe(false);
+    expect(invalidatesLights(root, orbit, syncedTreeRevision)).toBe(false);
+  });
+
+  it('marks draw batches dirty for structural mesh insertions', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const mesh = createElement('mesh');
+    const scheduleSync = vi.fn();
+
+    insert(root, scene, null);
+    root.runtime = { scheduleSync };
+    const syncedTreeRevision = root.treeRevision;
+
+    insert(scene, mesh, null);
+
+    expect(scheduleSync).toHaveBeenLastCalledWith(root, mesh);
+    expect(invalidatesDrawBatches(root, mesh, syncedTreeRevision)).toBe(true);
+    expect(invalidatesLights(root, mesh, syncedTreeRevision)).toBe(false);
   });
 
   it('passes the invalidated node to runtime sync scheduling', () => {

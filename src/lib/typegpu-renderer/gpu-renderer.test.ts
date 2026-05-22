@@ -141,6 +141,10 @@ describe('TypeGPU GPU renderer', () => {
     expect(source).not.toContain('device.createRenderPipeline');
   });
 
+  it('seeds initial scene state with empty camera metadata', () => {
+    expect(rendererSource).toMatch(/this\.setScene\(\{[\s\S]*cameraNode:\s*null[\s\S]*cameraController:\s*null/s);
+  });
+
   it('loads renderer runtime source for lighting dirtiness assertions', () => {
     expect(svelteRendererSource).toMatch(
       /lightsDirty\s*\|\|=\s*invalidatesLights\(root,\s*dirtyNode,\s*syncedTreeRevision\)/

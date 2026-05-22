@@ -10,7 +10,15 @@ export function invalidatesDrawBatches(
 ): boolean {
   if (!dirtyNode) return true;
   if (root.treeRevision !== syncedTreeRevision) {
-    return !isCameraControlNode(dirtyNode);
+    if (dirtyNode.name === 'group') {
+      return subtreeHasMeshNode(dirtyNode);
+    }
+
+    return (
+      dirtyNode.name !== 'scene' &&
+      !isCameraControlNode(dirtyNode) &&
+      !isSupportedLightNode(dirtyNode)
+    );
   }
 
   if (dirtyNode.name === 'group') {
@@ -31,7 +39,10 @@ export function invalidatesLights(
 ): boolean {
   if (!dirtyNode) return true;
   if (root.treeRevision !== syncedTreeRevision) {
-    return !isCameraControlNode(dirtyNode);
+    if (isCameraControlNode(dirtyNode)) return false;
+    if (isSupportedLightNode(dirtyNode)) return true;
+
+    return dirtyNode.name === 'group' && subtreeHasSupportedLight(dirtyNode);
   }
   if (isCameraControlNode(dirtyNode)) return false;
   if (isSupportedLightNode(dirtyNode)) return true;

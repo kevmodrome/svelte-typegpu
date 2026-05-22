@@ -112,8 +112,8 @@ export function insert(parent: TypeGpuNode, node: TypeGpuNode, anchor: TypeGpuNo
     parent.lastChild = node;
   }
 
-  markTreeChanged(parent);
-  invalidateFrom(parent);
+  const root = markTreeChanged(parent);
+  invalidateRoot(root, node);
 }
 
 export function remove(node: TypeGpuNode): void {
@@ -135,11 +135,12 @@ export function remove(node: TypeGpuNode): void {
     parent.lastChild = previous;
   }
 
+  const root = markTreeChanged(parent);
+
   node.parent = null;
   node.previousSibling = null;
   node.nextSibling = null;
-  markTreeChanged(parent);
-  invalidateFrom(parent);
+  invalidateRoot(root, node);
 }
 
 export function getParent(node: TypeGpuNode): TypeGpuNode | null {
@@ -247,7 +248,11 @@ export function walk(node: TypeGpuNode, visitor: (node: TypeGpuNode) => void): v
 
 function invalidateFrom(node: TypeGpuNode): void {
   const root = findRoot(node);
-  root.runtime?.scheduleSync(root, node);
+  invalidateRoot(root, node);
+}
+
+function invalidateRoot(root: TypeGpuNode, dirtyNode: TypeGpuNode): void {
+  root.runtime?.scheduleSync(root, dirtyNode);
 }
 
 function findRoot(node: TypeGpuNode): TypeGpuNode {
@@ -256,8 +261,10 @@ function findRoot(node: TypeGpuNode): TypeGpuNode {
   return current;
 }
 
-function markTreeChanged(node: TypeGpuNode): void {
-  findRoot(node).treeRevision += 1;
+function markTreeChanged(node: TypeGpuNode): TypeGpuNode {
+  const root = findRoot(node);
+  root.treeRevision += 1;
+  return root;
 }
 
 function childSnapshot(node: TypeGpuNode): TypeGpuNode[] {

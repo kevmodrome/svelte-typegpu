@@ -170,6 +170,8 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#fallbackMaterial = this.#createFallbackMaterial();
     this.setScene({
       camera: DEFAULT_TYPEGPU_CAMERA,
+      cameraNode: null,
+      cameraController: null,
       scale: 1,
       animationSpeed: 1,
       colorShift: 0,
