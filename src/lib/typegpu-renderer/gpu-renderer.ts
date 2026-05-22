@@ -2,9 +2,13 @@ import tgpu, {
   d,
   type TgpuBindGroup,
   type TgpuBuffer,
+  type TgpuFixedSampler,
   type TgpuRenderPipeline,
   type TgpuRoot,
+  type TgpuTexture,
   type TgpuVertexLayout,
+  type RenderFlag,
+  type SampledFlag,
   type UniformFlag
 } from 'typegpu';
 import { createFpsMeter } from '../fps-meter';
@@ -15,8 +19,10 @@ import {
 import { createViewProjectionMatrix } from './camera-math';
 import { createContinuityTracker } from './continuity';
 import { DEPTH_FORMAT } from './render-constants';
+import { textureKeyForMaterial } from './materials';
 import { createMeshPipeline } from './typegpu-pipeline';
 import {
+  materialBindGroupLayout,
   meshInstanceLayout,
   meshVertexLayout,
   sceneBindGroupLayout,
@@ -57,6 +63,16 @@ interface TypeGpuVertexBuffer {
 }
 
 type TypeGpuSceneUniformBuffer = TgpuBuffer<typeof typegpuSceneUniformSchema> & UniformFlag;
+type TypeGpuMaterialTexture = TgpuTexture & SampledFlag;
+type TypeGpuDepthTexture = TgpuTexture & RenderFlag;
+type TypeGpuMeshPipeline = TgpuRenderPipeline<d.v4f>;
+
+interface TypeGpuMaterialResource {
+  key: string;
+  texture: TypeGpuMaterialTexture;
+  bindGroup: TgpuBindGroup<typeof materialBindGroupLayout.entries>;
+  status: 'ready' | 'loading' | 'failed' | 'fallback';
+}
 
 export interface TypeGpuRenderer {
   setScene(scene: TypeGpuSceneState): void;
@@ -87,19 +103,20 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #camera = { ...DEFAULT_TYPEGPU_CAMERA };
   #context: GPUCanvasContext;
   #continuity = createContinuityTracker();
-  #depthTexture: GPUTexture | null = null;
+  #depthTexture: TypeGpuDepthTexture | null = null;
   #disposed = false;
   #drawBatches: TypeGpuDrawBatch[] = [];
   #frame = 0;
   #batchBuffers = new Map<string, TypeGpuBatchBuffers>();
   #lastTimestamp = 0;
-  #bindGroup: TgpuBindGroup;
+  #fallbackMaterial: TypeGpuMaterialResource;
   #fpsMeter;
-  #pipeline: TgpuRenderPipeline;
+  #materialResources = new Map<string, TypeGpuMaterialResource>();
+  #materialSampler: TgpuFixedSampler;
+  #pipeline: TypeGpuMeshPipeline;
   #projectionDirty = true;
-  #rawBindGroup: GPUBindGroup;
-  #rawPipeline: GPURenderPipeline;
   #renderSize = { width: 0, height: 0 };
+  #sceneBindGroup: TgpuBindGroup<typeof sceneBindGroupLayout.entries>;
   #scale = 1;
   #animationSpeed = 1;
   #animationOffset = 0;
@@ -125,10 +142,16 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       .createBuffer(typegpuSceneUniformSchema)
       .$usage('uniform')
       .$name('TypeGPU scene uniforms');
-    this.#bindGroup = root.createBindGroup(sceneBindGroupLayout, { scene: this.#uniformBuffer });
-    this.#pipeline = createMeshPipeline(root, format);
-    this.#rawBindGroup = root.unwrap(this.#bindGroup);
-    this.#rawPipeline = root.unwrap(this.#pipeline);
+    this.#materialSampler = root.createSampler({
+      magFilter: 'linear',
+      minFilter: 'linear',
+      mipmapFilter: 'linear',
+      addressModeU: 'repeat',
+      addressModeV: 'repeat'
+    });
+    this.#sceneBindGroup = root.createBindGroup(sceneBindGroupLayout, { scene: this.#uniformBuffer });
+    this.#pipeline = createMeshPipeline(root, format) as TypeGpuMeshPipeline;
+    this.#fallbackMaterial = this.#createFallbackMaterial();
     this.setScene({
       camera: DEFAULT_TYPEGPU_CAMERA,
       scale: 1,
@@ -180,8 +203,121 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       buffers.instanceBuffer?.destroy();
       buffers.vertexBuffer.destroy();
     }
+    this.#fallbackMaterial.texture.destroy();
+    for (const material of this.#materialResources.values()) {
+      if (material.texture !== this.#fallbackMaterial.texture) {
+        material.texture.destroy();
+      }
+    }
     this.#uniformBuffer.destroy();
     this.root.destroy();
+  }
+
+  #createFallbackMaterial(): TypeGpuMaterialResource {
+    const root = this.root;
+    const texture = root.createTexture({
+      size: [1, 1],
+      format: 'rgba8unorm',
+      dimension: '2d'
+    })
+      .$usage('sampled')
+      .$name('TypeGPU fallback white texture');
+
+    texture.write(new Uint8Array([255, 255, 255, 255]));
+
+    return {
+      key: 'solid:white',
+      texture,
+      bindGroup: root.createBindGroup(materialBindGroupLayout, {
+        baseColorTexture: texture,
+        baseColorSampler: this.#materialSampler
+      }),
+      status: 'fallback'
+    };
+  }
+
+  #materialForBatch(batch: TypeGpuDrawBatch): TypeGpuMaterialResource {
+    const key = textureKeyForMaterial(batch.material);
+
+    if (key === this.#fallbackMaterial.key) {
+      return this.#fallbackMaterial;
+    }
+
+    const existing = this.#materialResources.get(key);
+
+    if (existing?.status === 'ready') {
+      return existing;
+    }
+
+    if (!existing) {
+      this.#materialResources.set(key, {
+        ...this.#fallbackMaterial,
+        key,
+        status: 'loading'
+      });
+      void this.#loadMaterialTexture(key, batch.material.map?.src ?? null);
+    }
+
+    return this.#fallbackMaterial;
+  }
+
+  async #loadMaterialTexture(key: string, src: string | null): Promise<void> {
+    if (!src) return;
+
+    try {
+      const response = await fetch(src);
+
+      if (!response.ok) {
+        throw new Error(`Failed to load material texture ${src}: ${response.status}`);
+      }
+
+      const bitmap = await createImageBitmap(await response.blob());
+
+      if (this.#disposed) {
+        bitmap.close();
+        return;
+      }
+
+      const root = this.root;
+      const texture = root.createTexture({
+        size: [bitmap.width, bitmap.height],
+        format: 'rgba8unorm',
+        dimension: '2d'
+      })
+        .$usage('sampled')
+        .$name(`TypeGPU material texture ${src}`);
+
+      texture.write(bitmap);
+      bitmap.close();
+
+      if (this.#disposed) {
+        texture.destroy();
+        return;
+      }
+
+      const previous = this.#materialResources.get(key);
+      if (previous && previous.texture !== this.#fallbackMaterial.texture) {
+        previous.texture.destroy();
+      }
+
+      this.#materialResources.set(key, {
+        key,
+        texture,
+        bindGroup: root.createBindGroup(materialBindGroupLayout, {
+          baseColorTexture: texture,
+          baseColorSampler: this.#materialSampler
+        }),
+        status: 'ready'
+      });
+    } catch {
+      if (this.#disposed) return;
+
+      this.#materialResources.set(key, {
+        ...this.#fallbackMaterial,
+        key,
+        status: 'failed'
+      });
+    }
   }
 
   #ensureBatchBuffers(batch: TypeGpuDrawBatch): TypeGpuBatchBuffers {
@@ -287,7 +423,6 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #render(timestamp: number): void {
     if (this.#disposed) return;
 
-    const device = this.root.device;
     const delta = this.#lastTimestamp ? Math.min(48, timestamp - this.#lastTimestamp) : 0;
     this.#lastTimestamp = timestamp;
 
@@ -297,38 +432,33 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#writeUniforms();
 
     if (this.#depthTexture) {
-      const encoder = device.createCommandEncoder({ label: 'TypeGPU frame' });
-      const pass = encoder.beginRenderPass({
-        colorAttachments: [
-          {
-            view: this.#context.getCurrentTexture().createView(),
-            loadOp: 'clear',
-            storeOp: 'store',
-            clearValue: { r: 0.067, g: 0.078, b: 0.102, a: 1 }
-          }
-        ],
-        depthStencilAttachment: {
-          view: this.#depthTexture.createView(),
+      const framePipeline = this.#pipeline
+        .with(this.#sceneBindGroup)
+        .withColorAttachment({
+          view: this.#context,
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearValue: { r: 0.067, g: 0.078, b: 0.102, a: 1 }
+        })
+        .withDepthStencilAttachment({
+          view: this.#depthTexture,
           depthClearValue: 1,
           depthLoadOp: 'clear',
           depthStoreOp: 'store'
-        }
-      });
-
-      pass.setPipeline(this.#rawPipeline);
-      pass.setBindGroup(0, this.#rawBindGroup);
+        });
 
       for (const batch of this.#drawBatches) {
         const buffers = this.#batchBuffers.get(batch.key);
         if (!buffers?.instanceBuffer || buffers.instanceCount === 0) continue;
 
-        pass.setVertexBuffer(0, buffers.vertexBuffer.buffer);
-        pass.setVertexBuffer(1, buffers.instanceBuffer.buffer);
-        pass.draw(batch.geometry.vertexCount, buffers.instanceCount);
-      }
+        const material = this.#materialForBatch(batch);
 
-      pass.end();
-      device.queue.submit([encoder.finish()]);
+        framePipeline
+          .with(material.bindGroup)
+          .with(meshVertexLayout, buffers.vertexBuffer.buffer)
+          .with(meshInstanceLayout, buffers.instanceBuffer.buffer)
+          .draw(batch.geometry.vertexCount, buffers.instanceCount);
+      }
     }
 
     this.#fpsMeter.record(timestamp);
@@ -346,12 +476,14 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.canvas.height = height;
     this.#renderSize = { width, height };
     this.#depthTexture?.destroy();
-    this.#depthTexture = this.root.device.createTexture({
-      label: 'TypeGPU depth texture',
-      size: { width, height },
+    const root = this.root;
+    this.#depthTexture = root.createTexture({
+      size: [width, height],
       format: DEPTH_FORMAT,
-      usage: GPUTextureUsage.RENDER_ATTACHMENT
-    });
+      dimension: '2d'
+    })
+      .$usage('render')
+      .$name('TypeGPU depth texture');
     this.#projectionDirty = true;
   }
 

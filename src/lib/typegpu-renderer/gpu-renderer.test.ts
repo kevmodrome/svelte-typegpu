@@ -22,22 +22,33 @@ describe('TypeGPU GPU renderer', () => {
     expect(layoutsSource).toContain('tgpu.vertexLayout');
     expect(rendererSource).toContain('.createBuffer(d.arrayOf(d.f32');
     expect(rendererSource).toMatch(/\.\$usage\('vertex'(?: as never)?\)/);
-    expect(rendererSource).toContain('pass.setVertexBuffer(0, buffers.vertexBuffer.buffer)');
-    expect(rendererSource).toContain('pass.setVertexBuffer(1, buffers.instanceBuffer.buffer)');
     expect(pipelineSource).toContain('meshVertexLayout.attrib.position');
     expect(pipelineSource).toContain('meshInstanceLayout.attrib.position');
     expect(source).not.toContain('arrayStride: MESH_VERTEX_FLOATS');
     expect(source).not.toContain('arrayStride: MESH_INSTANCE_FLOATS');
   });
 
-  it('uses TypeGPU pipeline and bind group resources for rendering', () => {
+  it('creates material resources through TypeGPU APIs', () => {
+    expect(rendererSource).toContain('root.createTexture');
+    expect(rendererSource).toContain('root.createSampler');
+    expect(rendererSource).toContain('root.createBindGroup(materialBindGroupLayout');
+    expect(rendererSource).toContain('.write(');
+    expect(rendererSource).not.toContain('device.createTexture');
+    expect(rendererSource).not.toContain('this.root.device.createTexture');
+    expect(rendererSource).not.toContain('device.createSampler');
+    expect(rendererSource).not.toContain('device.createBindGroup');
+  });
+
+  it('uses TypeGPU pipeline binding for material draws', () => {
     expect(rendererSource).toContain('root.createBindGroup(sceneBindGroupLayout');
     expect(pipelineSource).toMatch(/root\s*\.\s*createRenderPipeline/);
-    expect(rendererSource).toContain('root.unwrap(this.#pipeline)');
-    expect(rendererSource).toContain('root.unwrap(this.#bindGroup)');
-    expect(rendererSource).not.toContain('.with(this.#bindGroup)');
-    expect(rendererSource).not.toContain('.with(meshVertexLayout');
-    expect(rendererSource).not.toContain('.with(meshInstanceLayout');
+    expect(rendererSource).toContain('.with(this.#sceneBindGroup)');
+    expect(rendererSource).toContain('.with(material.bindGroup)');
+    expect(rendererSource).toContain('.with(meshVertexLayout');
+    expect(rendererSource).toContain('.with(meshInstanceLayout');
+    expect(rendererSource).toContain('.withColorAttachment');
+    expect(rendererSource).toContain('.withDepthStencilAttachment');
+    expect(rendererSource).toContain('.draw(');
     expect(source).not.toContain('device.createBindGroup');
     expect(source).not.toContain('device.createRenderPipeline');
   });
