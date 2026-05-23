@@ -1,10 +1,18 @@
 import { numberArg } from '../attributes';
 import type { TypeGpuNode } from '../core';
 import type { TypeGpuLoadedModelMesh } from '../glb-loader';
-import { isStandardMaterialObject, normalizeStandardMaterial } from '../materials';
+import {
+  DEFAULT_STANDARD_MATERIAL,
+  isStandardMaterialObject,
+  normalizeStandardMaterial
+} from '../materials';
 import type { TypeGpuModelCache } from '../model-cache';
 import { composeTransforms, readLocalTransform } from '../transform';
-import type { TypeGpuMeshDrawItem, TypeGpuStandardMaterialDescriptor, TypeGpuTransform } from '../types';
+import type {
+  TypeGpuMaterialDescriptor,
+  TypeGpuMeshDrawItem,
+  TypeGpuTransform
+} from '../types';
 
 export interface ModelWalkContext {
   transform: TypeGpuTransform;
@@ -69,13 +77,17 @@ function modelMeshDrawItem(
 
 function readModelMaterial(
   modelNode: TypeGpuNode,
-  fallback: TypeGpuStandardMaterialDescriptor
-): { node: TypeGpuNode | null; descriptor: TypeGpuStandardMaterialDescriptor } {
+  fallback: TypeGpuMaterialDescriptor
+): { node: TypeGpuNode | null; descriptor: TypeGpuMaterialDescriptor } {
   for (let child = modelNode.firstChild; child; child = child.nextSibling) {
     if (child.name !== 'standardMaterial') continue;
 
     const materialAttr = child.attributes.material;
-    const base = isStandardMaterialObject(materialAttr) ? materialAttr : fallback;
+    const base = isStandardMaterialObject(materialAttr)
+      ? materialAttr
+      : fallback.kind === 'standard'
+        ? fallback
+        : DEFAULT_STANDARD_MATERIAL;
 
     return {
       node: child,

@@ -205,6 +205,143 @@ describe('TypeGPU scene compiler', () => {
     expect(second.drawBatches[0].instances[18]).toBeCloseTo(0.5);
   });
 
+  it('compiles instancedMesh array data into one draw batch', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const resources = createElement('resources');
+    const geometry = createElement('boxGeometry');
+    const material = createElement('phongMaterial');
+    const instanced = createElement('instancedMesh');
+    const instances = [
+      { id: 'a', position: [0, 0, 0] as const, color: [1, 0, 0, 1] as const },
+      { id: 'b', position: [2, 0, 0] as const, color: [0, 1, 0, 1] as const }
+    ];
+
+    setAttribute(geometry, 'id', 'cube');
+    setAttribute(material, 'id', 'mat');
+    setAttribute(instanced, 'geometry', 'cube');
+    setAttribute(instanced, 'material', 'mat');
+    setAttribute(instanced, 'position', [1, 0, 0]);
+    setAttribute(instanced, 'instances', instances);
+    setAttribute(instanced, 'getKey', (item: (typeof instances)[number]) => item.id);
+    setAttribute(instanced, 'getTransform', (item: (typeof instances)[number]) => ({
+      position: item.position
+    }));
+    setAttribute(instanced, 'getColor', (item: (typeof instances)[number]) => item.color);
+    setAttribute(
+      instanced,
+      'getSpinSpeed',
+      (_item: (typeof instances)[number], index: number) => index + 1
+    );
+
+    insert(resources, geometry, null);
+    insert(resources, material, null);
+    insert(scene, resources, null);
+    insert(scene, instanced, null);
+    insert(root, scene, null);
+
+    const state = createSceneState(root, createTypeGpuSceneCache(), { dirty: Dirty.All });
+
+    expect(state.drawBatches).toHaveLength(1);
+    expect(state.drawBatches[0].geometryKey).toBe('box:1:1:1');
+    expect(state.drawBatches[0].instanceCount).toBe(2);
+    expect(state.drawBatches[0].instanceIds).toEqual(['a', 'b']);
+    expect(Array.from(state.drawBatches[0].instances.slice(0, 12))).toEqual([
+      1, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1
+    ]);
+    expect(Array.from(state.drawBatches[0].instances.slice(20, 32))).toEqual([
+      3, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 2
+    ]);
+  });
+
+  it('re-packs instancedMesh dirty ranges when callback-derived values change', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const geometry = createElement('boxGeometry');
+    const instanced = createElement('instancedMesh');
+    const cache = createTypeGpuSceneCache();
+    const instances = [
+      { id: 'a', position: [0, 0, 0] as [number, number, number] },
+      { id: 'b', position: [2, 0, 0] as [number, number, number] }
+    ];
+
+    setAttribute(instanced, 'instances', instances);
+    setAttribute(instanced, 'getKey', (item: (typeof instances)[number]) => item.id);
+    setAttribute(instanced, 'getTransform', (item: (typeof instances)[number]) => ({
+      position: item.position
+    }));
+
+    insert(instanced, geometry, null);
+    insert(scene, instanced, null);
+    insert(root, scene, null);
+
+    const first = createSceneState(root, cache, { dirty: Dirty.All });
+    instances[1].position = [4, 0, 0];
+    const second = createSceneState(root, cache, { dirty: Dirty.InstanceData });
+
+    expect(second.drawBatches[0].instances).toBe(first.drawBatches[0].instances);
+    expect(second.drawBatches[0].instancesChanged).toBe(true);
+    expect(second.drawBatches[0].dirtyRanges).toEqual([{ start: 1, count: 1 }]);
+    expect(second.drawBatches[0].instances[20]).toBe(4);
+  });
+
+  it('compiles ready model cache entries into imported draw batches', async () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const model = createElement('model');
+    const loaded: TypeGpuLoadedModel = {
+      key: 'url:/models/column.glb',
+      meshes: [
+        {
+          geometry: {
+            key: 'url:/models/column.glb:primitive:0',
+            kind: 'imported',
+            vertexData: new Float32Array([0, 0, 0, 0, 1, 0, 0, 0]),
+            vertexCount: 1,
+            vertexFloats: 8,
+            bounds: { min: [0, 0, 0], max: [1, 1, 0] },
+            topology: 'triangle-list',
+            layoutKey: 'pnu8'
+          },
+          material: {
+            kind: 'phong',
+            color: [1, 1, 1, 1],
+            roughness: 0.5,
+            metalness: 0,
+            opacity: 1,
+            map: null
+          },
+          transform: {
+            position: [0, 0, 0],
+            rotation: [0, 0, 0],
+            scale: [1, 1, 1]
+          }
+        }
+      ]
+    };
+    const cache = createTypeGpuSceneCache({
+      modelCache: createModelCache({
+        loadUrl: async () => loaded,
+        loadData: async () => loaded
+      })
+    });
+
+    setAttribute(model, 'src', '/models/column.glb');
+    setAttribute(model, 'position', [3, 4, 5]);
+    insert(scene, model, null);
+    insert(root, scene, null);
+
+    createSceneState(root, cache, { dirty: Dirty.All });
+    await Promise.resolve();
+    const state = createSceneState(root, cache, { dirty: Dirty.All });
+
+    expect(state.drawBatches).toHaveLength(1);
+    expect(state.drawBatches[0].geometryKey).toBe('url:/models/column.glb:primitive:0');
+    expect(state.drawBatches[0].geometry.kind).toBe('imported');
+    expect(state.drawBatches[0].instanceCount).toBe(1);
+    expect(Array.from(state.drawBatches[0].instances.slice(0, 3))).toEqual([3, 4, 5]);
+  });
+
   it('preserves loaded model textures when material children override only color', async () => {
     const root = createFragment();
     const scene = createElement('scene');

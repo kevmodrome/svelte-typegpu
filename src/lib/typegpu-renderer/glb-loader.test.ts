@@ -133,8 +133,12 @@ describe('GLB loader', () => {
     expect(model.meshes).toHaveLength(1);
     expect(model.meshes[0].geometry).toMatchObject({
       key: 'model:test:primitive:0',
+      kind: 'imported',
       vertexCount: 3,
-      vertexFloats: MESH_VERTEX_FLOATS
+      vertexFloats: MESH_VERTEX_FLOATS,
+      bounds: { min: [0, 0, 0], max: [1, 1, 0] },
+      topology: 'triangle-list',
+      layoutKey: 'pnu8'
     });
     expect(Array.from(model.meshes[0].geometry.vertexData)).toEqual([
       0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1
@@ -558,13 +562,22 @@ describe('GLB loader', () => {
     );
 
     expect(model.meshes[0].material).toMatchObject({
+      key: expect.stringContaining('material:standard'),
+      pipelineKey: expect.stringContaining('material:standard'),
+      bindGroupKey: 'embedded:model:material:image:0|sampler:default',
       color: [0.2, 0.3, 0.4, 0.5],
       roughness: 0.7,
       metalness: 0.8,
       opacity: 1,
+      textureKey: 'embedded:model:material:image:0',
+      texture: {
+        kind: 'embedded',
+        key: 'embedded:model:material:image:0',
+        mimeType: 'image/png'
+      },
       map: {
         kind: 'embedded',
-        key: 'model:material:image:0',
+        key: 'embedded:model:material:image:0',
         mimeType: 'image/png'
       }
     });
@@ -593,10 +606,13 @@ describe('GLB loader', () => {
     );
 
     expect(model.meshes[0].material).toMatchObject({
+      key: expect.stringContaining('material:standard'),
       color: [1, 0.5, 0.25, 0.125],
       roughness: 1,
       metalness: 1,
-      opacity: 1
+      opacity: 1,
+      textureKey: 'solid:white',
+      map: null
     });
   });
 
@@ -619,8 +635,11 @@ describe('GLB loader', () => {
     );
 
     expect(model.meshes[0].material).toMatchObject({
+      key: expect.stringContaining('material:standard'),
       roughness: 1,
-      metalness: 1
+      metalness: 1,
+      textureKey: 'solid:white',
+      map: null
     });
   });
 

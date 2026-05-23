@@ -1,10 +1,14 @@
 import { MESH_VERTEX_FLOATS } from './instance-data';
-import { DEFAULT_STANDARD_MATERIAL } from './materials';
+import type { TypeGpuNode } from './core';
+import { readInlineMaterial } from './material-descriptors';
 import { IDENTITY_TRANSFORM } from './transform';
 import type {
+  TypeGpuBounds,
   TypeGpuEmbeddedTextureSource,
   TypeGpuGeometryData,
-  TypeGpuStandardMaterialDescriptor
+  TypeGpuMaterialDescriptor,
+  TypeGpuTransform,
+  Vector3Tuple
 } from './types';
 
 type Matrix4 = [
@@ -26,8 +30,8 @@ export interface TypeGpuLoadedModel {
 
 export interface TypeGpuLoadedModelMesh {
   geometry: TypeGpuGeometryData;
-  material: TypeGpuStandardMaterialDescriptor;
-  transform: typeof IDENTITY_TRANSFORM;
+  material: TypeGpuMaterialDescriptor;
+  transform: TypeGpuTransform;
 }
 
 export interface GltfJson {
@@ -284,9 +288,13 @@ function readPrimitive(
   return {
     geometry: {
       key: `${modelKey}:primitive:${primitiveIndex}`,
+      kind: 'imported',
       vertexData,
       vertexCount: vertexData.length / MESH_VERTEX_FLOATS,
-      vertexFloats: MESH_VERTEX_FLOATS
+      vertexFloats: MESH_VERTEX_FLOATS,
+      bounds: boundsForVertexData(vertexData),
+      topology: 'triangle-list',
+      layoutKey: 'pnu8'
     },
     material: readMaterial(container, modelKey, primitive.material),
     transform: IDENTITY_TRANSFORM
@@ -437,23 +445,26 @@ function readMaterial(
   container: ParsedGlbContainer,
   modelKey: string,
   materialIndex: number | undefined
-): TypeGpuStandardMaterialDescriptor {
+): TypeGpuMaterialDescriptor {
   const material = isNonNegativeInteger(materialIndex)
     ? container.json.materials?.[materialIndex]
     : undefined;
   const pbr = material?.pbrMetallicRoughness;
   const color = pbr?.baseColorFactor;
+  const descriptor = readInlineMaterial({
+    name: 'standardMaterial',
+    attributes: {
+      color: color?.length === 4
+        ? [color[0] ?? 1, color[1] ?? 1, color[2] ?? 1, color[3] ?? 1]
+        : [1, 1, 1, 1],
+      roughness: pbr?.roughnessFactor ?? 1,
+      metalness: pbr?.metallicFactor ?? 1,
+      opacity: 1,
+      map: readEmbeddedTextureSource(container, modelKey, pbr?.baseColorTexture?.index)
+    }
+  } as unknown as TypeGpuNode);
 
-  return {
-    kind: 'standard',
-    color: color?.length === 4
-      ? [color[0] ?? 1, color[1] ?? 1, color[2] ?? 1, color[3] ?? 1]
-      : [...DEFAULT_STANDARD_MATERIAL.color],
-    roughness: pbr?.roughnessFactor ?? 1,
-    metalness: pbr?.metallicFactor ?? 1,
-    opacity: 1,
-    map: readEmbeddedTextureSource(container, modelKey, pbr?.baseColorTexture?.index)
-  };
+  return descriptor!;
 }
 
 function readEmbeddedTextureSource(
@@ -658,6 +669,25 @@ function buildVertexData(
   }
 
   return new Float32Array(vertexData);
+}
+
+function boundsForVertexData(vertexData: Float32Array): TypeGpuBounds {
+  const min: Vector3Tuple = [Infinity, Infinity, Infinity];
+  const max: Vector3Tuple = [-Infinity, -Infinity, -Infinity];
+
+  for (let index = 0; index < vertexData.length; index += MESH_VERTEX_FLOATS) {
+    for (let axis = 0; axis < 3; axis += 1) {
+      const value = vertexData[index + axis] ?? 0;
+      min[axis] = Math.min(min[axis], value);
+      max[axis] = Math.max(max[axis], value);
+    }
+  }
+
+  if (!Number.isFinite(min[0])) {
+    return { min: [0, 0, 0], max: [0, 0, 0] };
+  }
+
+  return { min, max };
 }
 
 function dataViewForBufferView(
