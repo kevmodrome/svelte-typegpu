@@ -48,7 +48,7 @@ The renderer is not yet aligned with the full guide in these areas:
 
 ## Scope
 
-Implement both the immediate internals and the immediate public primitives from the guide. The work should be staged so each new primitive uses the new architecture rather than extending the existing ad hoc paths.
+Implement both the immediate internals and the immediate public primitives from the guide. The implementation may replace existing renderer internals wholesale when that produces a simpler and more coherent result. Existing modules, helper boundaries, and tests are useful reference material, not constraints.
 
 In scope:
 
@@ -58,8 +58,8 @@ In scope:
 - Pipeline cache and resource pruning.
 - Texture generation tokens for async load races.
 - Bounds-based CPU interaction picking.
-- Public primitives: `scene`, `group`, `perspectiveCamera`, `orthographicCamera`, `orbitControls`, existing controls compatibility, ambient/directional/point lights plus existing hemisphere/spot lights, `mesh`, `instancedMesh`, `boxGeometry`, `planeGeometry`, `sphereGeometry`, `bufferGeometry`, `basicMaterial`, `phongMaterial`, existing `standardMaterial`, `texture`, and `sampler`.
-- Backward compatibility for existing camelCase component files and current demo usage.
+- Public primitives: `scene`, `group`, `perspectiveCamera`, `orthographicCamera`, `orbitControls`, ambient/directional/point lights plus hemisphere/spot lights, `mesh`, `instancedMesh`, `boxGeometry`, `planeGeometry`, `sphereGeometry`, `bufferGeometry`, `basicMaterial`, `phongMaterial`, `standardMaterial`, `texture`, and `sampler`.
+- A rebuilt demo and test suite that prove the target API and renderer behavior, even if that means deleting or rewriting older implementation files.
 
 Out of scope for this branch:
 
@@ -72,6 +72,12 @@ Out of scope for this branch:
 - Skeletal animation, morph targets, or expanded GLB feature coverage.
 
 Those escape hatches should be represented by boundaries and key shapes where useful, but not implemented as public behavior in this branch.
+
+## Rebuild Strategy
+
+The implementation should prefer a clean renderer core over incremental preservation. Keep existing code only when it fits the target architecture without contortions. Delete or replace code that bakes in obsolete assumptions such as first-interactive-mesh picking, draw-batch-only scene state, nested camera child nodes as the primary API, or material handling coupled directly to one texture path.
+
+The end-state contract is the guide-aligned public API and renderer behavior described in this spec. Passing old tests is not a requirement. Tests should be rewritten around the new contract when old tests assert obsolete internals or compatibility paths.
 
 ## Public API
 
@@ -101,13 +107,15 @@ The renderer should support the guide's MVP public API using scene-level primiti
 </scene>
 ```
 
-Existing authored names remain valid:
+The target authored names are the guide-level scene primitives. CamelCase names are acceptable where Svelte custom-renderer ergonomics make them simpler or where they cost almost nothing to support:
 
-- `perspectiveCamera`, `cameraPose`, `cameraLens`, `controls`, `pointerControls`, `keyboardControls`.
+- `perspectiveCamera`, `orthographicCamera`, `orbitControls`.
 - `ambientLight`, `hemisphereLight`, `directionalLight`, `pointLight`, `spotLight`.
-- `boxGeometry`, `sphereGeometry`, `standardMaterial`.
+- `boxGeometry`, `planeGeometry`, `sphereGeometry`, `bufferGeometry`.
+- `basicMaterial`, `phongMaterial`, `standardMaterial`.
+- `instancedMesh`.
 
-Add aliases or descriptors for the guide names where Svelte compilation allows them:
+Kebab-case aliases should be supported where Svelte compilation allows them:
 
 - `perspective-camera`, `orthographic-camera`, `orbit-controls`.
 - `ambient-light`, `directional-light`, `point-light`.
@@ -115,7 +123,7 @@ Add aliases or descriptors for the guide names where Svelte compilation allows t
 - `basic-material`, `phong-material`, `standard-material`.
 - `instanced-mesh`.
 
-The implementation should not break the current demo components. `Box.typegpu.svelte`, `Sphere.typegpu.svelte`, and the existing scene should continue to compile and render through the custom renderer.
+The current demo components may be rewritten or removed. The finished demo should exercise the target renderer API directly and should remain useful for manual verification.
 
 ## Primitive Semantics
 
@@ -134,11 +142,11 @@ The implementation should not break the current demo components. `Box.typegpu.sv
 - `visible`: false removes descendants from draw batches and interaction.
 - `renderOrder`: contributes to sort key and batch ordering.
 
-`perspectiveCamera` supports the existing nested form and the direct guide form. A direct camera node with `position`, `target`, `fov`, `near`, and `far` should compile the same as a node with `cameraPose` and `cameraLens` children.
+`perspectiveCamera` uses the direct guide form. A camera node with `position`, `target`, `fov`, `near`, and `far` is the target API.
 
 `orthographicCamera` should compile into camera state with a `projection` discriminator and `zoom`, `near`, and `far`. The GPU renderer should produce an orthographic view-projection matrix when that camera is active.
 
-`orbitControls` should be a public alias for orbit-style controls. Existing nested `controls` with `pointerControls` and `keyboardControls` remain valid. Camera interaction stays renderer-owned and must not force per-frame Svelte updates.
+`orbitControls` should be the public camera interaction primitive. It owns camera interaction settings through its own props rather than requiring nested `controls`, `pointerControls`, or `keyboardControls` nodes. Camera interaction stays renderer-owned and must not force per-frame Svelte updates.
 
 Lights compile into packed lighting data, not GPU resources:
 
@@ -157,9 +165,9 @@ Geometry nodes produce CPU geometry descriptors and live geometry keys:
 
 Material nodes produce material descriptors and separate material, bind-group, texture, sampler, and pipeline keys:
 
-- `basicMaterial`: unlit-style material descriptor, initially rendered through the current material path with lights bypassed or approximated if the shader split is not yet added.
-- `phongMaterial`: lit material alias compatible with the existing standard shader.
-- `standardMaterial`: existing material model.
+- `basicMaterial`: unlit-style material descriptor.
+- `phongMaterial`: lit material descriptor using the renderer's lighting data.
+- `standardMaterial`: PBR-inspired descriptor with the existing color, roughness, metalness, opacity, and map semantics.
 
 `texture` and `sampler` are resource declarations. A material can reference them by id:
 
@@ -191,7 +199,7 @@ Material nodes produce material descriptors and separate material, bind-group, t
 
 ## Scene Compiler
 
-Replace the current draw-batch/light-focused state reader with a compiler that produces a fuller scene state:
+Build a compiler that produces a full scene state:
 
 ```ts
 interface TypeGpuSceneState {
@@ -260,7 +268,7 @@ Primitive descriptors should own these concerns:
 - Dirty behavior.
 - Resource and scene compilation hooks.
 
-This replaces the current coarse `invalidatesDrawBatches` and `invalidatesLights` approach. Transitional helper functions may remain while tests are migrated, but runtime scheduling should use `Dirty`.
+Runtime scheduling should use `Dirty`. The old `invalidatesDrawBatches` and `invalidatesLights` approach can be deleted instead of migrated.
 
 ## Draw Batches And Resource Keys
 
@@ -354,7 +362,7 @@ Pointer movement should reuse the same index to dispatch `pointerenter` and `poi
 
 ## Rendering
 
-The GPU renderer should keep the current TypeGPU-backed render path, but change ownership boundaries:
+The GPU renderer should use TypeGPU-backed resources and render submission, but it may be rebuilt around clearer ownership boundaries:
 
 - `setScene` receives scene IR and updates only dirty resource classes.
 - Pipeline lookup goes through a pipeline cache keyed by `batch.pipelineKey`.
@@ -381,7 +389,7 @@ Required test coverage:
 - Descriptor dirty masks for scene, transform, camera, lights, geometry, material, texture, sampler, interaction listeners, insert, and remove.
 - Runtime scheduling passes dirty masks into scene compilation and reuses clean draw batches, lights, and interaction indexes.
 - Scene compiler emits render settings, draw-batch changed flags, live resource keys, and interaction index.
-- Direct camera props and existing nested camera children compile consistently.
+- Direct camera props compile into camera state.
 - Orthographic camera state is preserved.
 - Plane geometry and buffer geometry compile into geometry data and bounds.
 - Basic, phong, and standard material descriptors normalize color, opacity, map, sampler, and pipeline-relevant fields.
@@ -391,13 +399,12 @@ Required test coverage:
 - Bounds-based click picking dispatches the nearest interactive mesh, not the first interactive mesh.
 - `pointerEvents="none"` and `hitTest="none"` remove targets from picking.
 - `instancedMesh` compiles many instances into one draw batch with stable instance ids and dirty ranges.
-- Existing GLB model, material override, camera controls, lighting, and renderer tests remain green.
+- GLB model import, material override, camera controls, lighting, and renderer behavior are covered by target-behavior tests. Older tests may be rewritten or removed when they assert obsolete internal details.
 - Component-renderer tests cover new primitive aliases where Svelte accepts the tag names.
 
 Manual verification should include running the demo and confirming:
 
-- Existing cube/sphere field still renders.
-- Existing GLB model still renders.
+- The rebuilt demo renders procedural meshes and at least one GLB model.
 - Texture changes do not leak visible stale resources.
 - Clicking a visible object selects the object under the cursor rather than always the first interactive mesh.
 
@@ -405,18 +412,18 @@ Manual verification should include running the demo and confirming:
 
 Implement in this order:
 
-1. Dirty bitmask and descriptor registry, while keeping existing behavior passing.
+1. Establish the new renderer module boundaries and descriptor registry.
 2. Scene state expansion with render settings, live resource keys, and changed flags.
-3. Geometry/material/resource descriptor compilation for existing primitives.
+3. Geometry/material/resource descriptor compilation for target primitives.
 4. New geometry and material primitives.
 5. Texture and sampler resources, pruning, and generation tokens.
 6. Pipeline cache and explicit batch key components.
 7. Interaction index and bounds picking.
 8. Instanced mesh.
 9. Orthographic camera and root options.
-10. Compatibility cleanup and demo verification.
+10. Demo rebuild and verification.
 
-Each step should preserve existing API behavior and tests.
+Each step should preserve the target behavior introduced by earlier steps. It does not need to preserve obsolete implementation behavior.
 
 ## Non-Goals And Follow-Ups
 
