@@ -435,6 +435,61 @@ describe('GLB loader', () => {
     expect(Array.from(model.meshes[0].geometry.vertexData.slice(0, 3))).toEqual([10, 0, 0]);
   });
 
+  it('bakes node rotation into imported vertex normals', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const normals = float32Bytes([1, 0, 0, 1, 0, 0, 1, 0, 0]);
+    const binary = concatBytes([positions, normals]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0, rotation: [0, 0, Math.SQRT1_2, Math.SQRT1_2] }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0, NORMAL: 1 } }] }],
+          buffers: [{ byteLength: binary.byteLength }],
+          bufferViews: [
+            { buffer: 0, byteOffset: 0, byteLength: positions.byteLength },
+            { buffer: 0, byteOffset: positions.byteLength, byteLength: normals.byteLength }
+          ],
+          accessors: [
+            { bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' },
+            { bufferView: 1, componentType: 5126, count: 3, type: 'VEC3' }
+          ]
+        },
+        binary
+      ),
+      'model:rotated-normals'
+    );
+
+    expect(Array.from(model.meshes[0].geometry.vertexData.slice(3, 6))).toEqual([0, 1, 0]);
+  });
+
+  it('reverses emitted winding for mirrored node transforms', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0, scale: [-1, 1, 1] }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+          buffers: [{ byteLength: positions.byteLength }],
+          bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: positions.byteLength }],
+          accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' }]
+        },
+        positions
+      ),
+      'model:mirrored'
+    );
+    const vertexData = model.meshes[0].geometry.vertexData;
+
+    expect(Array.from(vertexData.slice(0, 3))).toEqual([0, 1, 0]);
+    expect(Array.from(vertexData.slice(3, 6))).toEqual([0, 0, 1]);
+    expect(Array.from(vertexData.slice(MESH_VERTEX_FLOATS, MESH_VERTEX_FLOATS + 3))).toEqual([
+      -1, 0, 0
+    ]);
+  });
+
   it('maps metallic-roughness material fields and embedded base color textures', () => {
     const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
     const pngBytes = new Uint8Array([137, 80, 78, 71]);
@@ -474,13 +529,97 @@ describe('GLB loader', () => {
       color: [0.2, 0.3, 0.4, 0.5],
       roughness: 0.7,
       metalness: 0.8,
+      opacity: 1,
       map: {
         kind: 'embedded',
         key: 'model:material:image:0',
         mimeType: 'image/png'
       }
     });
-    expect(Array.from(model.meshes[0].material.map?.data ?? [])).toEqual([137, 80, 78, 71]);
+    const map = model.meshes[0].material.map;
+    expect(map?.kind).toBe('embedded');
+    expect(Array.from(map?.kind === 'embedded' ? map.data : [])).toEqual([137, 80, 78, 71]);
+  });
+
+  it('uses glTF metallic-roughness defaults and keeps alpha only in color', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0 }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 }, material: 0 }] }],
+          buffers: [{ byteLength: positions.byteLength }],
+          bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: positions.byteLength }],
+          accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' }],
+          materials: [{ pbrMetallicRoughness: { baseColorFactor: [1, 0.5, 0.25, 0.125] } }]
+        },
+        positions
+      ),
+      'model:material-defaults'
+    );
+
+    expect(model.meshes[0].material).toMatchObject({
+      color: [1, 0.5, 0.25, 0.125],
+      roughness: 1,
+      metalness: 1,
+      opacity: 1
+    });
+  });
+
+  it('ignores embedded base color textures with empty mime type or bytes', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0 }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 }, material: 0 }] }],
+          buffers: [{ byteLength: positions.byteLength }],
+          bufferViews: [
+            { buffer: 0, byteOffset: 0, byteLength: positions.byteLength },
+            { buffer: 0, byteOffset: positions.byteLength, byteLength: 0 }
+          ],
+          accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' }],
+          materials: [{ pbrMetallicRoughness: { baseColorTexture: { index: 0 } } }],
+          textures: [{ source: 0 }],
+          images: [{ bufferView: 1, mimeType: '' }]
+        },
+        positions
+      ),
+      'model:empty-image'
+    );
+
+    expect(model.meshes[0].material.map).toBeNull();
+  });
+
+  it('ignores embedded base color textures with empty byte data', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0 }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 }, material: 0 }] }],
+          buffers: [{ byteLength: positions.byteLength }],
+          bufferViews: [
+            { buffer: 0, byteOffset: 0, byteLength: positions.byteLength },
+            { buffer: 0, byteOffset: positions.byteLength, byteLength: 0 }
+          ],
+          accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' }],
+          materials: [{ pbrMetallicRoughness: { baseColorTexture: { index: 0 } } }],
+          textures: [{ source: 0 }],
+          images: [{ bufferView: 1, mimeType: 'image/png' }]
+        },
+        positions
+      ),
+      'model:empty-image-bytes'
+    );
+
+    expect(model.meshes[0].material.map).toBeNull();
   });
 
   it('skips unsupported primitive modes and missing position primitives', () => {

@@ -255,7 +255,13 @@ function readPrimitive(
 
   const transformedPositions = positions.map((position) => transformPoint(worldMatrix, position));
   const transformedNormals = normals?.map((normal) => transformNormal(worldMatrix, normal)) ?? null;
-  const vertexData = buildVertexData(transformedPositions, transformedNormals, uvs, indices);
+  const vertexData = buildVertexData(
+    transformedPositions,
+    transformedNormals,
+    uvs,
+    indices,
+    matrixDeterminant3(worldMatrix) < 0
+  );
   if (!vertexData) return null;
 
   return {
@@ -381,15 +387,33 @@ function transformNormal(matrix: Matrix4, normal: number[]): number[] {
   const inverseDeterminant = 1 / determinant;
   return normalizeVector([
     b01 * inverseDeterminant * x +
-      (-a22 * a01 + a02 * a21) * inverseDeterminant * y +
-      (a12 * a01 - a02 * a11) * inverseDeterminant * z,
-    b11 * inverseDeterminant * x +
+      b11 * inverseDeterminant * y +
+      b21 * inverseDeterminant * z,
+    (-a22 * a01 + a02 * a21) * inverseDeterminant * x +
       (a22 * a00 - a02 * a20) * inverseDeterminant * y +
-      (-a12 * a00 + a02 * a10) * inverseDeterminant * z,
-    b21 * inverseDeterminant * x +
-      (-a21 * a00 + a01 * a20) * inverseDeterminant * y +
+      (-a21 * a00 + a01 * a20) * inverseDeterminant * z,
+    (a12 * a01 - a02 * a11) * inverseDeterminant * x +
+      (-a12 * a00 + a02 * a10) * inverseDeterminant * y +
       (a11 * a00 - a01 * a10) * inverseDeterminant * z
   ]);
+}
+
+function matrixDeterminant3(matrix: Matrix4): number {
+  const a00 = matrix[0];
+  const a01 = matrix[4];
+  const a02 = matrix[8];
+  const a10 = matrix[1];
+  const a11 = matrix[5];
+  const a12 = matrix[9];
+  const a20 = matrix[2];
+  const a21 = matrix[6];
+  const a22 = matrix[10];
+
+  return (
+    a00 * (a22 * a11 - a12 * a21) +
+    a01 * (-a22 * a10 + a12 * a20) +
+    a02 * (a21 * a10 - a11 * a20)
+  );
 }
 
 function readMaterial(
@@ -408,15 +432,9 @@ function readMaterial(
     color: color?.length === 4
       ? [color[0] ?? 1, color[1] ?? 1, color[2] ?? 1, color[3] ?? 1]
       : [...DEFAULT_STANDARD_MATERIAL.color],
-    roughness: typeof pbr?.roughnessFactor === 'number'
-      ? pbr.roughnessFactor
-      : DEFAULT_STANDARD_MATERIAL.roughness,
-    metalness: typeof pbr?.metallicFactor === 'number'
-      ? pbr.metallicFactor
-      : DEFAULT_STANDARD_MATERIAL.metalness,
-    opacity: color?.length === 4
-      ? color[3] ?? DEFAULT_STANDARD_MATERIAL.opacity
-      : DEFAULT_STANDARD_MATERIAL.opacity,
+    roughness: material ? pbr?.roughnessFactor ?? 1 : DEFAULT_STANDARD_MATERIAL.roughness,
+    metalness: material ? pbr?.metallicFactor ?? 1 : DEFAULT_STANDARD_MATERIAL.metalness,
+    opacity: 1,
     map: readEmbeddedTextureSource(container, modelKey, pbr?.baseColorTexture?.index)
   };
 }
@@ -432,10 +450,17 @@ function readEmbeddedTextureSource(
   if (!isNonNegativeInteger(imageIndex)) return null;
 
   const image = container.json.images?.[imageIndex];
-  if (!image || !isNonNegativeInteger(image.bufferView) || !image.mimeType) return null;
+  if (
+    !image ||
+    !isNonNegativeInteger(image.bufferView) ||
+    typeof image.mimeType !== 'string' ||
+    image.mimeType.length === 0
+  ) {
+    return null;
+  }
 
   const bytes = bytesForBufferView(container, container.json.bufferViews?.[image.bufferView]);
-  if (!bytes) return null;
+  if (!bytes || bytes.byteLength === 0) return null;
 
   return {
     kind: 'embedded',
@@ -572,7 +597,8 @@ function buildVertexData(
   positions: number[][],
   normals: number[][] | null,
   uvs: number[][] | null,
-  indices: number[] | null
+  indices: number[] | null,
+  reverseWinding = false
 ): Float32Array | null {
   const vertexIndices = indices ?? positions.map((_, index) => index);
   if (vertexIndices.length === 0 || vertexIndices.length % 3 !== 0) return null;
@@ -586,16 +612,17 @@ function buildVertexData(
   const vertexData: number[] = [];
 
   for (let triangleOffset = 0; triangleOffset < vertexIndices.length; triangleOffset += 3) {
-    const flatNormal = normals
-      ? null
-      : generateFlatNormal(positions, [
-          vertexIndices[triangleOffset] ?? 0,
-          vertexIndices[triangleOffset + 1] ?? 0,
-          vertexIndices[triangleOffset + 2] ?? 0
-        ]);
+    const triangleIndices = [
+      vertexIndices[triangleOffset] ?? 0,
+      vertexIndices[triangleOffset + 1] ?? 0,
+      vertexIndices[triangleOffset + 2] ?? 0
+    ];
+    if (reverseWinding) triangleIndices.reverse();
+
+    const flatNormal = normals ? null : generateFlatNormal(positions, triangleIndices);
 
     for (let vertexOffset = 0; vertexOffset < 3; vertexOffset += 1) {
-      const vertexIndex = vertexIndices[triangleOffset + vertexOffset] ?? 0;
+      const vertexIndex = triangleIndices[vertexOffset] ?? 0;
       const position = positions[vertexIndex] ?? [0, 0, 0];
       const normal = normals?.[vertexIndex] ?? flatNormal ?? [0, 0, 1];
       const uv = uvs?.[vertexIndex] ?? [0, 0];
@@ -728,7 +755,15 @@ function normalizeVector(vector: number[]): number[] {
   const length = Math.hypot(vector[0] ?? 0, vector[1] ?? 0, vector[2] ?? 0);
 
   if (length === 0) return [0, 0, 1];
-  return [(vector[0] ?? 0) / length, (vector[1] ?? 0) / length, (vector[2] ?? 0) / length];
+  return [
+    cleanFloat((vector[0] ?? 0) / length),
+    cleanFloat((vector[1] ?? 0) / length),
+    cleanFloat((vector[2] ?? 0) / length)
+  ];
+}
+
+function cleanFloat(value: number): number {
+  return Math.abs(value) < 1e-12 ? 0 : value;
 }
 
 function trimJsonPadding(chunk: Uint8Array): Uint8Array {
