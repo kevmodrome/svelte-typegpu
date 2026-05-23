@@ -90,6 +90,43 @@ describe('TypeGPU component renderer integration', () => {
     expect(material.attributes.color).toBe(color);
     expect(material.attributes.map).toBe('/textures/checker.svg');
   });
+
+  it('renders public model nodes with url and data sources', () => {
+    const ModelScene = compileTypeGpuSource(`
+      <script>
+        const data = new ArrayBuffer(8);
+      </script>
+
+      <scene>
+        <model src="/models/chair.glb" position={[1, 2, 3]} rotation={[0.1, 0.2, 0.3]} scale={2}></model>
+        <model data={data} position={[4, 5, 6]}></model>
+      </scene>
+    `);
+    const root = createFragment();
+
+    renderer.render(ModelScene, {
+      target: root
+    });
+
+    const scene = onlyElement(root);
+    const models = scene.children.filter((node) => node.kind === 'element');
+    const [srcModel, dataModel] = models;
+
+    expect(scene.name).toBe('scene');
+    expect(models).toHaveLength(2);
+    expect(srcModel.name).toBe('model');
+    expect(srcModel.attributes).toMatchObject({
+      src: '/models/chair.glb',
+      position: [1, 2, 3],
+      rotation: [0.1, 0.2, 0.3],
+      scale: 2
+    });
+    expect(dataModel.name).toBe('model');
+    expect(dataModel.attributes).toMatchObject({
+      position: [4, 5, 6]
+    });
+    expect(dataModel.attributes.data).toBeInstanceOf(ArrayBuffer);
+  });
 });
 
 function onlyElement(root: TypeGpuNode): TypeGpuNode {
@@ -102,6 +139,14 @@ function onlyElement(root: TypeGpuNode): TypeGpuNode {
 
 function loadTypeGpuComponent(filename: string) {
   const source = readFileSync(filename, 'utf8');
+  return compileTypeGpuComponent(source, filename);
+}
+
+function compileTypeGpuSource(source: string) {
+  return compileTypeGpuComponent(source, 'Inline.typegpu.svelte');
+}
+
+function compileTypeGpuComponent(source: string, filename: string) {
   const result = compile(source, {
     filename,
     generate: 'client',
