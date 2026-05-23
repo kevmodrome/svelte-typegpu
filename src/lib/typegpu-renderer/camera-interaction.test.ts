@@ -1,4 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+import {
+  applyCameraChange,
+  clampSceneControls,
+  DEFAULT_SCENE_CONTROLS,
+  type CameraChangeDetail
+} from '../scene-controls';
 import { createCameraInteractionController } from './camera-interaction';
 import type {
   TypeGpuCameraSettings,
@@ -77,16 +83,18 @@ const pointerControls: TypeGpuPointerControls = {
 };
 
 function sceneState({
+  cameraSettings = camera,
   cameraNode = createElement('camera'),
   controller = 'orbit',
   pointer = pointerControls
 }: {
+  cameraSettings?: TypeGpuCameraSettings;
   cameraNode?: TypeGpuNode | null;
   controller?: 'orbit' | null;
   pointer?: TypeGpuPointerControls | null | true;
 } = {}): TypeGpuSceneState {
   return {
-    camera,
+    camera: cameraSettings,
     cameraNode,
     cameraController:
       controller === 'orbit'
@@ -482,6 +490,59 @@ describe('TypeGPU camera interaction controller', () => {
     expect(renderer.setCamera).toHaveBeenCalledOnce();
     const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
     expect(nextCamera.position[0]).toBeLessThan(0);
+  });
+
+  it('continues dragging after app camera-change state is reconciled', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const cameraNode = createElement('camera');
+    const controls = clampSceneControls({
+      ...DEFAULT_SCENE_CONTROLS,
+      camera
+    });
+    const scene = sceneState({ cameraNode, pointer: true });
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    addEventListener(cameraNode, 'camerachange', (event) => {
+      applyCameraChange(controls, event.detail as CameraChangeDetail);
+    });
+
+    controller.reconcile(scene);
+    canvas.dispatch<MouseEvent>('mousedown', { button: 0, clientX: 10, clientY: 20 } as Partial<
+      MouseEvent
+    >);
+    windowTarget.dispatch<MouseEvent>('mousemove', {
+      buttons: 1,
+      clientX: 110,
+      clientY: 20
+    } as Partial<MouseEvent>);
+
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+    expect(controls.camera.position).toEqual(renderer.setCamera.mock.calls[0][0].position);
+
+    controller.reconcile(
+      sceneState({
+        cameraSettings: controls.camera,
+        cameraNode,
+        pointer: true
+      })
+    );
+    windowTarget.dispatch<MouseEvent>('mousemove', {
+      buttons: 1,
+      clientX: 130,
+      clientY: 20
+    } as Partial<MouseEvent>);
+
+    expect(renderer.setCamera).toHaveBeenCalledTimes(2);
   });
 
   it('rotates the camera from middle mouse drag', () => {

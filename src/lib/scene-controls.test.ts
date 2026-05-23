@@ -97,6 +97,44 @@ describe('scene controls', () => {
     });
   });
 
+  it('preserves renderer precision when applying camera change events', () => {
+    const controls = clampSceneControls(DEFAULT_SCENE_CONTROLS);
+
+    applyCameraChange(controls, {
+      camera: {
+        position: [-2.397128, 1.412345, 4.387913],
+        lookAt: [0.123456, -0.654321, 0.222222],
+        fov: 45,
+        near: 0.1,
+        far: 500
+      },
+      orbit: {
+        radius: 5.192302,
+        yaw: 0.25,
+        pitch: 0.1
+      }
+    });
+
+    expect(controls.camera.position).toEqual([-2.397128, 1.412345, 4.387913]);
+    expect(controls.camera.lookAt).toEqual([0.123456, -0.654321, 0.222222]);
+  });
+
+  it('keeps clamped camera position away from lookAt', () => {
+    expect(
+      clampSceneControls({
+        ...DEFAULT_SCENE_CONTROLS,
+        camera: {
+          ...DEFAULT_SCENE_CONTROLS.camera,
+          position: [0, 0, 0],
+          lookAt: [0, 0, 0]
+        }
+      }).camera
+    ).toMatchObject({
+      position: [0, 0, 1],
+      lookAt: [0, 0, 0]
+    });
+  });
+
   it('copies clamped control values without replacing the target object', () => {
     const target = clampSceneControls(DEFAULT_SCENE_CONTROLS);
     const camera = target.camera;
