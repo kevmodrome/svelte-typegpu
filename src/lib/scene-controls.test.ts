@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyCameraChange,
   DEFAULT_SCENE_CONTROLS,
-  cameraLookAt,
   cameraControlsForCount,
   clampSceneControls,
   copySceneControls,
@@ -19,11 +19,8 @@ describe('scene controls', () => {
         cubeCount: 20_000,
         hue: 725,
         camera: {
-          position: [-80, 2.125, 80],
-          rotation: {
-            yaw: 240,
-            pitch: -120
-          },
+          position: [-2000, 2.125, 2000],
+          lookAt: [1500, -2.125, -1500],
           fov: 150,
           near: -1,
           far: 0.2
@@ -36,11 +33,8 @@ describe('scene controls', () => {
       cubeCount: 10_000,
       hue: 5,
       camera: {
-        position: [-40, 2.13, 40],
-        rotation: {
-          yaw: 180,
-          pitch: -85
-        },
+        position: [-1000, 2.13, 1000],
+        lookAt: [1000, -2.12, -1000],
         fov: 100,
         near: 0.01,
         far: 1.01
@@ -51,10 +45,7 @@ describe('scene controls', () => {
   it('creates camera defaults that frame each cube count preset', () => {
     expect(cameraControlsForCount(1)).toEqual({
       position: [0, 1.4, 5],
-      rotation: {
-        yaw: 0,
-        pitch: -15.64
-      },
+      lookAt: [0, 0, 0],
       fov: 45,
       near: 0.1,
       far: 500
@@ -62,18 +53,48 @@ describe('scene controls', () => {
 
     expect(cameraControlsForCount(10_000)).toEqual({
       position: [9, 7, 13],
-      rotation: {
-        yaw: -34.7,
-        pitch: -23.88
-      },
+      lookAt: [0, 0, 0],
       fov: 45,
       near: 0.1,
       far: 500
     });
   });
 
-  it('derives a look-at point from camera position and rotation', () => {
-    expect(cameraLookAt(DEFAULT_SCENE_CONTROLS.camera)).toEqual([0, 1.13, 4.04]);
+  it('stores lookAt directly in camera controls', () => {
+    expect(DEFAULT_SCENE_CONTROLS.camera).toMatchObject({
+      position: [0, 1.4, 5],
+      lookAt: [0, 0, 0],
+      fov: 45,
+      near: 0.1,
+      far: 500
+    });
+  });
+
+  it('applies camera change events to scene controls', () => {
+    const controls = clampSceneControls(DEFAULT_SCENE_CONTROLS);
+
+    applyCameraChange(controls, {
+      camera: {
+        position: [1.25, 2.5, 7.75],
+        lookAt: [0.5, 0.25, -0.5],
+        fov: 55,
+        near: 0.2,
+        far: 300
+      },
+      orbit: {
+        radius: 8,
+        yaw: 0.25,
+        pitch: 0.1
+      }
+    });
+
+    expect(controls.camera).toEqual({
+      position: [1.25, 2.5, 7.75],
+      lookAt: [0.5, 0.25, -0.5],
+      fov: 55,
+      near: 0.2,
+      far: 300
+    });
   });
 
   it('copies clamped control values without replacing the target object', () => {
@@ -86,7 +107,8 @@ describe('scene controls', () => {
       hue: 725,
       camera: {
         ...target.camera,
-        position: [3.333, 4.444, 5.555]
+        position: [3.333, 4.444, 5.555],
+        lookAt: [-1.111, -2.222, -3.333]
       }
     });
 
@@ -94,6 +116,7 @@ describe('scene controls', () => {
     expect(target.hue).toBe(5);
     expect(target.camera).toBe(camera);
     expect(target.camera.position).toEqual([3.33, 4.44, 5.56]);
+    expect(target.camera.lookAt).toEqual([-1.11, -2.22, -3.33]);
   });
 
   it('wraps hue changes and formats the material color', () => {

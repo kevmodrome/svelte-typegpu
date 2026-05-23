@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Scene from './Scene.typegpu.svelte';
-  import type { SceneControls } from './lib/scene-controls';
+  import type { CameraChangeDetail, SceneControls } from './lib/scene-controls';
   import renderer, {
     createTypeGpuRoot,
     type TypeGpuRoot
@@ -11,9 +11,15 @@
     controls: SceneControls;
     onShapeClick?: () => void;
     onFps?: (fps: number) => void;
+    onCameraChange?: (detail: CameraChangeDetail) => void;
   }
 
-  let { controls, onShapeClick = () => {}, onFps = () => {} }: Props = $props();
+  let {
+    controls,
+    onShapeClick = () => {},
+    onFps = () => {},
+    onCameraChange = () => {}
+  }: Props = $props();
 
   let host: HTMLDivElement;
   let error = $state<string | null>(null);
@@ -35,7 +41,8 @@
           target: root,
           props: {
             controls,
-            onShapeClick
+            onShapeClick,
+            onCameraChange
           }
         });
         error = null;

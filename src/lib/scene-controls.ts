@@ -2,17 +2,21 @@ import { clampCubeCount, sceneCameraForCount } from './cube-field';
 
 export type Vector3Tuple = [number, number, number];
 
-export interface CameraRotationControls {
-  yaw: number;
-  pitch: number;
-}
-
 export interface CameraControls {
   position: Vector3Tuple;
-  rotation: CameraRotationControls;
+  lookAt: Vector3Tuple;
   fov: number;
   near: number;
   far: number;
+}
+
+export interface CameraChangeDetail {
+  camera: CameraControls;
+  orbit: {
+    radius: number;
+    yaw: number;
+    pitch: number;
+  };
 }
 
 export interface SceneControls {
@@ -53,7 +57,7 @@ export function copySceneControls(target: SceneControls, source: SceneControls):
   target.cubeCount = next.cubeCount;
   target.hue = next.hue;
   target.camera.position = next.camera.position;
-  target.camera.rotation = next.camera.rotation;
+  target.camera.lookAt = next.camera.lookAt;
   target.camera.fov = next.camera.fov;
   target.camera.near = next.camera.near;
   target.camera.far = next.camera.far;
@@ -64,23 +68,18 @@ export function cameraControlsForCount(count: number): CameraControls {
 
   return {
     position: [...camera.position],
-    rotation: rotationForLookAt(camera.position, camera.lookAt),
+    lookAt: [...camera.lookAt],
     fov: 45,
     near: 0.1,
     far: 500
   };
 }
 
-export function cameraLookAt(camera: CameraControls): Vector3Tuple {
-  const yaw = toRadians(camera.rotation.yaw);
-  const pitch = toRadians(camera.rotation.pitch);
-  const horizontal = Math.cos(pitch);
-
-  return [
-    round(camera.position[0] + Math.sin(yaw) * horizontal),
-    round(camera.position[1] + Math.sin(pitch)),
-    round(camera.position[2] - Math.cos(yaw) * horizontal)
-  ];
+export function applyCameraChange(controls: SceneControls, detail: CameraChangeDetail): void {
+  copySceneControls(controls, {
+    ...controls,
+    camera: detail.camera
+  });
 }
 
 export function nextHue(hue: number, step = 47): number {
@@ -103,11 +102,8 @@ function clampCameraControls(camera: CameraControls): CameraControls {
   const near = round(clamp(camera.near, 0.01, 10));
 
   return {
-    position: clampVector(camera.position, -40, 40),
-    rotation: {
-      yaw: round(clamp(camera.rotation.yaw, -180, 180)),
-      pitch: round(clamp(camera.rotation.pitch, -85, 85))
-    },
+    position: clampVector(camera.position, -1000, 1000),
+    lookAt: clampVector(camera.lookAt, -1000, 1000),
     fov: round(clamp(camera.fov, 20, 100)),
     near,
     far: round(Math.max(clamp(camera.far, 0.1, 1000), near + 1))
@@ -120,26 +116,4 @@ function clampVector(vector: Vector3Tuple, min: number, max: number): Vector3Tup
 
 function round(value: number): number {
   return Math.round(value * 100) / 100;
-}
-
-function rotationForLookAt(position: Vector3Tuple, lookAt: Vector3Tuple): CameraRotationControls {
-  const direction: Vector3Tuple = [
-    lookAt[0] - position[0],
-    lookAt[1] - position[1],
-    lookAt[2] - position[2]
-  ];
-  const horizontal = Math.hypot(direction[0], direction[2]) || 1;
-
-  return {
-    yaw: round(toDegrees(Math.atan2(direction[0], -direction[2]))),
-    pitch: round(toDegrees(Math.atan2(direction[1], horizontal)))
-  };
-}
-
-function toDegrees(radians: number): number {
-  return (radians * 180) / Math.PI;
-}
-
-function toRadians(degrees: number): number {
-  return (degrees * Math.PI) / 180;
 }

@@ -5,8 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { createCubeField, sceneCameraForCount } from './lib/cube-field';
 import { demoColorForIndex } from './lib/demo-colors';
 import {
-  cameraLookAt,
   DEFAULT_SCENE_CONTROLS,
+  type CameraChangeDetail,
   type SceneControls
 } from './lib/scene-controls';
 import {
@@ -51,6 +51,7 @@ describe('TypeGPU demo scene authoring API', () => {
     const root = createFragment();
     const Scene = loadTypeGpuSceneComponent(source);
     const onShapeClick = vi.fn();
+    const onCameraChange = vi.fn();
     const controls: SceneControls = {
       ...DEFAULT_SCENE_CONTROLS,
       spinSpeed: 1.25,
@@ -60,17 +61,20 @@ describe('TypeGPU demo scene authoring API', () => {
       camera: {
         ...DEFAULT_SCENE_CONTROLS.camera,
         position: [9, 7, 13],
-        rotation: { yaw: 34, pitch: -19 }
+        lookAt: [0.5, 0.25, -0.5]
       }
     };
 
     renderer.render(Scene, {
       target: root,
-      props: { controls, onShapeClick }
+      props: { controls, onShapeClick, onCameraChange }
     });
 
     const scene = onlyElement(root, 'scene');
     const camera = onlyNamed(scene, 'perspectiveCamera');
+    const orbit = onlyNamed(camera, 'orbitControls');
+    const pointer = onlyNamed(orbit, 'pointerControls');
+    const keyboard = onlyNamed(orbit, 'keyboardControls');
     const ambientLight = onlyNamed(scene, 'ambientLight');
     const hemisphereLight = onlyNamed(scene, 'hemisphereLight');
     const directionalLight = onlyNamed(scene, 'directionalLight');
@@ -88,9 +92,23 @@ describe('TypeGPU demo scene authoring API', () => {
     });
     expect(camera.attributes).toMatchObject({
       position: controls.camera.position,
+      lookAt: controls.camera.lookAt,
       fov: controls.camera.fov,
       near: controls.camera.near,
       far: controls.camera.far
+    });
+    expect(orbit.attributes).toMatchObject({
+      minDistance: 1,
+      maxDistance: 100
+    });
+    expect(pointer.name).toBe('pointerControls');
+    expect(keyboard.attributes).toMatchObject({
+      rotateLeft: 'ArrowLeft',
+      rotateRight: 'ArrowRight',
+      rotateUp: 'ArrowUp',
+      rotateDown: 'ArrowDown',
+      zoomIn: '+',
+      zoomOut: '-'
     });
 
     expect(ambientLight.attributes).toMatchObject({ intensity: 0.18 });
@@ -147,8 +165,24 @@ describe('TypeGPU demo scene authoring API', () => {
 
     dispatchNodeEvent(boxMesh, 'click');
     dispatchNodeEvent(sphereMesh, 'keydown', { key: 'Enter' } as never);
+    const cameraChange: CameraChangeDetail = {
+      camera: {
+        position: [2, 3, 4],
+        lookAt: [0, 0, 0],
+        fov: 50,
+        near: 0.2,
+        far: 400
+      },
+      orbit: {
+        radius: 6,
+        yaw: 0.25,
+        pitch: 0.1
+      }
+    };
+    dispatchNodeEvent(camera, 'camerachange', { detail: cameraChange });
 
     expect(onShapeClick).toHaveBeenCalledTimes(2);
+    expect(onCameraChange).toHaveBeenCalledWith(cameraChange);
   });
 });
 
@@ -206,7 +240,6 @@ function loadTypeGpuSceneComponent(source: string) {
     'createCubeField',
     'sceneCameraForCount',
     'demoColorForIndex',
-    'cameraLookAt',
     `${executableCode}\nreturn ${componentName};`
   );
 
@@ -215,7 +248,6 @@ function loadTypeGpuSceneComponent(source: string) {
     renderer,
     createCubeField,
     sceneCameraForCount,
-    demoColorForIndex,
-    cameraLookAt
+    demoColorForIndex
   ) as Parameters<typeof renderer.render>[0];
 }

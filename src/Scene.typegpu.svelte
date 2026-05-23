@@ -1,14 +1,15 @@
 <script lang="ts">
   import { createCubeField, sceneCameraForCount } from './lib/cube-field';
   import { demoColorForIndex } from './lib/demo-colors';
-  import { cameraLookAt, type SceneControls } from './lib/scene-controls';
+  import type { CameraChangeDetail, SceneControls } from './lib/scene-controls';
 
   interface Props {
     controls: SceneControls;
     onShapeClick?: () => void;
+    onCameraChange?: (detail: CameraChangeDetail) => void;
   }
 
-  let { controls, onShapeClick = () => {} }: Props = $props();
+  let { controls, onShapeClick = () => {}, onCameraChange = () => {} }: Props = $props();
   let boxes = $derived(createCubeField(controls.cubeCount));
   let frame = $derived(sceneCameraForCount(controls.cubeCount));
   let baseSize = $derived(frame.cubeSize);
@@ -49,16 +50,33 @@
       onShapeClick();
     }
   }
+
+  function handleCameraChange(event: CustomEvent<CameraChangeDetail>) {
+    onCameraChange(event.detail);
+  }
 </script>
 
 <scene scale={controls.cubeScale} {animationSpeed} colorShift={controls.hue}>
   <perspectiveCamera
     position={controls.camera.position}
-    lookAt={cameraLookAt(controls.camera)}
+    lookAt={controls.camera.lookAt}
     fov={controls.camera.fov}
     near={controls.camera.near}
     far={controls.camera.far}
-  ></perspectiveCamera>
+    oncamerachange={handleCameraChange}
+  >
+    <orbitControls minDistance={1} maxDistance={100}>
+      <pointerControls></pointerControls>
+      <keyboardControls
+        rotateLeft="ArrowLeft"
+        rotateRight="ArrowRight"
+        rotateUp="ArrowUp"
+        rotateDown="ArrowDown"
+        zoomIn="+"
+        zoomOut="-"
+      ></keyboardControls>
+    </orbitControls>
+  </perspectiveCamera>
 
   <ambientLight color={[1, 1, 1]} intensity={0.18}></ambientLight>
 

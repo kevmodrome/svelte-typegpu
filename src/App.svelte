@@ -3,6 +3,7 @@
   import { CUBE_COUNT_PRESETS } from './lib/cube-field';
   import {
     DEFAULT_SCENE_CONTROLS,
+    applyCameraChange,
     cameraControlsForCount,
     clampSceneControls,
     copySceneControls,
@@ -45,6 +46,10 @@
     copySceneControls(controls, controls);
   }
 
+  function syncCamera(detail: Parameters<typeof applyCameraChange>[1]) {
+    applyCameraChange(controls, detail);
+  }
+
   function formatCubeCount(count: number) {
     return count >= 1_000 ? `${count / 1_000}k` : String(count);
   }
@@ -59,7 +64,12 @@
 </script>
 
 <main class="shell">
-  <TypeGpuCanvas {controls} onShapeClick={shiftHue} onFps={(value) => (fps = value)} />
+  <TypeGpuCanvas
+    {controls}
+    onShapeClick={shiftHue}
+    onFps={(value) => (fps = value)}
+    onCameraChange={syncCamera}
+  />
 
   <header class="masthead" aria-label="Renderer status">
     <div>
@@ -134,36 +144,6 @@
             <output>{formatCameraValue(controls.camera.position[axis])}</output>
           </label>
         {/each}
-      </div>
-
-      <div class="slider-stack">
-        <span>Rotation</span>
-        <label class="mini-slider-row">
-          <span>Yaw</span>
-          <input
-            type="range"
-            min="-180"
-            max="180"
-            step="1"
-            bind:value={controls.camera.rotation.yaw}
-            onchange={clampControls}
-            aria-label="Camera yaw"
-          />
-          <output>{controls.camera.rotation.yaw.toFixed(0)}°</output>
-        </label>
-        <label class="mini-slider-row">
-          <span>Pitch</span>
-          <input
-            type="range"
-            min="-85"
-            max="85"
-            step="1"
-            bind:value={controls.camera.rotation.pitch}
-            onchange={clampControls}
-            aria-label="Camera pitch"
-          />
-          <output>{controls.camera.rotation.pitch.toFixed(0)}°</output>
-        </label>
       </div>
 
       <div class="clip-control">
