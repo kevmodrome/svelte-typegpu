@@ -450,16 +450,21 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     const dpr = Math.min(this.#maxDevicePixelRatio, window.devicePixelRatio || 1);
     const width = Math.max(1, Math.floor((canvas.clientWidth || canvas.width || 1) * dpr));
     const height = Math.max(1, Math.floor((canvas.clientHeight || canvas.height || 1) * dpr));
+    const sizeChanged = this.#renderSize.width !== width || this.#renderSize.height !== height;
+    const needsDepthTexture = this.#renderSettings.depth && !this.#depthTexture;
 
-    if (this.#renderSize.width === width && this.#renderSize.height === height) return;
+    if (!sizeChanged && !needsDepthTexture) return;
 
-    canvas.width = width;
-    canvas.height = height;
-    this.#renderSize = { width, height };
-    this.#depthTexture?.destroy();
-    this.#depthTexture = null;
+    if (sizeChanged) {
+      canvas.width = width;
+      canvas.height = height;
+      this.#renderSize = { width, height };
+      this.#depthTexture?.destroy();
+      this.#depthTexture = null;
+      this.#projectionDirty = true;
+    }
 
-    if (this.#renderSettings.depth) {
+    if (this.#renderSettings.depth && (sizeChanged || needsDepthTexture)) {
       const root = this.root;
       this.#depthTexture = root
         .createTexture({
@@ -470,8 +475,6 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
         .$usage('render')
         .$name('TypeGPU depth texture');
     }
-
-    this.#projectionDirty = true;
   }
 
   #writeUniforms(): void {

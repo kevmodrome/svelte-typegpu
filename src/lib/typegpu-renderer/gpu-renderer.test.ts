@@ -70,6 +70,14 @@ describe('TypeGPU GPU renderer', () => {
     expect(rendererSource).toContain('this.#pipelineForBatch(batch, this.#renderSettings.depth)');
   });
 
+  it('recreates depth textures when depth is toggled back on without a resize', () => {
+    expect(rendererSource).toContain('const sizeChanged =');
+    expect(rendererSource).toContain('const needsDepthTexture = this.#renderSettings.depth && !this.#depthTexture');
+    expect(rendererSource).toContain('if (!sizeChanged && !needsDepthTexture) return;');
+    expect(rendererSource).toContain('if (sizeChanged) {');
+    expect(rendererSource).toContain('if (this.#renderSettings.depth && (sizeChanged || needsDepthTexture))');
+  });
+
   it('implements always, demand, and manual frame loops truthfully', () => {
     expect(rendererSource).toContain("frameloop: 'always'");
     expect(rendererSource).toContain("frameloop: 'demand'");
