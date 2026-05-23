@@ -220,7 +220,10 @@ function readPrimitive(
       : null;
   const indices =
     typeof primitive.indices === 'number' ? readIndexAccessor(container, primitive.indices) : null;
+  if (typeof primitive.indices === 'number' && !indices) return null;
+
   const vertexData = buildVertexData(positions, normals, uvs, indices);
+  if (!vertexData) return null;
 
   return {
     geometry: {
@@ -245,8 +248,8 @@ function readAccessor(
   if (accessor.sparse) return null;
   if (accessor.type !== expectedType) return null;
   if (accessor.componentType !== expectedComponentType) return null;
-  if (typeof accessor.bufferView !== 'number') return null;
-  if (typeof accessor.count !== 'number') return null;
+  if (!isNonNegativeInteger(accessor.bufferView)) return null;
+  if (!isNonNegativeInteger(accessor.count)) return null;
 
   const componentCount = accessorComponentCount(accessor.type);
   const componentSize = componentByteSize(accessor.componentType);
@@ -257,7 +260,18 @@ function readAccessor(
   if (!bufferView || !view) return null;
 
   const accessorOffset = accessor.byteOffset ?? 0;
+  if (!isNonNegativeInteger(accessorOffset)) return null;
+
+  const elementByteSize = componentCount * componentSize;
   const stride = bufferView.byteStride ?? componentCount * componentSize;
+  if (!isNonNegativeInteger(stride)) return null;
+  if (stride < elementByteSize) return null;
+  if (
+    !accessorFitsBufferView(accessorOffset, stride, elementByteSize, accessor.count, view.byteLength)
+  ) {
+    return null;
+  }
+
   const values: number[][] = [];
 
   for (let index = 0; index < accessor.count; index += 1) {
@@ -279,8 +293,8 @@ function readIndexAccessor(container: ParsedGlbContainer, accessorIndex: number)
   if (!accessor) return null;
   if (accessor.sparse) return null;
   if (accessor.type !== 'SCALAR') return null;
-  if (typeof accessor.bufferView !== 'number') return null;
-  if (typeof accessor.count !== 'number') return null;
+  if (!isNonNegativeInteger(accessor.bufferView)) return null;
+  if (!isNonNegativeInteger(accessor.count)) return null;
   if (
     accessor.componentType !== COMPONENT_UNSIGNED_SHORT &&
     accessor.componentType !== COMPONENT_UNSIGNED_INT
@@ -296,7 +310,17 @@ function readIndexAccessor(container: ParsedGlbContainer, accessorIndex: number)
   if (!bufferView || !view) return null;
 
   const accessorOffset = accessor.byteOffset ?? 0;
+  if (!isNonNegativeInteger(accessorOffset)) return null;
+
   const stride = bufferView.byteStride ?? componentSize;
+  if (!isNonNegativeInteger(stride)) return null;
+  if (stride < componentSize) return null;
+  if (
+    !accessorFitsBufferView(accessorOffset, stride, componentSize, accessor.count, view.byteLength)
+  ) {
+    return null;
+  }
+
   const values: number[] = [];
 
   for (let index = 0; index < accessor.count; index += 1) {
@@ -316,26 +340,42 @@ function buildVertexData(
   normals: number[][] | null,
   uvs: number[][] | null,
   indices: number[] | null
-): Float32Array {
+): Float32Array | null {
   const vertexIndices = indices ?? positions.map((_, index) => index);
-  const flatNormal = normals ? null : generateFlatNormal(positions, vertexIndices);
-  const vertexData: number[] = [];
+  if (vertexIndices.length === 0 || vertexIndices.length % 3 !== 0) return null;
 
   for (const vertexIndex of vertexIndices) {
-    const position = positions[vertexIndex] ?? [0, 0, 0];
-    const normal = normals?.[vertexIndex] ?? flatNormal ?? [0, 0, 1];
-    const uv = uvs?.[vertexIndex] ?? [0, 0];
+    if (!isNonNegativeInteger(vertexIndex) || vertexIndex >= positions.length) return null;
+  }
 
-    vertexData.push(
-      position[0] ?? 0,
-      position[1] ?? 0,
-      position[2] ?? 0,
-      normal[0] ?? 0,
-      normal[1] ?? 0,
-      normal[2] ?? 1,
-      uv[0] ?? 0,
-      uv[1] ?? 0
-    );
+  const vertexData: number[] = [];
+
+  for (let triangleOffset = 0; triangleOffset < vertexIndices.length; triangleOffset += 3) {
+    const flatNormal = normals
+      ? null
+      : generateFlatNormal(positions, [
+          vertexIndices[triangleOffset] ?? 0,
+          vertexIndices[triangleOffset + 1] ?? 0,
+          vertexIndices[triangleOffset + 2] ?? 0
+        ]);
+
+    for (let vertexOffset = 0; vertexOffset < 3; vertexOffset += 1) {
+      const vertexIndex = vertexIndices[triangleOffset + vertexOffset] ?? 0;
+      const position = positions[vertexIndex] ?? [0, 0, 0];
+      const normal = normals?.[vertexIndex] ?? flatNormal ?? [0, 0, 1];
+      const uv = uvs?.[vertexIndex] ?? [0, 0];
+
+      vertexData.push(
+        position[0] ?? 0,
+        position[1] ?? 0,
+        position[2] ?? 0,
+        normal[0] ?? 0,
+        normal[1] ?? 0,
+        normal[2] ?? 1,
+        uv[0] ?? 0,
+        uv[1] ?? 0
+      );
+    }
   }
 
   return new Float32Array(vertexData);
@@ -347,9 +387,10 @@ function dataViewForBufferView(
 ): DataView | null {
   if (!bufferView) return null;
   if ((bufferView.buffer ?? 0) !== 0) return null;
-  if (typeof bufferView.byteLength !== 'number') return null;
+  if (!isNonNegativeInteger(bufferView.byteLength)) return null;
 
   const byteOffset = bufferView.byteOffset ?? 0;
+  if (!isNonNegativeInteger(byteOffset)) return null;
   if (byteOffset + bufferView.byteLength > container.binary.byteLength) return null;
 
   return new DataView(
@@ -357,6 +398,24 @@ function dataViewForBufferView(
     container.binary.byteOffset + byteOffset,
     bufferView.byteLength
   );
+}
+
+function accessorFitsBufferView(
+  byteOffset: number,
+  byteStride: number,
+  elementByteSize: number,
+  count: number,
+  bufferViewByteLength: number
+): boolean {
+  if (byteOffset > bufferViewByteLength) return false;
+  if (count === 0) return true;
+
+  const finalByte = byteOffset + (count - 1) * byteStride + elementByteSize;
+  return finalByte <= bufferViewByteLength;
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 function accessorComponentCount(type: string): number | null {

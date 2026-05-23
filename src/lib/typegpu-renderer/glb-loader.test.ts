@@ -5,7 +5,8 @@ import {
   createGlbFixture,
   createInvalidGlbHeader,
   float32Bytes,
-  uint16Bytes
+  uint16Bytes,
+  uint32Bytes
 } from './glb-test-fixtures';
 import { loadGlbModel, parseGlbContainer } from './glb-loader';
 
@@ -159,6 +160,179 @@ describe('GLB loader', () => {
     );
 
     expect(Array.from(model.meshes[0].geometry.vertexData.slice(3, 8))).toEqual([0, 0, 1, 0, 0]);
+  });
+
+  it('skips primitives with malformed accessor bounds', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0 }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+          buffers: [{ byteLength: positions.byteLength }],
+          bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: positions.byteLength }],
+          accessors: [
+            {
+              bufferView: 0,
+              byteOffset: positions.byteLength - Float32Array.BYTES_PER_ELEMENT,
+              componentType: 5126,
+              count: 3,
+              type: 'VEC3'
+            }
+          ]
+        },
+        positions
+      ),
+      'model:malformed'
+    );
+
+    expect(model.meshes).toHaveLength(0);
+  });
+
+  it('skips primitives with invalid declared indices', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const indices = uint16Bytes([0, 1, 5]);
+    const binary = concatBytes([positions, indices]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0 }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 }, indices: 1 }] }],
+          buffers: [{ byteLength: binary.byteLength }],
+          bufferViews: [
+            { buffer: 0, byteOffset: 0, byteLength: positions.byteLength },
+            { buffer: 0, byteOffset: positions.byteLength, byteLength: indices.byteLength }
+          ],
+          accessors: [
+            { bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' },
+            { bufferView: 1, componentType: 5123, count: 3, type: 'SCALAR' }
+          ]
+        },
+        binary
+      ),
+      'model:bad-indices'
+    );
+
+    expect(model.meshes).toHaveLength(0);
+  });
+
+  it('skips primitives with non-triangle index counts', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const indices = uint16Bytes([0, 1]);
+    const binary = concatBytes([positions, indices]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0 }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 }, indices: 1 }] }],
+          buffers: [{ byteLength: binary.byteLength }],
+          bufferViews: [
+            { buffer: 0, byteOffset: 0, byteLength: positions.byteLength },
+            { buffer: 0, byteOffset: positions.byteLength, byteLength: indices.byteLength }
+          ],
+          accessors: [
+            { bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' },
+            { bufferView: 1, componentType: 5123, count: 2, type: 'SCALAR' }
+          ]
+        },
+        binary
+      ),
+      'model:non-triangle-indices'
+    );
+
+    expect(model.meshes).toHaveLength(0);
+  });
+
+  it('skips primitives when a declared indices accessor cannot be decoded', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const indices = uint16Bytes([0, 1, 2]);
+    const binary = concatBytes([positions, indices]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0 }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 }, indices: 1 }] }],
+          buffers: [{ byteLength: binary.byteLength }],
+          bufferViews: [
+            { buffer: 0, byteOffset: 0, byteLength: positions.byteLength },
+            { buffer: 0, byteOffset: positions.byteLength, byteLength: indices.byteLength }
+          ],
+          accessors: [
+            { bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' },
+            { bufferView: 1, componentType: 5126, count: 3, type: 'SCALAR' }
+          ]
+        },
+        binary
+      ),
+      'model:undecodable-indices'
+    );
+
+    expect(model.meshes).toHaveLength(0);
+  });
+
+  it('generates fallback flat normals per triangle', () => {
+    const positions = float32Bytes([
+      0, 0, 0, 1, 0, 0, 0, 1, 0,
+      0, 0, 0, 0, 1, 0, 1, 0, 0
+    ]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0 }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+          buffers: [{ byteLength: positions.byteLength }],
+          bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: positions.byteLength }],
+          accessors: [{ bufferView: 0, componentType: 5126, count: 6, type: 'VEC3' }]
+        },
+        positions
+      ),
+      'model:flat-normals'
+    );
+    const vertexData = model.meshes[0].geometry.vertexData;
+
+    expect(Array.from(vertexData.slice(3, 6))).toEqual([0, 0, 1]);
+    expect(
+      Array.from(vertexData.slice(MESH_VERTEX_FLOATS * 3 + 3, MESH_VERTEX_FLOATS * 3 + 6))
+    ).toEqual([0, 0, -1]);
+  });
+
+  it('loads uint32 indices', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const indices = uint32Bytes([2, 1, 0]);
+    const binary = concatBytes([positions, indices]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0 }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 }, indices: 1 }] }],
+          buffers: [{ byteLength: binary.byteLength }],
+          bufferViews: [
+            { buffer: 0, byteOffset: 0, byteLength: positions.byteLength },
+            { buffer: 0, byteOffset: positions.byteLength, byteLength: indices.byteLength }
+          ],
+          accessors: [
+            { bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' },
+            { bufferView: 1, componentType: 5125, count: 3, type: 'SCALAR' }
+          ]
+        },
+        binary
+      ),
+      'model:uint32-indices'
+    );
+
+    expect(Array.from(model.meshes[0].geometry.vertexData.slice(0, 3))).toEqual([0, 1, 0]);
   });
 });
 

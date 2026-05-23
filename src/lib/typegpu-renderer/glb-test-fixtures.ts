@@ -54,6 +54,12 @@ export function uint16Bytes(values: number[]): Uint8Array {
   return new Uint8Array(buffer);
 }
 
+export function uint32Bytes(values: number[]): Uint8Array {
+  const buffer = new ArrayBuffer(values.length * Uint32Array.BYTES_PER_ELEMENT);
+  new Uint32Array(buffer).set(values);
+  return new Uint8Array(buffer);
+}
+
 export function concatBytes(chunks: Uint8Array[]): Uint8Array {
   const length = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
   const output = new Uint8Array(length);
