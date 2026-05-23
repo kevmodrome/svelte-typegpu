@@ -1,6 +1,22 @@
+import { MESH_VERTEX_FLOATS } from './instance-data';
+import { DEFAULT_STANDARD_MATERIAL } from './materials';
+import { IDENTITY_TRANSFORM } from './transform';
+import type { TypeGpuGeometryData, TypeGpuStandardMaterialDescriptor } from './types';
+
 export interface ParsedGlbContainer {
   json: GltfJson;
   binary: Uint8Array;
+}
+
+export interface TypeGpuLoadedModel {
+  key: string;
+  meshes: TypeGpuLoadedModelMesh[];
+}
+
+export interface TypeGpuLoadedModelMesh {
+  geometry: TypeGpuGeometryData;
+  material: TypeGpuStandardMaterialDescriptor;
+  transform: typeof IDENTITY_TRANSFORM;
 }
 
 export interface GltfJson {
@@ -76,6 +92,10 @@ const GLB_MAGIC = 0x46546c67;
 const GLB_VERSION = 2;
 const JSON_CHUNK = 0x4e4f534a;
 const BIN_CHUNK = 0x004e4942;
+const GL_TRIANGLES = 4;
+const COMPONENT_UNSIGNED_SHORT = 5123;
+const COMPONENT_UNSIGNED_INT = 5125;
+const COMPONENT_FLOAT = 5126;
 
 export function parseGlbContainer(input: ArrayBuffer): ParsedGlbContainer {
   const view = new DataView(input);
@@ -132,6 +152,263 @@ export function parseGlbContainer(input: ArrayBuffer): ParsedGlbContainer {
   }
 
   return { json, binary };
+}
+
+export function loadGlbModel(input: ArrayBuffer, key: string): TypeGpuLoadedModel {
+  const container = parseGlbContainer(input);
+  const meshes: TypeGpuLoadedModelMesh[] = [];
+  let primitiveIndex = 0;
+
+  for (const nodeIndex of rootNodeIndices(container.json)) {
+    collectNodePrimitives(container, key, nodeIndex, meshes, () => primitiveIndex++);
+  }
+
+  return { key, meshes };
+}
+
+function rootNodeIndices(json: GltfJson): number[] {
+  const sceneIndex = json.scene ?? 0;
+  return json.scenes?.[sceneIndex]?.nodes ?? [];
+}
+
+function collectNodePrimitives(
+  container: ParsedGlbContainer,
+  modelKey: string,
+  nodeIndex: number,
+  meshes: TypeGpuLoadedModelMesh[],
+  nextPrimitiveIndex: () => number
+): void {
+  const node = container.json.nodes?.[nodeIndex];
+  if (!node) return;
+
+  if (typeof node.mesh === 'number') {
+    const mesh = container.json.meshes?.[node.mesh];
+
+    for (const primitive of mesh?.primitives ?? []) {
+      const loaded = readPrimitive(container, modelKey, primitive, nextPrimitiveIndex());
+      if (loaded) meshes.push(loaded);
+    }
+  }
+
+  for (const childIndex of node.children ?? []) {
+    collectNodePrimitives(container, modelKey, childIndex, meshes, nextPrimitiveIndex);
+  }
+}
+
+function readPrimitive(
+  container: ParsedGlbContainer,
+  modelKey: string,
+  primitive: GltfPrimitive,
+  primitiveIndex: number
+): TypeGpuLoadedModelMesh | null {
+  if ((primitive.mode ?? GL_TRIANGLES) !== GL_TRIANGLES) return null;
+  if (!primitive.attributes || typeof primitive.attributes.POSITION !== 'number') return null;
+  if (primitive.extensions?.KHR_draco_mesh_compression || primitive.extensions?.EXT_meshopt_compression) {
+    return null;
+  }
+
+  const positions = readAccessor(container, primitive.attributes.POSITION, 'VEC3', COMPONENT_FLOAT);
+  if (!positions) return null;
+
+  const normals =
+    typeof primitive.attributes.NORMAL === 'number'
+      ? readAccessor(container, primitive.attributes.NORMAL, 'VEC3', COMPONENT_FLOAT)
+      : null;
+  const uvs =
+    typeof primitive.attributes.TEXCOORD_0 === 'number'
+      ? readAccessor(container, primitive.attributes.TEXCOORD_0, 'VEC2', COMPONENT_FLOAT)
+      : null;
+  const indices =
+    typeof primitive.indices === 'number' ? readIndexAccessor(container, primitive.indices) : null;
+  const vertexData = buildVertexData(positions, normals, uvs, indices);
+
+  return {
+    geometry: {
+      key: `${modelKey}:primitive:${primitiveIndex}`,
+      vertexData,
+      vertexCount: vertexData.length / MESH_VERTEX_FLOATS,
+      vertexFloats: MESH_VERTEX_FLOATS
+    },
+    material: DEFAULT_STANDARD_MATERIAL,
+    transform: IDENTITY_TRANSFORM
+  };
+}
+
+function readAccessor(
+  container: ParsedGlbContainer,
+  accessorIndex: number,
+  expectedType: string,
+  expectedComponentType: number
+): number[][] | null {
+  const accessor = container.json.accessors?.[accessorIndex];
+  if (!accessor) return null;
+  if (accessor.sparse) return null;
+  if (accessor.type !== expectedType) return null;
+  if (accessor.componentType !== expectedComponentType) return null;
+  if (typeof accessor.bufferView !== 'number') return null;
+  if (typeof accessor.count !== 'number') return null;
+
+  const componentCount = accessorComponentCount(accessor.type);
+  const componentSize = componentByteSize(accessor.componentType);
+  if (!componentCount || !componentSize) return null;
+
+  const bufferView = container.json.bufferViews?.[accessor.bufferView];
+  const view = dataViewForBufferView(container, bufferView);
+  if (!bufferView || !view) return null;
+
+  const accessorOffset = accessor.byteOffset ?? 0;
+  const stride = bufferView.byteStride ?? componentCount * componentSize;
+  const values: number[][] = [];
+
+  for (let index = 0; index < accessor.count; index += 1) {
+    const elementOffset = accessorOffset + index * stride;
+    const element: number[] = [];
+
+    for (let component = 0; component < componentCount; component += 1) {
+      element.push(view.getFloat32(elementOffset + component * componentSize, true));
+    }
+
+    values.push(element);
+  }
+
+  return values;
+}
+
+function readIndexAccessor(container: ParsedGlbContainer, accessorIndex: number): number[] | null {
+  const accessor = container.json.accessors?.[accessorIndex];
+  if (!accessor) return null;
+  if (accessor.sparse) return null;
+  if (accessor.type !== 'SCALAR') return null;
+  if (typeof accessor.bufferView !== 'number') return null;
+  if (typeof accessor.count !== 'number') return null;
+  if (
+    accessor.componentType !== COMPONENT_UNSIGNED_SHORT &&
+    accessor.componentType !== COMPONENT_UNSIGNED_INT
+  ) {
+    return null;
+  }
+
+  const componentSize = componentByteSize(accessor.componentType);
+  if (!componentSize) return null;
+
+  const bufferView = container.json.bufferViews?.[accessor.bufferView];
+  const view = dataViewForBufferView(container, bufferView);
+  if (!bufferView || !view) return null;
+
+  const accessorOffset = accessor.byteOffset ?? 0;
+  const stride = bufferView.byteStride ?? componentSize;
+  const values: number[] = [];
+
+  for (let index = 0; index < accessor.count; index += 1) {
+    const elementOffset = accessorOffset + index * stride;
+    values.push(
+      accessor.componentType === COMPONENT_UNSIGNED_SHORT
+        ? view.getUint16(elementOffset, true)
+        : view.getUint32(elementOffset, true)
+    );
+  }
+
+  return values;
+}
+
+function buildVertexData(
+  positions: number[][],
+  normals: number[][] | null,
+  uvs: number[][] | null,
+  indices: number[] | null
+): Float32Array {
+  const vertexIndices = indices ?? positions.map((_, index) => index);
+  const flatNormal = normals ? null : generateFlatNormal(positions, vertexIndices);
+  const vertexData: number[] = [];
+
+  for (const vertexIndex of vertexIndices) {
+    const position = positions[vertexIndex] ?? [0, 0, 0];
+    const normal = normals?.[vertexIndex] ?? flatNormal ?? [0, 0, 1];
+    const uv = uvs?.[vertexIndex] ?? [0, 0];
+
+    vertexData.push(
+      position[0] ?? 0,
+      position[1] ?? 0,
+      position[2] ?? 0,
+      normal[0] ?? 0,
+      normal[1] ?? 0,
+      normal[2] ?? 1,
+      uv[0] ?? 0,
+      uv[1] ?? 0
+    );
+  }
+
+  return new Float32Array(vertexData);
+}
+
+function dataViewForBufferView(
+  container: ParsedGlbContainer,
+  bufferView: GltfBufferView | undefined
+): DataView | null {
+  if (!bufferView) return null;
+  if ((bufferView.buffer ?? 0) !== 0) return null;
+  if (typeof bufferView.byteLength !== 'number') return null;
+
+  const byteOffset = bufferView.byteOffset ?? 0;
+  if (byteOffset + bufferView.byteLength > container.binary.byteLength) return null;
+
+  return new DataView(
+    container.binary.buffer,
+    container.binary.byteOffset + byteOffset,
+    bufferView.byteLength
+  );
+}
+
+function accessorComponentCount(type: string): number | null {
+  switch (type) {
+    case 'SCALAR':
+      return 1;
+    case 'VEC2':
+      return 2;
+    case 'VEC3':
+      return 3;
+    case 'VEC4':
+      return 4;
+    default:
+      return null;
+  }
+}
+
+function componentByteSize(componentType: number | undefined): number | null {
+  switch (componentType) {
+    case COMPONENT_UNSIGNED_SHORT:
+      return 2;
+    case COMPONENT_UNSIGNED_INT:
+    case COMPONENT_FLOAT:
+      return 4;
+    default:
+      return null;
+  }
+}
+
+function generateFlatNormal(positions: number[][], indices: number[]): number[] {
+  const a = positions[indices[0] ?? 0] ?? [0, 0, 0];
+  const b = positions[indices[1] ?? 1] ?? [0, 0, 0];
+  const c = positions[indices[2] ?? 2] ?? [0, 0, 0];
+  const ab = [
+    (b[0] ?? 0) - (a[0] ?? 0),
+    (b[1] ?? 0) - (a[1] ?? 0),
+    (b[2] ?? 0) - (a[2] ?? 0)
+  ];
+  const ac = [
+    (c[0] ?? 0) - (a[0] ?? 0),
+    (c[1] ?? 0) - (a[1] ?? 0),
+    (c[2] ?? 0) - (a[2] ?? 0)
+  ];
+  const normal = [
+    ab[1] * ac[2] - ab[2] * ac[1],
+    ab[2] * ac[0] - ab[0] * ac[2],
+    ab[0] * ac[1] - ab[1] * ac[0]
+  ];
+  const length = Math.hypot(normal[0], normal[1], normal[2]);
+
+  if (length === 0) return [0, 0, 1];
+  return [normal[0] / length, normal[1] / length, normal[2] / length];
 }
 
 function trimJsonPadding(chunk: Uint8Array): Uint8Array {

@@ -1,4 +1,7 @@
-export function createGlbFixture(json: object, binary = new Uint8Array()): ArrayBuffer {
+export function createGlbFixture(
+  json: object,
+  binary: Uint8Array<ArrayBufferLike> = new Uint8Array()
+): ArrayBuffer {
   const jsonBytes = new TextEncoder().encode(JSON.stringify(json));
   const paddedJson = padChunk(jsonBytes, 0x20);
   const paddedBinary = padChunk(binary, 0);
@@ -39,7 +42,32 @@ export function createInvalidGlbHeader(version: number): ArrayBuffer {
   return buffer;
 }
 
-function padChunk(bytes: Uint8Array, paddingByte: number): Uint8Array {
+export function float32Bytes(values: number[]): Uint8Array {
+  const buffer = new ArrayBuffer(values.length * Float32Array.BYTES_PER_ELEMENT);
+  new Float32Array(buffer).set(values);
+  return new Uint8Array(buffer);
+}
+
+export function uint16Bytes(values: number[]): Uint8Array {
+  const buffer = new ArrayBuffer(values.length * Uint16Array.BYTES_PER_ELEMENT);
+  new Uint16Array(buffer).set(values);
+  return new Uint8Array(buffer);
+}
+
+export function concatBytes(chunks: Uint8Array[]): Uint8Array {
+  const length = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const output = new Uint8Array(length);
+  let offset = 0;
+
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  return output;
+}
+
+function padChunk(bytes: Uint8Array<ArrayBufferLike>, paddingByte: number): Uint8Array {
   const paddedLength = Math.ceil(bytes.byteLength / 4) * 4;
   const padded = new Uint8Array(paddedLength);
   padded.fill(paddingByte);
