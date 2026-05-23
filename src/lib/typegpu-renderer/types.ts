@@ -5,7 +5,8 @@ export type RgbaTuple = [number, number, number, number];
 
 export const MAX_TYPEGPU_LIGHTS = 32;
 
-export type TypeGpuGeometryKind = 'box' | 'sphere';
+export type TypeGpuProceduralGeometryKind = 'box' | 'sphere';
+export type TypeGpuGeometryKind = TypeGpuProceduralGeometryKind | 'imported';
 export type TypeGpuMaterialKind = 'standard';
 export type TypeGpuLightKind = 'ambient' | 'hemisphere' | 'directional' | 'point' | 'spot';
 
@@ -80,15 +81,26 @@ export interface TypeGpuGeometryData {
   vertexFloats: number;
 }
 
+export interface TypeGpuProceduralGeometryDescriptor {
+  kind: TypeGpuProceduralGeometryKind;
+  size: Vector3Tuple;
+}
+
+export interface TypeGpuImportedGeometryDescriptor {
+  kind: 'imported';
+  key: string;
+  size: Vector3Tuple;
+  data: TypeGpuGeometryData;
+}
+
+export type TypeGpuGeometryDescriptor =
+  | TypeGpuProceduralGeometryDescriptor
+  | TypeGpuImportedGeometryDescriptor;
+
 export interface TypeGpuTransform {
   position: Vector3Tuple;
   rotation: Vector3Tuple;
   scale: Vector3Tuple;
-}
-
-export interface TypeGpuGeometryDescriptor {
-  kind: TypeGpuGeometryKind;
-  size: Vector3Tuple;
 }
 
 export interface TypeGpuUrlTextureSource {
@@ -96,7 +108,14 @@ export interface TypeGpuUrlTextureSource {
   src: string;
 }
 
-export type TypeGpuTextureSource = TypeGpuUrlTextureSource;
+export interface TypeGpuEmbeddedTextureSource {
+  kind: 'embedded';
+  key: string;
+  mimeType: string;
+  data: Uint8Array;
+}
+
+export type TypeGpuTextureSource = TypeGpuUrlTextureSource | TypeGpuEmbeddedTextureSource;
 
 export interface TypeGpuStandardMaterialDescriptor {
   kind: 'standard';

@@ -62,8 +62,25 @@ export function textureSource(value: unknown): TypeGpuTextureSource | null {
 
   if (value && typeof value === 'object') {
     const source = value as Partial<TypeGpuTextureSource>;
+
     if (source.kind === 'url' && typeof source.src === 'string' && source.src.length > 0) {
       return { kind: 'url', src: source.src };
+    }
+
+    if (
+      source.kind === 'embedded' &&
+      typeof source.key === 'string' &&
+      source.key.length > 0 &&
+      typeof source.mimeType === 'string' &&
+      source.mimeType.length > 0 &&
+      source.data instanceof Uint8Array
+    ) {
+      return {
+        kind: 'embedded',
+        key: source.key,
+        mimeType: source.mimeType,
+        data: source.data
+      };
     }
   }
 
@@ -71,5 +88,9 @@ export function textureSource(value: unknown): TypeGpuTextureSource | null {
 }
 
 export function textureKeyForMaterial(material: TypeGpuStandardMaterialDescriptor): string {
-  return material.map ? `url:${material.map.src}` : 'solid:white';
+  if (!material.map) return 'solid:white';
+
+  return material.map.kind === 'url'
+    ? `url:${material.map.src}`
+    : `embedded:${material.map.key}`;
 }
