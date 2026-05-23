@@ -17,10 +17,20 @@ import {
   readPerspectiveCamera,
   readPerspectiveCameraState
 } from './components/perspective-camera';
+import type { TypeGpuLoadedModel } from './glb-loader';
 import { createStandardMaterial } from './materials';
+import { createModelCache } from './model-cache';
 import { invalidatesDrawBatches, invalidatesLights } from './scene-dirtiness';
 import { createSceneState, createTypeGpuSceneCache } from './scene-state';
 import { MAX_TYPEGPU_LIGHTS } from './types';
+
+function readyModelCache(model: TypeGpuLoadedModel) {
+  return createModelCache({
+    loadUrl: async () => model,
+    loadData: async () => model,
+    onSettled: () => {}
+  });
+}
 
 describe('TypeGPU renderer core', () => {
   it('turns authored mesh nodes into geometry/material draw batches', () => {
@@ -450,6 +460,55 @@ describe('TypeGPU renderer core', () => {
     expect(thirdBatch.instancesChanged).toBe(true);
   });
 
+  it('renders ready model cache entries as imported draw batches', async () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const modelNode = createElement('model');
+    const model: TypeGpuLoadedModel = {
+      key: 'url:/models/triangle.glb',
+      meshes: [
+        {
+          geometry: {
+            key: 'url:/models/triangle.glb:primitive:0',
+            vertexData: new Float32Array([0, 0, 0, 0, 0, 1, 0, 0]),
+            vertexCount: 1,
+            vertexFloats: 8
+          },
+          material: {
+            kind: 'standard',
+            color: [0.2, 0.3, 0.4, 1],
+            roughness: 0.6,
+            metalness: 0.1,
+            opacity: 1,
+            map: null
+          },
+          transform: {
+            position: [0, 0, 0],
+            rotation: [0, 0, 0],
+            scale: [1, 1, 1]
+          }
+        }
+      ]
+    };
+    const cache = createTypeGpuSceneCache({
+      modelCache: readyModelCache(model)
+    });
+
+    setAttribute(modelNode, 'src', '/models/triangle.glb');
+    setAttribute(modelNode, 'position', [3, 4, 5]);
+    insert(scene, modelNode, null);
+    insert(root, scene, null);
+
+    createSceneState(root, cache);
+    await Promise.resolve();
+    const state = createSceneState(root, cache);
+    const batch = drawBatch(state, 'mesh:url:/models/triangle.glb:primitive:0:standard:solid:white');
+
+    expect(batch.geometry.key).toBe('url:/models/triangle.glb:primitive:0');
+    expect(batch.instanceCount).toBe(1);
+    expect(Array.from(batch.instances.slice(0, 4))).toEqual([3, 4, 5, 0]);
+  });
+
   it('stores and dispatches element events', () => {
     const box = createElement('box');
     const handler = vi.fn();
@@ -686,6 +745,18 @@ describe('TypeGPU renderer core', () => {
     expect(invalidatesLights(root, group, root.treeRevision)).toBe(true);
     expect(invalidatesLights(root, mesh, root.treeRevision)).toBe(false);
     expect(invalidatesDrawBatches(root, light, root.treeRevision)).toBe(false);
+  });
+
+  it('marks draw batches dirty for model node changes', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const modelNode = createElement('model');
+
+    insert(scene, modelNode, null);
+    insert(root, scene, null);
+
+    expect(invalidatesDrawBatches(root, modelNode, root.treeRevision)).toBe(true);
+    expect(invalidatesLights(root, modelNode, root.treeRevision)).toBe(false);
   });
 
   it('keeps camera-control changes out of draw-batch and light dirtiness', () => {

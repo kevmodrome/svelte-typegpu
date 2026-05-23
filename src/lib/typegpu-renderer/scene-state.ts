@@ -2,13 +2,20 @@ import { collectLights } from './components/lights';
 import { readPerspectiveCameraState } from './components/perspective-camera';
 import { readSceneSettings } from './components/scene';
 import { createDrawBatchCache, type TypeGpuDrawBatchCache } from './draw-batch-cache';
+import { createModelCache, type TypeGpuModelCache } from './model-cache';
 import type { TypeGpuNode } from './core';
 import type { TypeGpuDrawBatch, TypeGpuLight, TypeGpuSceneState } from './types';
 
 export interface TypeGpuSceneCache {
   drawBatchCache: TypeGpuDrawBatchCache;
+  modelCache: TypeGpuModelCache;
   cleanDrawBatches: TypeGpuDrawBatch[];
   cleanLights: TypeGpuLight[];
+}
+
+export interface CreateTypeGpuSceneCacheOptions {
+  modelCache?: TypeGpuModelCache;
+  onModelSettled?: () => void;
 }
 
 export interface TypeGpuSceneStateOptions {
@@ -16,9 +23,16 @@ export interface TypeGpuSceneStateOptions {
   reuseLights?: boolean;
 }
 
-export function createTypeGpuSceneCache(): TypeGpuSceneCache {
+export function createTypeGpuSceneCache(
+  options: CreateTypeGpuSceneCacheOptions = {}
+): TypeGpuSceneCache {
   return {
     drawBatchCache: createDrawBatchCache(),
+    modelCache:
+      options.modelCache ??
+      createModelCache({
+        onSettled: options.onModelSettled
+      }),
     cleanDrawBatches: [],
     cleanLights: []
   };
@@ -32,7 +46,7 @@ export function createSceneState(
   const scene = readSceneSettings(root);
   const drawBatches = options.reuseDrawBatches
     ? cache.cleanDrawBatches
-    : cache.drawBatchCache.read(root);
+    : cache.drawBatchCache.read(root, cache.modelCache);
   const lights = options.reuseLights ? cache.cleanLights : collectLights(root);
   const camera = readPerspectiveCameraState(root);
 

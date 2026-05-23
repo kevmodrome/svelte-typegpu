@@ -1,18 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createFragment } from './core';
+import { collectDrawItems } from './components/draw-items';
 import { createDrawBatchCache } from './draw-batch-cache';
+import { createModelCache } from './model-cache';
 import type {
   TypeGpuGeometryData,
   TypeGpuMeshDrawItem,
   TypeGpuStandardMaterialDescriptor
 } from './types';
-import { collectMeshDrawItems } from './components/mesh';
 
-vi.mock('./components/mesh', () => ({
-  collectMeshDrawItems: vi.fn()
+vi.mock('./components/draw-items', () => ({
+  collectDrawItems: vi.fn()
 }));
 
-const collectMeshDrawItemsMock = vi.mocked(collectMeshDrawItems);
+const collectDrawItemsMock = vi.mocked(collectDrawItems);
 
 describe('TypeGPU draw batch cache', () => {
   it('keeps imported geometries with the same material in separate batches', () => {
@@ -27,16 +28,16 @@ describe('TypeGPU draw batch cache', () => {
       map: null
     };
 
-    collectMeshDrawItemsMock.mockReturnValue([
+    collectDrawItemsMock.mockReturnValue([
       importedMeshDrawItem(1, chairGeometry, material),
       importedMeshDrawItem(2, tableGeometry, material)
     ]);
 
-    const batches = createDrawBatchCache().read(createFragment());
+    const batches = createDrawBatchCache().read(createFragment(), createModelCache());
 
     expect(batches.map((batch) => batch.key)).toEqual([
-      'mesh:imported:model:chair:mesh:0:standard:solid:white',
-      'mesh:imported:model:table:mesh:0:standard:solid:white'
+      'mesh:model:chair:mesh:0:standard:solid:white',
+      'mesh:model:table:mesh:0:standard:solid:white'
     ]);
     expect(batches).toHaveLength(2);
     expect(batches[0].geometry).toBe(chairGeometry);

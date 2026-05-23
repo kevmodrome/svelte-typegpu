@@ -1,5 +1,6 @@
 import { isSupportedLightNode, subtreeHasSupportedLight } from './components/lights';
 import { subtreeHasMeshNode } from './components/mesh';
+import { subtreeHasModelNode } from './components/model';
 import { isCameraControlNode } from './components/perspective-camera';
 import type { TypeGpuNode } from './core';
 
@@ -16,14 +17,18 @@ export function invalidatesDrawBatches(
       isCameraControlNode(dirtyNode) ||
       isSupportedLightNode(dirtyNode)
     ) {
-      return subtreeHasMeshNode(dirtyNode);
+      return subtreeHasMeshNode(dirtyNode) || subtreeHasModelNode(dirtyNode);
     }
 
     return true;
   }
 
+  if (dirtyNode.name === 'model') {
+    return true;
+  }
+
   if (dirtyNode.name === 'group') {
-    return subtreeHasMeshNode(dirtyNode);
+    return subtreeHasMeshNode(dirtyNode) || subtreeHasModelNode(dirtyNode);
   }
 
   return (

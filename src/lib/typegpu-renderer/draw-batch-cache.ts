@@ -1,7 +1,8 @@
 import { createBoxGeometryData } from './box-data';
-import { collectMeshDrawItems } from './components/mesh';
+import { collectDrawItems } from './components/draw-items';
 import { MESH_INSTANCE_FLOATS, packMeshInstance } from './instance-data';
 import { textureKeyForMaterial } from './materials';
+import type { TypeGpuModelCache } from './model-cache';
 import { createSphereGeometryData } from './sphere-data';
 import type {
   TypeGpuDrawBatch,
@@ -13,7 +14,7 @@ import type {
 } from './types';
 import type { TypeGpuNode } from './core';
 
-type GeometryBatchKey = TypeGpuProceduralGeometryKind | `imported:${string}`;
+type GeometryBatchKey = TypeGpuProceduralGeometryKind | string;
 type DrawBatchKey = `mesh:${GeometryBatchKey}:${TypeGpuMaterialKind}:${string}`;
 
 interface DrawBatchState {
@@ -23,7 +24,7 @@ interface DrawBatchState {
 }
 
 export interface TypeGpuDrawBatchCache {
-  read(root: TypeGpuNode): TypeGpuDrawBatch[];
+  read(root: TypeGpuNode, modelCache: TypeGpuModelCache): TypeGpuDrawBatch[];
 }
 
 export function createDrawBatchCache(): TypeGpuDrawBatchCache {
@@ -34,8 +35,8 @@ export function createDrawBatchCache(): TypeGpuDrawBatchCache {
   const previousBatches = new Map<DrawBatchKey, DrawBatchState>();
 
   return {
-    read(root) {
-      const groupedItems = groupMeshDrawItems(collectMeshDrawItems(root));
+    read(root, modelCache) {
+      const groupedItems = groupMeshDrawItems(collectDrawItems(root, modelCache));
       const batches: TypeGpuDrawBatch[] = [];
 
       for (const [key, items] of groupedItems) {
@@ -84,7 +85,7 @@ function groupMeshDrawItems(items: TypeGpuMeshDrawItem[]): Map<DrawBatchKey, Typ
 
 function geometryBatchKey(item: TypeGpuMeshDrawItem): GeometryBatchKey {
   return item.geometry.kind === 'imported'
-    ? `imported:${item.geometry.data.key}`
+    ? item.geometry.data.key
     : item.geometry.kind;
 }
 
