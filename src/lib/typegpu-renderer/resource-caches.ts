@@ -58,6 +58,9 @@ export interface TypeGpuInstanceBufferResource {
 export interface TypeGpuTextureResource {
   key: string;
   texture: TypeGpuMaterialTexture;
+  width: number;
+  height: number;
+  generation: number;
   status: 'ready' | 'loading' | 'failed' | 'fallback';
 }
 
@@ -184,7 +187,6 @@ export class InstanceBufferCache {
 export class TextureResourceCache {
   #disposed = false;
   readonly #fallback: TypeGpuTextureResource;
-  readonly #generations = new Map<string, number>();
   readonly #resources = new Map<string, TypeGpuTextureResource>();
 
   constructor(
@@ -203,6 +205,9 @@ export class TextureResourceCache {
     this.#fallback = {
       key: 'solid:white',
       texture,
+      width: 1,
+      height: 1,
+      generation: 0,
       status: 'fallback'
     };
     this.#resources.set(this.#fallback.key, this.#fallback);
@@ -221,12 +226,15 @@ export class TextureResourceCache {
     const resource = {
       key,
       texture: this.#fallback.texture,
+      width: textureSourceWidth(source),
+      height: textureSourceHeight(source),
+      generation: 0,
       status: 'loading' as const
     };
-    const generation = this.#nextGeneration(key);
+    const generation = (resource.generation += 1);
 
     this.#resources.set(key, resource);
-    void this.#load(key, source, generation);
+    void this.#load(resource, source, generation);
     return resource;
   }
 
@@ -238,7 +246,7 @@ export class TextureResourceCache {
         resource.texture.destroy();
       }
 
-      this.#nextGeneration(key);
+      resource.generation += 1;
       this.#resources.delete(key);
     }
   }
@@ -247,6 +255,8 @@ export class TextureResourceCache {
     this.#disposed = true;
 
     for (const resource of this.#resources.values()) {
+      resource.generation += 1;
+
       if (resource.texture !== this.#fallback.texture) {
         resource.texture.destroy();
       }
@@ -254,17 +264,24 @@ export class TextureResourceCache {
 
     this.#fallback.texture.destroy();
     this.#resources.clear();
-    this.#generations.clear();
   }
 
-  async #load(key: string, source: TypeGpuTextureSource, generation: number): Promise<void> {
+  async #load(
+    resource: TypeGpuTextureResource,
+    source: TypeGpuTextureSource,
+    generation: number
+  ): Promise<void> {
     let image: LoadedTextureImage | null = null;
     let texture: TypeGpuMaterialTexture | null = null;
 
     try {
       image = await loadMaterialTextureImageSource(source);
 
-      if (!this.#isLiveGeneration(key, generation)) return;
+      if (!this.#isLiveResource(resource, generation)) {
+        image.close();
+        image = null;
+        return;
+      }
 
       const root = this.root;
       texture = root.createTexture({
@@ -277,39 +294,32 @@ export class TextureResourceCache {
 
       writeLoadedTexture(texture, image);
 
-      if (!this.#isLiveGeneration(key, generation)) {
+      if (!this.#isLiveResource(resource, generation)) {
         texture.destroy();
         texture = null;
+        image.close();
+        image = null;
         return;
       }
 
-      const previous = this.#resources.get(key);
-      if (!previous) {
-        texture.destroy();
-        texture = null;
-        return;
+      if (resource.texture !== this.#fallback.texture) {
+        resource.texture.destroy();
       }
 
-      if (previous.texture !== this.#fallback.texture) {
-        previous.texture.destroy();
-      }
-
-      this.#resources.set(key, {
-        key,
-        texture,
-        status: 'ready'
-      });
+      resource.texture = texture;
+      resource.width = image.width;
+      resource.height = image.height;
+      resource.status = 'ready';
       texture = null;
       this.onSettled();
     } catch {
       texture?.destroy();
 
-      if (this.#isLiveGeneration(key, generation)) {
-        this.#resources.set(key, {
-          key,
-          texture: this.#fallback.texture,
-          status: 'failed'
-        });
+      if (this.#isLiveResource(resource, generation)) {
+        resource.texture = this.#fallback.texture;
+        resource.width = 1;
+        resource.height = 1;
+        resource.status = 'failed';
         this.onSettled();
       }
     } finally {
@@ -317,14 +327,13 @@ export class TextureResourceCache {
     }
   }
 
-  #nextGeneration(key: string): number {
-    const generation = (this.#generations.get(key) ?? 0) + 1;
-    this.#generations.set(key, generation);
-    return generation;
-  }
+  #isLiveResource(resource: TypeGpuTextureResource, generation: number): boolean {
+    if (resource.generation !== generation) return false;
 
-  #isLiveGeneration(key: string, generation: number): boolean {
-    return !this.#disposed && this.#resources.has(key) && this.#generations.get(key) === generation;
+    return (
+      !this.#disposed &&
+      this.#resources.get(resource.key) === resource
+    );
   }
 }
 
@@ -532,6 +541,14 @@ function textureSourceLabel(source: TypeGpuTextureSource): string {
 
 function textureResourceKey(source: TypeGpuTextureSource | null): string {
   return source?.key ?? textureKeyFor(source);
+}
+
+function textureSourceWidth(source: TypeGpuTextureSource): number {
+  return source.kind === 'data' ? (source.width ?? 1) : 1;
+}
+
+function textureSourceHeight(source: TypeGpuTextureSource): number {
+  return source.kind === 'data' ? (source.height ?? 1) : 1;
 }
 
 function loadHtmlTextureImage(blob: Blob): Promise<LoadedTextureImage> {

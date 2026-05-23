@@ -26,14 +26,38 @@ export function readInlineMaterial(
   const kind = materialKindForNode(node);
   if (!kind) return null;
 
-  const texture = textureSourceFor(node.attributes.map, resources);
-  const sampler = samplerDescriptorFor(node.attributes.sampler, resources);
-  const textureKey = textureKeyFor(node.attributes.map, resources);
-  const samplerKey = samplerKeyFor(node.attributes.sampler, resources);
-  const color = colorTuple(node.attributes.color);
-  const opacity = numberArg(node.attributes.opacity, color[3]);
-  const transparent = Boolean(node.attributes.transparent) || opacity < 1 || color[3] < 1;
-  const blendMode = blendModeFor(node.attributes.blendMode, transparent);
+  return createMaterialDescriptor(kind, node.attributes, resources);
+}
+
+export interface TypeGpuMaterialDescriptorInput {
+  color?: unknown;
+  opacity?: unknown;
+  roughness?: unknown;
+  metalness?: unknown;
+  map?: unknown;
+  texture?: unknown;
+  sampler?: unknown;
+  transparent?: unknown;
+  depthWrite?: unknown;
+  depthTest?: unknown;
+  cullMode?: unknown;
+  blendMode?: unknown;
+}
+
+export function createMaterialDescriptor(
+  kind: TypeGpuMaterialKind,
+  input: TypeGpuMaterialDescriptorInput = {},
+  resources?: TypeGpuResourceCollection
+): TypeGpuMaterialDescriptor {
+  const textureInput = input.map ?? input.texture;
+  const texture = textureSourceFor(textureInput, resources);
+  const sampler = samplerDescriptorFor(input.sampler, resources);
+  const textureKey = textureKeyFor(textureInput, resources);
+  const samplerKey = samplerKeyFor(input.sampler, resources);
+  const color = colorTuple(input.color);
+  const opacity = numberArg(input.opacity, color[3]);
+  const transparent = Boolean(input.transparent) || opacity < 1 || color[3] < 1;
+  const blendMode = blendModeFor(input.blendMode, transparent);
   const descriptor: TypeGpuMaterialDescriptor = {
     key: '',
     pipelineKey: '',
@@ -41,16 +65,16 @@ export function readInlineMaterial(
     kind,
     color,
     opacity,
-    roughness: numberArg(node.attributes.roughness, defaultRoughness(kind)),
-    metalness: numberArg(node.attributes.metalness, defaultMetalness(kind)),
+    roughness: numberArg(input.roughness, defaultRoughness(kind)),
+    metalness: numberArg(input.metalness, defaultMetalness(kind)),
     textureKey,
     samplerKey,
     texture,
     sampler,
     transparent,
-    depthWrite: booleanArg(node.attributes.depthWrite, !transparent),
-    depthTest: booleanArg(node.attributes.depthTest, true),
-    cullMode: cullModeFor(node.attributes.cullMode),
+    depthWrite: booleanArg(input.depthWrite, !transparent),
+    depthTest: booleanArg(input.depthTest, true),
+    cullMode: cullModeFor(input.cullMode),
     blendMode,
     map: texture
   };

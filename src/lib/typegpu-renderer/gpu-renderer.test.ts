@@ -3,6 +3,8 @@ import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadMaterialTextureImageSource, SCENE_UNIFORM_FLOATS } from './gpu-renderer';
 import { MESH_INSTANCE_FLOATS, MESH_ROTATION_OFFSET } from './instance-data';
+import { TextureResourceCache } from './resource-caches';
+import type { TypeGpuTextureSource } from './types';
 
 function readSource(path: string): string {
   try {
@@ -94,11 +96,92 @@ describe('TypeGPU GPU renderer', () => {
 
   it('guards async texture settlement after prune or dispose', () => {
     expect(cacheSource).toContain('#disposed = false');
-    expect(cacheSource).toContain('#generations = new Map<string, number>()');
-    expect(cacheSource).toContain('const generation = this.#nextGeneration(key)');
-    expect(cacheSource).toContain('if (!this.#isLiveGeneration(key, generation)) return;');
-    expect(cacheSource).toContain('if (!this.#isLiveGeneration(key, generation)) {');
+    expect(cacheSource).toMatch(/generation\s*\+=\s*1/);
+    expect(cacheSource).toContain('resource.generation !== generation');
+    expect(cacheSource).toContain('image.close()');
+    expect(cacheSource).toContain('if (!this.#isLiveResource(resource, generation)) {');
     expect(cacheSource).toContain('this.#disposed = true');
+  });
+
+  it('keeps explicit texture resource dimensions and generation state', () => {
+    expect(cacheSource).toContain('width: number;');
+    expect(cacheSource).toContain('height: number;');
+    expect(cacheSource).toContain('generation: number;');
+    expect(cacheSource).toMatch(/status:\s*'ready'\s*\|\s*'loading'\s*\|\s*'failed'\s*\|\s*'fallback'/);
+  });
+
+  it('prunes texture and sampler resources separately from material resources', () => {
+    expect(rendererSource).toContain('this.#materialResources.prune(');
+    expect(rendererSource).toContain('this.#textureResources.prune(scene.liveResourceKeys.textures)');
+    expect(rendererSource).toContain('this.#samplerResources.prune(scene.liveResourceKeys.samplers)');
+    expect(cacheSource).toMatch(/export class TextureResourceCache[\s\S]*?prune\(liveKeys: Set<string>\): void/);
+    expect(cacheSource).toMatch(/export class SamplerResourceCache[\s\S]*?prune\(liveKeys: Set<string>\): void/);
+  });
+
+  it('invalidates demand frames when texture loading settles', () => {
+    expect(rendererSource).toContain('new TextureResourceCache(root, () => this.invalidate())');
+    expect(cacheSource).toContain('this.onSettled()');
+  });
+
+  it('closes decoded images without creating GPU textures after stale texture prune', async () => {
+    const root = createFakeRoot();
+    const cache = new TextureResourceCache(root as never, vi.fn());
+    const bitmapClose = vi.fn();
+    const bitmap = { width: 8, height: 4, close: bitmapClose };
+    const bitmapPromise = deferred<typeof bitmap>();
+
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Blob(['png']), { status: 200 })));
+    vi.stubGlobal('createImageBitmap', vi.fn(() => bitmapPromise.promise));
+
+    cache.getOrLoad(urlTexture('/textures/stale-before-upload.png'));
+    cache.prune(new Set());
+    bitmapPromise.resolve(bitmap);
+    await settleAsyncTextureLoad();
+
+    expect(root.createdTextures).toHaveLength(1);
+    expect(bitmapClose).toHaveBeenCalledOnce();
+  });
+
+  it('destroys created textures when a load becomes stale after upload', async () => {
+    const root = createFakeRoot();
+    const onSettled = vi.fn();
+    const cache = new TextureResourceCache(root as never, onSettled);
+    const source: TypeGpuTextureSource = {
+      kind: 'data',
+      key: 'data:test:stale-after-upload',
+      src: '',
+      data: new Uint8Array([255, 255, 255, 255]),
+      width: 1,
+      height: 1,
+      format: 'rgba8unorm'
+    };
+
+    root.onNextMaterialTextureWrite = () => cache.prune(new Set());
+
+    cache.getOrLoad(source);
+    await settleAsyncTextureLoad();
+
+    expect(root.createdTextures).toHaveLength(2);
+    expect(root.createdTextures[1].destroy).toHaveBeenCalledOnce();
+    expect(onSettled).not.toHaveBeenCalled();
+  });
+
+  it('keeps fallback texture state and invalidates when texture loading fails', async () => {
+    const root = createFakeRoot();
+    const onSettled = vi.fn();
+    const cache = new TextureResourceCache(root as never, onSettled);
+    const source = urlTexture('/textures/missing.png');
+
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })));
+
+    const loading = cache.getOrLoad(source);
+    await settleAsyncTextureLoad();
+    const failed = cache.getOrLoad(source);
+
+    expect(loading.status).toBe('failed');
+    expect(failed.status).toBe('failed');
+    expect(failed.texture).toBe(root.createdTextures[0]);
+    expect(onSettled).toHaveBeenCalledOnce();
   });
 
   it('recreates depth textures when depth is toggled back on without a resize', () => {
@@ -310,3 +393,60 @@ describe('TypeGPU GPU renderer', () => {
     expect(drawCallScopes).toEqual(['drawTypeGpuMaterialBatch']);
   });
 });
+
+function urlTexture(src: string): TypeGpuTextureSource {
+  return {
+    kind: 'url',
+    key: `url:${src}`,
+    src
+  };
+}
+
+function createFakeRoot() {
+  const root = {
+    createdTextures: [] as FakeTexture[],
+    onNextMaterialTextureWrite: null as (() => void) | null,
+    createTexture() {
+      const index = root.createdTextures.length;
+      const texture: FakeTexture = {
+        write: vi.fn(() => {
+          if (index > 0) {
+            root.onNextMaterialTextureWrite?.();
+            root.onNextMaterialTextureWrite = null;
+          }
+        }),
+        destroy: vi.fn(),
+        $usage: vi.fn(() => texture),
+        $name: vi.fn(() => texture)
+      };
+      root.createdTextures.push(texture);
+      return texture;
+    }
+  };
+
+  return root;
+}
+
+type FakeTexture = {
+  write: ReturnType<typeof vi.fn>;
+  destroy: ReturnType<typeof vi.fn>;
+  $usage: ReturnType<typeof vi.fn>;
+  $name: ReturnType<typeof vi.fn>;
+};
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, resolve, reject };
+}
+
+async function settleAsyncTextureLoad(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
