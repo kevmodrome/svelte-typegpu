@@ -92,14 +92,6 @@ export function dirtyForAttribute(
     return Dirty.None;
   }
 
-  if (transformAttributes.has(attribute)) {
-    return mergeDirty(Dirty.Transform, Dirty.InstanceData, Dirty.Interaction);
-  }
-
-  if (attribute === 'visible' || attribute === 'renderOrder') {
-    return mergeDirty(Dirty.DrawBatches, Dirty.Interaction);
-  }
-
   if (name === 'perspectiveCamera' || name === 'orthographicCamera') {
     return cameraAttributes.has(attribute) ? Dirty.Camera : Dirty.None;
   }
@@ -110,6 +102,14 @@ export function dirtyForAttribute(
 
   if (lightNames.has(name)) {
     return Dirty.Lights;
+  }
+
+  if (transformAttributes.has(attribute)) {
+    return mergeDirty(Dirty.Transform, Dirty.InstanceData, Dirty.Interaction);
+  }
+
+  if (attribute === 'visible' || attribute === 'renderOrder') {
+    return mergeDirty(Dirty.DrawBatches, Dirty.Interaction);
   }
 
   if (geometryNames.has(name)) {

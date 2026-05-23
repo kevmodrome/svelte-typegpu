@@ -39,6 +39,24 @@ describe('TypeGPU primitive descriptors', () => {
     expect(hasDirty(dirty, Dirty.Interaction)).toBe(true);
   });
 
+  it('marks camera transform attributes as camera dirty only', () => {
+    const dirty = dirtyForAttribute('perspectiveCamera', 'position', [0, 0, 0], [1, 2, 3]);
+
+    expect(hasDirty(dirty, Dirty.Camera)).toBe(true);
+    expect(hasDirty(dirty, Dirty.Transform)).toBe(false);
+    expect(hasDirty(dirty, Dirty.InstanceData)).toBe(false);
+    expect(hasDirty(dirty, Dirty.Interaction)).toBe(false);
+  });
+
+  it('marks light transform attributes as lights dirty only', () => {
+    const dirty = dirtyForAttribute('pointLight', 'position', [0, 0, 0], [1, 2, 3]);
+
+    expect(hasDirty(dirty, Dirty.Lights)).toBe(true);
+    expect(hasDirty(dirty, Dirty.Transform)).toBe(false);
+    expect(hasDirty(dirty, Dirty.InstanceData)).toBe(false);
+    expect(hasDirty(dirty, Dirty.Interaction)).toBe(false);
+  });
+
   it('marks geometry, material, texture, and pipeline-affecting attributes distinctly', () => {
     expect(hasDirty(dirtyForAttribute('boxGeometry', 'width', 1, 2), Dirty.Geometry)).toBe(true);
     expect(hasDirty(dirtyForAttribute('boxGeometry', 'width', 1, 2), Dirty.DrawBatches)).toBe(true);
