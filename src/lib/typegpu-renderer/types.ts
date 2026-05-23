@@ -227,7 +227,7 @@ export interface TypeGpuSceneState {
   camera: TypeGpuCameraSettings;
   cameraNode: TypeGpuNode | null;
   cameraControllerNode: TypeGpuNode | null;
-  cameraController: TypeGpuControlsController | null;
+  cameraController: TypeGpuCameraController | null;
   scale: number;
   animationSpeed: number;
   colorShift: number;

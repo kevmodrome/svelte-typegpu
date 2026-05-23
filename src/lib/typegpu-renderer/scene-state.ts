@@ -68,7 +68,7 @@ export function createSceneState(
     camera: camera.settings,
     cameraNode: camera.node,
     cameraControllerNode: camera.controllerNode,
-    cameraController: camera.controller?.kind === 'controls' ? camera.controller : null,
+    cameraController: camera.controller,
     scale: scene.scale,
     animationSpeed: scene.animationSpeed,
     colorShift: scene.colorShift,

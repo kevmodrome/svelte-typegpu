@@ -225,7 +225,11 @@ export function transformPoint4(matrix: Float32Array, point: Vector3Tuple): Vect
   const x = point[0];
   const y = point[1];
   const z = point[2];
-  const w = matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15] || 1;
+  const w = matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15];
+
+  if (!Number.isFinite(w) || Math.abs(w) <= 1e-12) {
+    throw new Error('Cannot transform point with near-zero homogeneous coordinate');
+  }
 
   return [
     (matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12]) / w,

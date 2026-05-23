@@ -9,6 +9,7 @@ import { createCameraInteractionController } from './camera-interaction';
 import type {
   TypeGpuKeyboardControls,
   TypeGpuCameraSettings,
+  TypeGpuControlsController,
   TypeGpuPointerControls,
   TypeGpuSceneState
 } from './types';
@@ -495,7 +496,7 @@ describe('TypeGPU camera interaction controller', () => {
     controller.reconcile({
       ...scene,
       cameraController: {
-        ...scene.cameraController!,
+        ...(scene.cameraController as TypeGpuControlsController),
         pointer: { ...pointerControls }
       }
     });

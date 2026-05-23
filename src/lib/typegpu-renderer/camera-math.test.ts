@@ -5,7 +5,7 @@ import {
   createViewProjectionMatrix,
   readCameraState
 } from './camera-math';
-import { invert4, multiply4, perspectiveMatrix } from './math3d';
+import { invert4, multiply4, perspectiveMatrix, transformPoint4 } from './math3d';
 
 describe('TypeGPU camera math', () => {
   it('reads direct perspective camera props', () => {
@@ -164,6 +164,68 @@ describe('TypeGPU camera math', () => {
     expect(ray.direction.every(Number.isFinite)).toBe(true);
   });
 
+  it('falls back near and far as a pair when far does not exceed near', () => {
+    const root = createFragment();
+    const first = createElement('perspectiveCamera');
+    const second = createElement('perspectiveCamera');
+
+    setAttribute(first, 'near', 200);
+    setAttribute(first, 'far', 0);
+    setAttribute(second, 'active', true);
+    setAttribute(second, 'near', 200);
+    insert(root, first, null);
+    insert(root, second, null);
+
+    expect(readCameraState(root).settings).toMatchObject({ near: 0.1, far: 100 });
+  });
+
+  it('keeps legacy controls scoped to the selected active camera', () => {
+    const root = createFragment();
+    const inactive = createElement('perspectiveCamera');
+    const active = createElement('perspectiveCamera');
+    const inactiveControls = createElement('controls');
+    const inactivePointer = createElement('pointerControls');
+    const activeControls = createElement('controls');
+    const activePointer = createElement('pointerControls');
+
+    setAttribute(active, 'active', true);
+    setAttribute(inactiveControls, 'minDistance', 2);
+    setAttribute(activeControls, 'minDistance', 7);
+    insert(inactiveControls, inactivePointer, null);
+    insert(activeControls, activePointer, null);
+    insert(inactive, inactiveControls, null);
+    insert(active, activeControls, null);
+    insert(root, inactive, null);
+    insert(root, active, null);
+
+    const state = readCameraState(root);
+
+    expect(state.node).toBe(active);
+    expect(state.controllerNode).toBe(activeControls);
+    expect(state.controller).toMatchObject({ kind: 'controls', minDistance: 7 });
+  });
+
+  it('falls back to aspect 1 for invalid view-projection aspect values', () => {
+    const invalid = createViewProjectionMatrix(0, {
+      projection: 'perspective',
+      position: [0, 0, 10],
+      target: [0, 0, 0],
+      fov: 45,
+      near: 0.1,
+      far: 100
+    });
+    const fallback = createViewProjectionMatrix(1, {
+      projection: 'perspective',
+      position: [0, 0, 10],
+      target: [0, 0, 0],
+      fov: 45,
+      near: 0.1,
+      far: 100
+    });
+
+    expect(Array.from(invalid)).toEqual(Array.from(fallback));
+  });
+
   it('throws when creating a ray with invalid viewport dimensions', () => {
     expect(() =>
       cameraRayFromViewport({
@@ -196,5 +258,13 @@ describe('TypeGPU camera math', () => {
     for (let index = 0; index < 16; index += 1) {
       expect(identity[index]).toBeCloseTo(index % 5 === 0 ? 1 : 0, 5);
     }
+  });
+
+  it('throws when transforming a point with a near-zero homogeneous coordinate', () => {
+    const matrix = new Float32Array(16);
+
+    expect(() => transformPoint4(matrix, [1, 2, 3])).toThrow(
+      'Cannot transform point with near-zero homogeneous coordinate'
+    );
   });
 });

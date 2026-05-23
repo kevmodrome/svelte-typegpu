@@ -277,6 +277,40 @@ describe('TypeGPU renderer core', () => {
     });
   });
 
+  it('preserves direct orbit controls in runtime scene state', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const camera = createElement('perspectiveCamera');
+    const controls = createElement('orbitControls');
+
+    setAttribute(controls, 'camera', 'main');
+    setAttribute(controls, 'target', [1, 2, 3]);
+    setAttribute(controls, 'minDistance', 4);
+    setAttribute(controls, 'maxDistance', 20);
+    setAttribute(controls, 'enablePan', false);
+    setAttribute(controls, 'enableZoom', true);
+    setAttribute(controls, 'enableRotate', false);
+    setAttribute(controls, 'rotateSpeed', 1.5);
+    setAttribute(controls, 'zoomSpeed', 0.75);
+    insert(scene, camera, null);
+    insert(scene, controls, null);
+    insert(root, scene, null);
+
+    expect(createSceneState(root).cameraController).toEqual({
+      kind: 'orbit',
+      camera: 'main',
+      enabled: true,
+      target: [1, 2, 3],
+      minDistance: 4,
+      maxDistance: 20,
+      enablePan: false,
+      enableZoom: true,
+      enableRotate: false,
+      rotateSpeed: 1.5,
+      zoomSpeed: 0.75
+    });
+  });
+
   it('falls back and clamps invalid camera-control options', () => {
     const root = createFragment();
     const scene = createElement('scene');

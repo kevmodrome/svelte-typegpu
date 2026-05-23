@@ -52,6 +52,11 @@ export function readPerspectiveCamera(root: TypeGpuNode): TypeGpuCameraSettings 
 
 export function readPerspectiveCameraState(root: TypeGpuNode): TypeGpuCameraState {
   const camera = findFirst(root, (node) => node.name === 'perspectiveCamera');
+
+  return readPerspectiveCameraNodeState(camera);
+}
+
+export function readPerspectiveCameraNodeState(camera: TypeGpuNode | null): TypeGpuCameraState {
   const pose = camera ? firstChildNamed(camera, 'cameraPose') : null;
   const lens = camera ? firstChildNamed(camera, 'cameraLens') : null;
   const controls = camera ? firstChildNamed(camera, 'controls') : null;

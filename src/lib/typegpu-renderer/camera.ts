@@ -1,5 +1,5 @@
 import { clampedNumberArg, numberArg, vectorTuple } from './attributes';
-import { readPerspectiveCameraState } from './components/perspective-camera';
+import { readPerspectiveCameraNodeState } from './components/perspective-camera';
 import { findFirst, type TypeGpuNode } from './core';
 import {
   add3,
@@ -39,7 +39,8 @@ const DEFAULT_MAX_DISTANCE = 100;
 export function readCameraState(root: TypeGpuNode): TypeGpuCameraState {
   const camera = findActiveCamera(root);
   const orbitControllerNode = findFirst(root, (node) => node.name === 'orbitControls');
-  const legacyState = camera?.name === 'perspectiveCamera' ? readPerspectiveCameraState(root) : null;
+  const legacyState =
+    camera?.name === 'perspectiveCamera' ? readPerspectiveCameraNodeState(camera) : null;
   const controllerNode = orbitControllerNode ?? legacyState?.controllerNode ?? null;
 
   return {
@@ -57,18 +58,19 @@ export function createViewProjectionMatrix(
   camera: TypeGpuCameraSettings = DEFAULT_CAMERA
 ): Float32Array {
   const normalizedCamera = normalizeCameraSettings(camera);
+  const normalizedAspect = isFinitePositive(aspect) ? aspect : 1;
   const view = lookAtMatrix(normalizedCamera.position, normalizedCamera.target, [0, 1, 0]);
   const projection =
     normalizedCamera.projection === 'orthographic'
       ? createOrthographicProjection(
-          aspect,
+          normalizedAspect,
           normalizedCamera.zoom,
           normalizedCamera.near,
           normalizedCamera.far
         )
       : perspectiveMatrix(
           (normalizedCamera.fov * Math.PI) / 180,
-          aspect,
+          normalizedAspect,
           normalizedCamera.near,
           normalizedCamera.far
         );
@@ -123,8 +125,7 @@ export function cameraRayFromViewport(input: {
 export function normalizeCameraSettings(
   camera: TypeGpuCameraSettings = DEFAULT_CAMERA
 ): TypeGpuNormalizedCameraSettings {
-  const near = isFinitePositive(camera.near) ? camera.near : DEFAULT_CAMERA.near;
-  const far = Number.isFinite(camera.far) && camera.far > near ? camera.far : DEFAULT_CAMERA.far;
+  const [near, far] = normalizeClipPlanes(camera.near, camera.far);
 
   if (camera.projection === 'orthographic') {
     return {
@@ -252,6 +253,14 @@ function firstChildNamed(node: TypeGpuNode, name: string): TypeGpuNode | null {
 
 function isFinitePositive(value: number): boolean {
   return Number.isFinite(value) && value > 0;
+}
+
+function normalizeClipPlanes(near: number, far: number): [number, number] {
+  if (isFinitePositive(near) && Number.isFinite(far) && far > near) {
+    return [near, far];
+  }
+
+  return [DEFAULT_CAMERA.near, DEFAULT_CAMERA.far];
 }
 
 function stringOrNull(value: unknown): string | null {
