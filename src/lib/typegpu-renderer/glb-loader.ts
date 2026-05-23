@@ -1,7 +1,18 @@
 import { MESH_VERTEX_FLOATS } from './instance-data';
 import { DEFAULT_STANDARD_MATERIAL } from './materials';
 import { IDENTITY_TRANSFORM } from './transform';
-import type { TypeGpuGeometryData, TypeGpuStandardMaterialDescriptor } from './types';
+import type {
+  TypeGpuEmbeddedTextureSource,
+  TypeGpuGeometryData,
+  TypeGpuStandardMaterialDescriptor
+} from './types';
+
+type Matrix4 = [
+  number, number, number, number,
+  number, number, number, number,
+  number, number, number, number,
+  number, number, number, number
+];
 
 export interface ParsedGlbContainer {
   json: GltfJson;
@@ -160,7 +171,14 @@ export function loadGlbModel(input: ArrayBuffer, key: string): TypeGpuLoadedMode
   let primitiveIndex = 0;
 
   for (const nodeIndex of rootNodeIndices(container.json)) {
-    collectNodePrimitives(container, key, nodeIndex, meshes, () => primitiveIndex++);
+    collectNodePrimitives(
+      container,
+      key,
+      nodeIndex,
+      identityMatrix4(),
+      meshes,
+      () => primitiveIndex++
+    );
   }
 
   return { key, meshes };
@@ -175,23 +193,26 @@ function collectNodePrimitives(
   container: ParsedGlbContainer,
   modelKey: string,
   nodeIndex: number,
+  parentMatrix: Matrix4,
   meshes: TypeGpuLoadedModelMesh[],
   nextPrimitiveIndex: () => number
 ): void {
   const node = container.json.nodes?.[nodeIndex];
   if (!node) return;
 
+  const worldMatrix = multiplyMatrix4(parentMatrix, matrixFromNode(node));
+
   if (typeof node.mesh === 'number') {
     const mesh = container.json.meshes?.[node.mesh];
 
     for (const primitive of mesh?.primitives ?? []) {
-      const loaded = readPrimitive(container, modelKey, primitive, nextPrimitiveIndex());
+      const loaded = readPrimitive(container, modelKey, primitive, nextPrimitiveIndex(), worldMatrix);
       if (loaded) meshes.push(loaded);
     }
   }
 
   for (const childIndex of node.children ?? []) {
-    collectNodePrimitives(container, modelKey, childIndex, meshes, nextPrimitiveIndex);
+    collectNodePrimitives(container, modelKey, childIndex, worldMatrix, meshes, nextPrimitiveIndex);
   }
 }
 
@@ -199,7 +220,8 @@ function readPrimitive(
   container: ParsedGlbContainer,
   modelKey: string,
   primitive: GltfPrimitive,
-  primitiveIndex: number
+  primitiveIndex: number,
+  worldMatrix: Matrix4
 ): TypeGpuLoadedModelMesh | null {
   if ((primitive.mode ?? GL_TRIANGLES) !== GL_TRIANGLES) return null;
   if (!primitive.attributes || typeof primitive.attributes.POSITION !== 'number') return null;
@@ -231,7 +253,9 @@ function readPrimitive(
   const indices = readOptionalIndexAccessor(container, primitive);
   if (indices === undefined) return null;
 
-  const vertexData = buildVertexData(positions, normals, uvs, indices);
+  const transformedPositions = positions.map((position) => transformPoint(worldMatrix, position));
+  const transformedNormals = normals?.map((normal) => transformNormal(worldMatrix, normal)) ?? null;
+  const vertexData = buildVertexData(transformedPositions, transformedNormals, uvs, indices);
   if (!vertexData) return null;
 
   return {
@@ -241,8 +265,183 @@ function readPrimitive(
       vertexCount: vertexData.length / MESH_VERTEX_FLOATS,
       vertexFloats: MESH_VERTEX_FLOATS
     },
-    material: DEFAULT_STANDARD_MATERIAL,
+    material: readMaterial(container, modelKey, primitive.material),
     transform: IDENTITY_TRANSFORM
+  };
+}
+
+function identityMatrix4(): Matrix4 {
+  return [
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+    0, 0, 0, 1
+  ];
+}
+
+function matrixFromNode(node: GltfNode): Matrix4 {
+  if (node.matrix?.length === 16) {
+    return [...node.matrix] as Matrix4;
+  }
+
+  const [tx, ty, tz] = node.translation ?? [0, 0, 0];
+  const [x, y, z, w] = node.rotation ?? [0, 0, 0, 1];
+  const [sx, sy, sz] = node.scale ?? [1, 1, 1];
+  const xx = x * x;
+  const xy = x * y;
+  const xz = x * z;
+  const xw = x * w;
+  const yy = y * y;
+  const yz = y * z;
+  const yw = y * w;
+  const zz = z * z;
+  const zw = z * w;
+
+  return [
+    (1 - 2 * (yy + zz)) * sx,
+    2 * (xy + zw) * sx,
+    2 * (xz - yw) * sx,
+    0,
+    2 * (xy - zw) * sy,
+    (1 - 2 * (xx + zz)) * sy,
+    2 * (yz + xw) * sy,
+    0,
+    2 * (xz + yw) * sz,
+    2 * (yz - xw) * sz,
+    (1 - 2 * (xx + yy)) * sz,
+    0,
+    tx ?? 0,
+    ty ?? 0,
+    tz ?? 0,
+    1
+  ];
+}
+
+function multiplyMatrix4(left: Matrix4, right: Matrix4): Matrix4 {
+  const result = new Array<number>(16);
+
+  for (let column = 0; column < 4; column += 1) {
+    for (let row = 0; row < 4; row += 1) {
+      result[column * 4 + row] =
+        left[0 * 4 + row] * right[column * 4 + 0] +
+        left[1 * 4 + row] * right[column * 4 + 1] +
+        left[2 * 4 + row] * right[column * 4 + 2] +
+        left[3 * 4 + row] * right[column * 4 + 3];
+    }
+  }
+
+  return result as Matrix4;
+}
+
+function transformPoint(matrix: Matrix4, point: number[]): number[] {
+  const x = point[0] ?? 0;
+  const y = point[1] ?? 0;
+  const z = point[2] ?? 0;
+  const w = matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15];
+
+  const transformed = [
+    matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12],
+    matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13],
+    matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14]
+  ];
+
+  if (w && w !== 1) {
+    return [transformed[0] / w, transformed[1] / w, transformed[2] / w];
+  }
+
+  return transformed;
+}
+
+function transformNormal(matrix: Matrix4, normal: number[]): number[] {
+  const x = normal[0] ?? 0;
+  const y = normal[1] ?? 0;
+  const z = normal[2] ?? 1;
+  const a00 = matrix[0];
+  const a01 = matrix[4];
+  const a02 = matrix[8];
+  const a10 = matrix[1];
+  const a11 = matrix[5];
+  const a12 = matrix[9];
+  const a20 = matrix[2];
+  const a21 = matrix[6];
+  const a22 = matrix[10];
+  const b01 = a22 * a11 - a12 * a21;
+  const b11 = -a22 * a10 + a12 * a20;
+  const b21 = a21 * a10 - a11 * a20;
+  const determinant = a00 * b01 + a01 * b11 + a02 * b21;
+
+  if (determinant === 0) {
+    return normalizeVector([
+      a00 * x + a01 * y + a02 * z,
+      a10 * x + a11 * y + a12 * z,
+      a20 * x + a21 * y + a22 * z
+    ]);
+  }
+
+  const inverseDeterminant = 1 / determinant;
+  return normalizeVector([
+    b01 * inverseDeterminant * x +
+      (-a22 * a01 + a02 * a21) * inverseDeterminant * y +
+      (a12 * a01 - a02 * a11) * inverseDeterminant * z,
+    b11 * inverseDeterminant * x +
+      (a22 * a00 - a02 * a20) * inverseDeterminant * y +
+      (-a12 * a00 + a02 * a10) * inverseDeterminant * z,
+    b21 * inverseDeterminant * x +
+      (-a21 * a00 + a01 * a20) * inverseDeterminant * y +
+      (a11 * a00 - a01 * a10) * inverseDeterminant * z
+  ]);
+}
+
+function readMaterial(
+  container: ParsedGlbContainer,
+  modelKey: string,
+  materialIndex: number | undefined
+): TypeGpuStandardMaterialDescriptor {
+  const material = isNonNegativeInteger(materialIndex)
+    ? container.json.materials?.[materialIndex]
+    : undefined;
+  const pbr = material?.pbrMetallicRoughness;
+  const color = pbr?.baseColorFactor;
+
+  return {
+    kind: 'standard',
+    color: color?.length === 4
+      ? [color[0] ?? 1, color[1] ?? 1, color[2] ?? 1, color[3] ?? 1]
+      : [...DEFAULT_STANDARD_MATERIAL.color],
+    roughness: typeof pbr?.roughnessFactor === 'number'
+      ? pbr.roughnessFactor
+      : DEFAULT_STANDARD_MATERIAL.roughness,
+    metalness: typeof pbr?.metallicFactor === 'number'
+      ? pbr.metallicFactor
+      : DEFAULT_STANDARD_MATERIAL.metalness,
+    opacity: color?.length === 4
+      ? color[3] ?? DEFAULT_STANDARD_MATERIAL.opacity
+      : DEFAULT_STANDARD_MATERIAL.opacity,
+    map: readEmbeddedTextureSource(container, modelKey, pbr?.baseColorTexture?.index)
+  };
+}
+
+function readEmbeddedTextureSource(
+  container: ParsedGlbContainer,
+  modelKey: string,
+  textureIndex: number | undefined
+): TypeGpuEmbeddedTextureSource | null {
+  if (!isNonNegativeInteger(textureIndex)) return null;
+
+  const imageIndex = container.json.textures?.[textureIndex]?.source;
+  if (!isNonNegativeInteger(imageIndex)) return null;
+
+  const image = container.json.images?.[imageIndex];
+  if (!image || !isNonNegativeInteger(image.bufferView) || !image.mimeType) return null;
+
+  const bytes = bytesForBufferView(container, container.json.bufferViews?.[image.bufferView]);
+  if (!bytes) return null;
+
+  return {
+    kind: 'embedded',
+    key: `${modelKey}:image:${imageIndex}`,
+    mimeType: image.mimeType,
+    data: bytes
   };
 }
 
@@ -436,6 +635,21 @@ function dataViewForBufferView(
   );
 }
 
+function bytesForBufferView(
+  container: ParsedGlbContainer,
+  bufferView: GltfBufferView | undefined
+): Uint8Array | null {
+  if (!bufferView) return null;
+  if ((bufferView.buffer ?? 0) !== 0) return null;
+  if (!isNonNegativeInteger(bufferView.byteLength)) return null;
+
+  const byteOffset = bufferView.byteOffset ?? 0;
+  if (!isNonNegativeInteger(byteOffset)) return null;
+  if (byteOffset + bufferView.byteLength > container.binary.byteLength) return null;
+
+  return container.binary.slice(byteOffset, byteOffset + bufferView.byteLength);
+}
+
 function accessorFitsBufferView(
   byteOffset: number,
   byteStride: number,
@@ -508,6 +722,13 @@ function generateFlatNormal(positions: number[][], indices: number[]): number[] 
 
   if (length === 0) return [0, 0, 1];
   return [normal[0] / length, normal[1] / length, normal[2] / length];
+}
+
+function normalizeVector(vector: number[]): number[] {
+  const length = Math.hypot(vector[0] ?? 0, vector[1] ?? 0, vector[2] ?? 0);
+
+  if (length === 0) return [0, 0, 1];
+  return [(vector[0] ?? 0) / length, (vector[1] ?? 0) / length, (vector[2] ?? 0) / length];
 }
 
 function trimJsonPadding(chunk: Uint8Array): Uint8Array {

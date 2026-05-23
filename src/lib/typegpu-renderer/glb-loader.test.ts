@@ -413,6 +413,103 @@ describe('GLB loader', () => {
 
     expect(Array.from(model.meshes[0].geometry.vertexData.slice(0, 3))).toEqual([0, 1, 0]);
   });
+
+  it('bakes node translation into imported vertex positions', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0, translation: [10, 0, 0] }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+          buffers: [{ byteLength: positions.byteLength }],
+          bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: positions.byteLength }],
+          accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' }]
+        },
+        positions
+      ),
+      'model:translated'
+    );
+
+    expect(Array.from(model.meshes[0].geometry.vertexData.slice(0, 3))).toEqual([10, 0, 0]);
+  });
+
+  it('maps metallic-roughness material fields and embedded base color textures', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const pngBytes = new Uint8Array([137, 80, 78, 71]);
+    const binary = concatBytes([positions, pngBytes]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0 }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 }, material: 0 }] }],
+          buffers: [{ byteLength: binary.byteLength }],
+          bufferViews: [
+            { buffer: 0, byteOffset: 0, byteLength: positions.byteLength },
+            { buffer: 0, byteOffset: positions.byteLength, byteLength: pngBytes.byteLength }
+          ],
+          accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' }],
+          materials: [
+            {
+              pbrMetallicRoughness: {
+                baseColorFactor: [0.2, 0.3, 0.4, 0.5],
+                roughnessFactor: 0.7,
+                metallicFactor: 0.8,
+                baseColorTexture: { index: 0 }
+              }
+            }
+          ],
+          textures: [{ source: 0 }],
+          images: [{ bufferView: 1, mimeType: 'image/png' }]
+        },
+        binary
+      ),
+      'model:material'
+    );
+
+    expect(model.meshes[0].material).toMatchObject({
+      color: [0.2, 0.3, 0.4, 0.5],
+      roughness: 0.7,
+      metalness: 0.8,
+      map: {
+        kind: 'embedded',
+        key: 'model:material:image:0',
+        mimeType: 'image/png'
+      }
+    });
+    expect(Array.from(model.meshes[0].material.map?.data ?? [])).toEqual([137, 80, 78, 71]);
+  });
+
+  it('skips unsupported primitive modes and missing position primitives', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0 }],
+          meshes: [
+            {
+              primitives: [
+                { mode: 1, attributes: { POSITION: 0 } },
+                { attributes: { NORMAL: 0 } }
+              ]
+            }
+          ],
+          buffers: [{ byteLength: positions.byteLength }],
+          bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: positions.byteLength }],
+          accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' }]
+        },
+        positions
+      ),
+      'model:skip'
+    );
+
+    expect(model.meshes).toEqual([]);
+  });
 });
 
 function withTrailingBytes(input: ArrayBuffer, trailingByteLength: number): ArrayBuffer {
