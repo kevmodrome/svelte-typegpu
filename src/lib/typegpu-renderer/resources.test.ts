@@ -212,10 +212,10 @@ describe('TypeGPU resource descriptors', () => {
 
     const resolvedMaterial = resolveMaterialReference('crate', resources);
     expect(resolvedMaterial?.textureKey).toBe('texture:checker');
-    expect(resources.liveResourceKeys.geometry.has('box:1:1:1')).toBe(true);
-    expect(resources.liveResourceKeys.material.has(resolvedMaterial!.key!)).toBe(true);
-    expect(resources.liveResourceKeys.texture.has('texture:checker')).toBe(true);
-    expect(resources.liveResourceKeys.sampler.has('sampler:repeatLinear')).toBe(true);
+    expect(resources.liveResourceKeys.geometries.has('box:1:1:1')).toBe(true);
+    expect(resources.liveResourceKeys.materials.has(resolvedMaterial!.key!)).toBe(true);
+    expect(resources.liveResourceKeys.textures.has('texture:checker')).toBe(true);
+    expect(resources.liveResourceKeys.samplers.has('sampler:repeatLinear')).toBe(true);
   });
 });
 

@@ -127,6 +127,7 @@ export interface TypeGpuGeometryData {
   vertexCount: number;
   vertexFloats: number;
   bounds?: TypeGpuBounds;
+  shape?: Vector3Tuple;
   topology?: TypeGpuPrimitiveTopology;
   layoutKey?: string;
 }
@@ -236,20 +237,33 @@ export type TypeGpuMaterialDescriptor =
   | TypeGpuStandardMaterialDescriptor;
 
 export interface TypeGpuLiveResourceKeys {
-  geometry: Set<string>;
-  material: Set<string>;
-  texture: Set<string>;
-  sampler: Set<string>;
+  geometries: Set<string>;
+  materials: Set<string>;
+  textures: Set<string>;
+  samplers: Set<string>;
+  pipelines: Set<string>;
+}
+
+export interface TypeGpuRenderSettings {
+  clearColor: RgbaTuple;
+  depth: boolean;
+  alphaMode: GPUCanvasAlphaMode;
 }
 
 export interface TypeGpuMeshDrawItem {
   id: TypeGpuInstanceId;
+  node: TypeGpuNode;
   revision: number;
-  geometry: TypeGpuGeometryDescriptor;
-  material: TypeGpuStandardMaterialDescriptor;
+  geometry: TypeGpuGeometryData;
+  material: TypeGpuMaterialDescriptor;
   transform: TypeGpuTransform;
+  bounds: TypeGpuBounds;
+  color: RgbaTuple;
   phase: number;
   spinSpeed: number;
+  renderOrder: number;
+  hitTest: 'none' | 'bounds' | 'mesh';
+  pointerEvents: 'auto' | 'none';
 }
 
 export interface TypeGpuLight {
@@ -271,26 +285,58 @@ export interface TypeGpuLight {
 
 export interface TypeGpuDrawBatch {
   key: string;
+  passKey: string;
+  pipelineKey: string;
+  materialKey: string;
+  bindGroupKey: string;
+  geometryKey: string;
   geometry: TypeGpuGeometryData;
-  material: TypeGpuStandardMaterialDescriptor;
+  material: TypeGpuMaterialDescriptor;
   floatsPerInstance: number;
   instances: Float32Array;
   instanceIds: TypeGpuInstanceId[];
   instanceCount: number;
   instancesChanged: boolean;
   dirtyRanges: TypeGpuInstanceDirtyRange[];
+  sortKey: number;
+}
+
+export interface TypeGpuInteractionTarget {
+  id: TypeGpuInstanceId;
+  drawItemId: TypeGpuInstanceId;
+  node: TypeGpuNode;
+  bounds: TypeGpuBounds;
+  hitTest: 'bounds' | 'mesh';
+  pointerEvents: 'auto';
+  renderOrder: number;
+}
+
+export interface TypeGpuInteractionHit {
+  target: TypeGpuInteractionTarget;
+  distance: number;
+  point: Vector3Tuple;
+}
+
+export interface TypeGpuInteractionIndex {
+  targets: TypeGpuInteractionTarget[];
+  pick(ray: TypeGpuRay): TypeGpuInteractionHit | null;
 }
 
 export interface TypeGpuSceneState {
-  dirty?: Dirty;
+  dirty: Dirty;
   camera: TypeGpuCameraSettings;
   cameraNode: TypeGpuNode | null;
   cameraControllerNode: TypeGpuNode | null;
   cameraController: TypeGpuCameraController | null;
+  renderSettings: TypeGpuRenderSettings;
   scale: number;
   animationSpeed: number;
   colorShift: number;
   lights: TypeGpuLight[];
   lightsChanged: boolean;
   drawBatches: TypeGpuDrawBatch[];
+  drawBatchesChanged: boolean;
+  interaction: TypeGpuInteractionIndex;
+  interactionChanged: boolean;
+  liveResourceKeys: TypeGpuLiveResourceKeys;
 }

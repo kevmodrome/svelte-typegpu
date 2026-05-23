@@ -6,6 +6,7 @@ import {
   type CameraChangeDetail
 } from '../scene-controls';
 import { createCameraInteractionController } from './camera-interaction';
+import { Dirty } from './dirty';
 import type {
   TypeGpuKeyboardControls,
   TypeGpuCameraSettings,
@@ -118,6 +119,7 @@ function sceneState({
   keyboard?: TypeGpuKeyboardControls | null | true;
 } = {}): TypeGpuSceneState {
   return {
+    dirty: Dirty.None,
     camera: cameraSettings,
     cameraNode,
     cameraControllerNode,
@@ -138,7 +140,25 @@ function sceneState({
     colorShift: 0,
     lights: [],
     lightsChanged: false,
-    drawBatches: []
+    drawBatches: [],
+    drawBatchesChanged: false,
+    renderSettings: {
+      clearColor: [0, 0, 0, 1],
+      depth: true,
+      alphaMode: 'premultiplied'
+    },
+    interaction: {
+      targets: [],
+      pick: () => null
+    },
+    interactionChanged: false,
+    liveResourceKeys: {
+      geometries: new Set(),
+      materials: new Set(),
+      textures: new Set(),
+      samplers: new Set(),
+      pipelines: new Set()
+    }
   };
 }
 

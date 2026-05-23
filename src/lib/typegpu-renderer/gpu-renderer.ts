@@ -17,9 +17,9 @@ import {
 } from './instance-data';
 import { createViewProjectionMatrix } from './camera-math';
 import { createContinuityTracker } from './continuity';
+import { Dirty } from './dirty';
 import { packLightingState } from './lighting-data';
 import { DEPTH_FORMAT } from './render-constants';
-import { textureKeyForMaterial } from './materials';
 import { createMeshPipeline } from './typegpu-pipeline';
 import {
   lightingBindGroupLayout,
@@ -180,16 +180,35 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#pipeline = createMeshPipeline(root, format);
     this.#fallbackMaterial = this.#createFallbackMaterial();
     this.setScene({
+      dirty: Dirty.None,
       camera: DEFAULT_TYPEGPU_CAMERA,
       cameraNode: null,
       cameraControllerNode: null,
       cameraController: null,
+      renderSettings: {
+        clearColor: [0, 0, 0, 1],
+        depth: true,
+        alphaMode: 'premultiplied'
+      },
       scale: 1,
       animationSpeed: 1,
       colorShift: 0,
       lights: [],
       lightsChanged: true,
-      drawBatches: []
+      drawBatches: [],
+      drawBatchesChanged: true,
+      interaction: {
+        targets: [],
+        pick: () => null
+      },
+      interactionChanged: true,
+      liveResourceKeys: {
+        geometries: new Set(),
+        materials: new Set(),
+        textures: new Set(),
+        samplers: new Set(),
+        pipelines: new Set()
+      }
     });
   }
 
@@ -280,7 +299,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   }
 
   #materialForBatch(batch: TypeGpuDrawBatch): TypeGpuMaterialResource {
-    const key = textureKeyForMaterial(batch.material);
+    const key = batch.material.textureKey ?? 'solid:white';
 
     if (key === this.#fallbackMaterial.key) {
       return this.#fallbackMaterial;

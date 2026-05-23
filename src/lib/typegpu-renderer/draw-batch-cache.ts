@@ -1,65 +1,54 @@
-import { createBoxGeometryData } from './box-data';
-import { collectDrawItems } from './components/draw-items';
 import { MESH_INSTANCE_FLOATS, packMeshInstance } from './instance-data';
-import { textureKeyForMaterial } from './materials';
-import type { TypeGpuModelCache } from './model-cache';
-import { createSphereGeometryData } from './sphere-data';
+import {
+  compareDrawBatchKeys,
+  drawBatchKey,
+  drawBatchKeysForItem,
+  type TypeGpuDrawBatchKeys
+} from './render-plan';
 import type {
   TypeGpuDrawBatch,
-  TypeGpuGeometryData,
-  TypeGpuProceduralGeometryKind,
-  TypeGpuInstanceId,
   TypeGpuInstanceDirtyRange,
-  TypeGpuMaterialKind,
+  TypeGpuInstanceId,
   TypeGpuMeshDrawItem
 } from './types';
-import type { TypeGpuNode } from './core';
 
-type GeometryBatchKey = TypeGpuProceduralGeometryKind | string;
-type DrawBatchKey = `mesh:${GeometryBatchKey}:${TypeGpuMaterialKind}:${string}`;
+interface DrawBatchGroup {
+  key: string;
+  keys: TypeGpuDrawBatchKeys;
+  items: TypeGpuMeshDrawItem[];
+}
 
 interface DrawBatchState {
-  itemIds: TypeGpuInstanceId[];
-  itemRevisions: number[];
+  instanceIds: TypeGpuInstanceId[];
+  revisions: number[];
   instances: Float32Array;
 }
 
 export interface TypeGpuDrawBatchCache {
-  read(root: TypeGpuNode, modelCache: TypeGpuModelCache): TypeGpuDrawBatch[];
+  read(items: TypeGpuMeshDrawItem[]): TypeGpuDrawBatch[];
 }
 
 export function createDrawBatchCache(): TypeGpuDrawBatchCache {
-  const geometries: Record<TypeGpuProceduralGeometryKind, TypeGpuGeometryData> = {
-    box: createBoxGeometryData(),
-    sphere: createSphereGeometryData()
-  };
-  const previousBatches = new Map<DrawBatchKey, DrawBatchState>();
+  const previousBatches = new Map<string, DrawBatchState>();
 
   return {
-    read(root, modelCache) {
-      const groupedItems = groupMeshDrawItems(collectDrawItems(root, modelCache));
-      const batches: TypeGpuDrawBatch[] = [];
-
-      for (const [key, items] of groupedItems) {
-        const geometryKind = items[0].geometry.kind;
-        const material = items[0].material;
-        const batch = readDrawBatch(
-          key,
-          geometryKind === 'imported' ? items[0].geometry.data : geometries[geometryKind],
-          material,
-          items,
-          previousBatches.get(key)
-        );
-        previousBatches.set(key, {
-          itemIds: batch.instanceIds,
-          itemRevisions: items.map((item) => item.revision),
-          instances: batch.instances
-        });
-        batches.push(batch);
-      }
+    read(items) {
+      const groups = groupDrawItems(items);
+      const activeKeys = new Set(groups.map((group) => group.key));
+      const batches = groups.map((group, index) =>
+        readDrawBatch(group, previousBatches.get(group.key), index)
+      );
 
       for (const key of previousBatches.keys()) {
-        if (!groupedItems.has(key)) previousBatches.delete(key);
+        if (!activeKeys.has(key)) previousBatches.delete(key);
+      }
+
+      for (const batch of batches) {
+        previousBatches.set(batch.key, {
+          instanceIds: batch.instanceIds,
+          revisions: groupRevisionList(groups[batch.sortKey]),
+          instances: batch.instances
+        });
       }
 
       return batches;
@@ -67,52 +56,54 @@ export function createDrawBatchCache(): TypeGpuDrawBatchCache {
   };
 }
 
-function groupMeshDrawItems(items: TypeGpuMeshDrawItem[]): Map<DrawBatchKey, TypeGpuMeshDrawItem[]> {
-  const groupedItems = new Map<DrawBatchKey, TypeGpuMeshDrawItem[]>();
+function groupDrawItems(items: TypeGpuMeshDrawItem[]): DrawBatchGroup[] {
+  const groupedItems = new Map<string, DrawBatchGroup>();
 
   for (const item of items) {
-    const key: DrawBatchKey = `mesh:${geometryBatchKey(item)}:${item.material.kind}:${textureKeyForMaterial(item.material)}`;
+    const keys = drawBatchKeysForItem(item);
+    const key = drawBatchKey(keys);
     const group = groupedItems.get(key);
 
     if (group) {
-      group.push(item);
+      group.items.push(item);
     } else {
-      groupedItems.set(key, [item]);
+      groupedItems.set(key, { key, keys, items: [item] });
     }
   }
 
-  return groupedItems;
-}
-
-function geometryBatchKey(item: TypeGpuMeshDrawItem): GeometryBatchKey {
-  return item.geometry.kind === 'imported'
-    ? `imported:${item.geometry.data.key}`
-    : item.geometry.kind;
+  return [...groupedItems.values()].sort((a, b) => compareDrawBatchKeys(a.keys, b.keys));
 }
 
 function readDrawBatch(
-  key: DrawBatchKey,
-  geometry: TypeGpuGeometryData,
-  material: TypeGpuMeshDrawItem['material'],
-  items: TypeGpuMeshDrawItem[],
-  previous: DrawBatchState | undefined
+  group: DrawBatchGroup,
+  previous: DrawBatchState | undefined,
+  sortKey: number
 ): TypeGpuDrawBatch {
-  const itemIds = items.map((item) => item.id);
+  const items = group.items;
+  const instanceIds = items.map((item) => item.id);
+  const revisions = items.map((item) => item.revision);
+  const instancesMatch =
+    previous && sameList(instanceIds, previous.instanceIds) && sameList(revisions, previous.revisions);
 
-  if (!previous || !sameItemIds(itemIds, previous.itemIds)) {
+  if (instancesMatch) {
+    return {
+      ...batchBase(group, sortKey),
+      instances: previous.instances,
+      instanceIds: previous.instanceIds,
+      instanceCount: items.length,
+      instancesChanged: false,
+      dirtyRanges: []
+    };
+  }
+
+  if (!previous || !sameList(instanceIds, previous.instanceIds)) {
     const instances = new Float32Array(items.length * MESH_INSTANCE_FLOATS);
-
-    items.forEach((item, index) => {
-      packMeshInstance(item, instances, index * MESH_INSTANCE_FLOATS);
-    });
+    items.forEach((item, index) => packMeshInstance(item, instances, index * MESH_INSTANCE_FLOATS));
 
     return {
-      key,
-      geometry,
-      material,
-      floatsPerInstance: MESH_INSTANCE_FLOATS,
+      ...batchBase(group, sortKey),
       instances,
-      instanceIds: itemIds,
+      instanceIds,
       instanceCount: items.length,
       instancesChanged: true,
       dirtyRanges: items.length > 0 ? [{ start: 0, count: items.length }] : []
@@ -122,29 +113,51 @@ function readDrawBatch(
   const dirtyRanges: TypeGpuInstanceDirtyRange[] = [];
 
   items.forEach((item, index) => {
-    if (item.revision === previous.itemRevisions[index]) return;
-
+    if (item.revision === previous.revisions[index]) return;
     packMeshInstance(item, previous.instances, index * MESH_INSTANCE_FLOATS);
     appendDirtyRange(dirtyRanges, index);
   });
 
   return {
-    key,
-    geometry,
-    material,
-    floatsPerInstance: MESH_INSTANCE_FLOATS,
+    ...batchBase(group, sortKey),
     instances: previous.instances,
-    instanceIds: previous.itemIds,
+    instanceIds: previous.instanceIds,
     instanceCount: items.length,
     instancesChanged: dirtyRanges.length > 0,
     dirtyRanges
   };
 }
 
-function sameItemIds(next: TypeGpuInstanceId[], previous: TypeGpuInstanceId[]): boolean {
-  if (next.length !== previous.length) return false;
+function batchBase(
+  group: DrawBatchGroup,
+  sortKey: number
+): Omit<
+  TypeGpuDrawBatch,
+  'instances' | 'instanceIds' | 'instanceCount' | 'instancesChanged' | 'dirtyRanges'
+> {
+  const item = group.items[0];
 
-  return next.every((id, index) => id === previous[index]);
+  return {
+    key: group.key,
+    passKey: group.keys.passKey,
+    pipelineKey: group.keys.pipelineKey,
+    materialKey: group.keys.materialKey,
+    bindGroupKey: group.keys.bindGroupKey,
+    geometryKey: group.keys.geometryKey,
+    geometry: item.geometry,
+    material: item.material,
+    floatsPerInstance: MESH_INSTANCE_FLOATS,
+    sortKey
+  };
+}
+
+function groupRevisionList(group: DrawBatchGroup | undefined): number[] {
+  return group?.items.map((item) => item.revision) ?? [];
+}
+
+function sameList<T>(next: T[], previous: T[]): boolean {
+  if (next.length !== previous.length) return false;
+  return next.every((value, index) => value === previous[index]);
 }
 
 function appendDirtyRange(ranges: TypeGpuInstanceDirtyRange[], index: number): void {

@@ -1,82 +1,163 @@
-import { describe, expect, it, vi } from 'vitest';
-import { createFragment } from './core';
-import { collectDrawItems } from './components/draw-items';
+import { describe, expect, it } from 'vitest';
+import { createElement } from './core';
 import { createDrawBatchCache } from './draw-batch-cache';
-import { createModelCache } from './model-cache';
 import type {
   TypeGpuGeometryData,
-  TypeGpuMeshDrawItem,
-  TypeGpuStandardMaterialDescriptor
+  TypeGpuMaterialDescriptor,
+  TypeGpuMeshDrawItem
 } from './types';
 
-vi.mock('./components/draw-items', () => ({
-  collectDrawItems: vi.fn()
-}));
-
-const collectDrawItemsMock = vi.mocked(collectDrawItems);
-
 describe('TypeGPU draw batch cache', () => {
-  it('keeps imported geometries with the same material in separate batches', () => {
-    const chairGeometry = importedGeometryData('model:chair:mesh:0');
-    const tableGeometry = importedGeometryData('model:table:mesh:0');
-    const material: TypeGpuStandardMaterialDescriptor = {
-      kind: 'standard',
-      color: [1, 1, 1, 1],
-      roughness: 0.45,
-      metalness: 0.05,
-      opacity: 1,
-      map: null
-    };
+  it('uses the exact Task 5 batch key shape', () => {
+    const [batch] = createDrawBatchCache().read([drawItem({ id: 'a' })]);
 
-    collectDrawItemsMock.mockReturnValue([
-      importedMeshDrawItem(1, chairGeometry, material),
-      importedMeshDrawItem(2, tableGeometry, material)
+    expect(batch.key).toBe(
+      'pass:main|pipeline:standard:opaque|material:standard:white|bind:solid|box:1:1:1|order:0'
+    );
+    expect(batch.passKey).toBe('pass:main');
+    expect(batch.pipelineKey).toBe('pipeline:standard:opaque');
+    expect(batch.materialKey).toBe('material:standard:white');
+    expect(batch.bindGroupKey).toBe('bind:solid');
+    expect(batch.geometryKey).toBe('box:1:1:1');
+  });
+
+  it('separates groups by pipeline, material, bind group, geometry, and render order', () => {
+    const batches = createDrawBatchCache().read([
+      drawItem({ id: 'opaque-a' }),
+      drawItem({ id: 'pipeline', pipelineKey: 'pipeline:standard:alpha' }),
+      drawItem({ id: 'material', materialKey: 'material:standard:red' }),
+      drawItem({ id: 'bind', bindGroupKey: 'bind:textured' }),
+      drawItem({ id: 'geometry', geometry: geometryData('sphere:0.5:16:8') }),
+      drawItem({ id: 'order', renderOrder: 2 })
     ]);
 
-    const batches = createDrawBatchCache().read(createFragment(), createModelCache());
+    expect(batches).toHaveLength(6);
+    expect(new Set(batches.map((batch) => batch.key)).size).toBe(6);
+  });
+
+  it('reuses instance buffers when instance ids and revisions match', () => {
+    const cache = createDrawBatchCache();
+    const first = cache.read([drawItem({ id: 'a', revision: 1 })]);
+    const second = cache.read([drawItem({ id: 'a', revision: 1 })]);
+
+    expect(second[0].instances).toBe(first[0].instances);
+    expect(second[0].instancesChanged).toBe(false);
+    expect(second[0].dirtyRanges).toEqual([]);
+  });
+
+  it('emits dirty ranges when individual revisions change', () => {
+    const cache = createDrawBatchCache();
+    const first = cache.read([
+      drawItem({ id: 'a', revision: 1 }),
+      drawItem({ id: 'b', revision: 1 }),
+      drawItem({ id: 'c', revision: 1 })
+    ]);
+    const second = cache.read([
+      drawItem({ id: 'a', revision: 2 }),
+      drawItem({ id: 'b', revision: 1 }),
+      drawItem({ id: 'c', revision: 2 })
+    ]);
+
+    expect(second[0].instances).toBe(first[0].instances);
+    expect(second[0].instancesChanged).toBe(true);
+    expect(second[0].dirtyRanges).toEqual([
+      { start: 0, count: 1 },
+      { start: 2, count: 1 }
+    ]);
+  });
+
+  it('orders batches deterministically by render plan keys', () => {
+    const batches = createDrawBatchCache().read([
+      drawItem({ id: 'z', pipelineKey: 'pipeline:z' }),
+      drawItem({ id: 'a', renderOrder: -1 }),
+      drawItem({ id: 'm', materialKey: 'material:a' })
+    ]);
 
     expect(batches.map((batch) => batch.key)).toEqual([
-      'mesh:imported:model:chair:mesh:0:standard:solid:white',
-      'mesh:imported:model:table:mesh:0:standard:solid:white'
+      'pass:main|pipeline:standard:opaque|material:standard:white|bind:solid|box:1:1:1|order:-1',
+      'pass:main|pipeline:standard:opaque|material:a|bind:solid|box:1:1:1|order:0',
+      'pass:main|pipeline:z|material:standard:white|bind:solid|box:1:1:1|order:0'
     ]);
-    expect(batches).toHaveLength(2);
-    expect(batches[0].geometry).toBe(chairGeometry);
-    expect(batches[1].geometry).toBe(tableGeometry);
-    expect(batches[0].instanceCount).toBe(1);
-    expect(batches[1].instanceCount).toBe(1);
+    expect(batches.map((batch) => batch.sortKey)).toEqual([0, 1, 2]);
   });
 });
 
-function importedGeometryData(key: string): TypeGpuGeometryData {
+function drawItem({
+  id,
+  revision = 1,
+  geometry = geometryData('box:1:1:1'),
+  materialKey = 'material:standard:white',
+  pipelineKey = 'pipeline:standard:opaque',
+  bindGroupKey = 'bind:solid',
+  renderOrder = 0
+}: {
+  id: string;
+  revision?: number;
+  geometry?: TypeGpuGeometryData;
+  materialKey?: string;
+  pipelineKey?: string;
+  bindGroupKey?: string;
+  renderOrder?: number;
+}): TypeGpuMeshDrawItem {
   return {
-    key,
-    vertexData: new Float32Array([0, 0, 0, 0, 1, 0, 0, 0]),
-    vertexCount: 1,
-    vertexFloats: 8
+    id,
+    node: createElement('mesh'),
+    revision,
+    geometry,
+    material: material({ key: materialKey, pipelineKey, bindGroupKey }),
+    transform: {
+      position: [1, 2, 3],
+      rotation: [0.1, 0.2, 0.3],
+      scale: [1, 1, 1]
+    },
+    bounds: geometry.bounds!,
+    color: [1, 1, 1, 1],
+    phase: 0.25,
+    spinSpeed: 0.5,
+    renderOrder,
+    hitTest: 'bounds',
+    pointerEvents: 'auto'
   };
 }
 
-function importedMeshDrawItem(
-  id: number,
-  geometry: TypeGpuGeometryData,
-  material: TypeGpuStandardMaterialDescriptor
-): TypeGpuMeshDrawItem {
+function geometryData(key: string): TypeGpuGeometryData {
   return {
-    id,
-    revision: 1,
-    geometry: {
-      kind: 'imported',
-      key: geometry.key,
-      size: [1, 1, 1],
-      data: geometry
-    },
-    material,
-    transform: {
-      position: [0, 0, 0],
-      rotation: [0, 0, 0],
-      scale: [1, 1, 1]
-    },
-    phase: 0,
-    spinSpeed: 0
+    key,
+    kind: key.startsWith('sphere') ? 'sphere' : 'box',
+    vertexData: new Float32Array([0, 0, 0, 0, 1, 0, 0, 0]),
+    vertexCount: 1,
+    vertexFloats: 8,
+    bounds: { min: [-0.5, -0.5, -0.5], max: [0.5, 0.5, 0.5] },
+    topology: 'triangle-list',
+    layoutKey: 'position:normal:uv'
+  };
+}
+
+function material({
+  key,
+  pipelineKey,
+  bindGroupKey
+}: {
+  key: string;
+  pipelineKey: string;
+  bindGroupKey: string;
+}): TypeGpuMaterialDescriptor {
+  return {
+    key,
+    pipelineKey,
+    bindGroupKey,
+    kind: 'standard',
+    color: [1, 1, 1, 1],
+    roughness: 0.45,
+    metalness: 0.05,
+    opacity: 1,
+    textureKey: 'solid:white',
+    samplerKey: 'sampler:default',
+    transparent: false,
+    depthWrite: true,
+    depthTest: true,
+    cullMode: 'back',
+    blendMode: 'opaque',
+    map: null
   };
 }

@@ -86,7 +86,8 @@ describe('TypeGPU renderer core', () => {
     insert(root, scene, null);
 
     const state = createSceneState(root);
-    const boxBatch = drawBatch(state, 'mesh:box:standard:solid:white');
+    const largeBoxBatch = drawBatchByGeometry(state, 'box:20:5:10');
+    const boxBatch = drawBatchByGeometry(state, 'box:1:1:1');
     const sphereBatch = drawBatch(state, 'mesh:sphere:standard:solid:white');
 
     expect(state).toMatchObject({
@@ -99,30 +100,33 @@ describe('TypeGPU renderer core', () => {
       }
     });
 
-    expect(boxBatch.geometry.key).toBe('box');
-    expect(boxBatch.instanceCount).toBe(2);
-    expect(boxBatch.instanceIds).toEqual([first.uid, second.uid]);
-    expect(Array.from(boxBatch.instances.slice(0, 4))).toEqual([1, 2, 3, 0.25]);
-    expect(boxBatch.instances[4]).toBeCloseTo(0.1);
-    expect(boxBatch.instances[5]).toBeCloseTo(0.2);
-    expect(boxBatch.instances[6]).toBeCloseTo(0.3);
+    expect(largeBoxBatch.geometry.key).toBe('box:20:5:10');
+    expect(largeBoxBatch.instanceCount).toBe(1);
+    expect(largeBoxBatch.instanceIds).toEqual([first.uid]);
+    expect(Array.from(largeBoxBatch.instances.slice(0, 4))).toEqual([1, 2, 3, 0.25]);
+    expect(largeBoxBatch.instances[4]).toBeCloseTo(0.1);
+    expect(largeBoxBatch.instances[5]).toBeCloseTo(0.2);
+    expect(largeBoxBatch.instances[6]).toBeCloseTo(0.3);
+    expect(largeBoxBatch.instances[7]).toBe(1);
+    expect(Array.from(largeBoxBatch.instances.slice(8, 11))).toEqual([20, 5, 10]);
+    expect(largeBoxBatch.instances[11]).toBeCloseTo(1.4);
+    expect(largeBoxBatch.instances[12]).toBe(0);
+    expect(Array.from(largeBoxBatch.instances.slice(13, 16))).toEqual([0, 0, 0]);
+    expect(largeBoxBatch.instances[16]).toBeCloseTo(0.7);
+    expect(largeBoxBatch.instances[17]).toBeCloseTo(0.2);
+    expect(largeBoxBatch.instances[18]).toBeCloseTo(1);
+    expect(largeBoxBatch.instances[19]).toBeCloseTo(0);
+    expect(boxBatch.geometry.key).toBe('box:1:1:1');
+    expect(boxBatch.instanceCount).toBe(1);
+    expect(boxBatch.instanceIds).toEqual([second.uid]);
+    expect(Array.from(boxBatch.instances.slice(0, 4))).toEqual([-1, -2, -3, 0.5]);
+    expect(boxBatch.instances[4]).toBeCloseTo(0.4);
+    expect(boxBatch.instances[5]).toBeCloseTo(0.5);
+    expect(boxBatch.instances[6]).toBeCloseTo(0.6);
     expect(boxBatch.instances[7]).toBe(1);
-    expect(Array.from(boxBatch.instances.slice(8, 11))).toEqual([20, 5, 10]);
-    expect(boxBatch.instances[11]).toBeCloseTo(1.4);
-    expect(boxBatch.instances[12]).toBe(0);
-    expect(Array.from(boxBatch.instances.slice(13, 16))).toEqual([0, 0, 0]);
-    expect(boxBatch.instances[16]).toBeCloseTo(0.7);
-    expect(boxBatch.instances[17]).toBeCloseTo(0.2);
-    expect(boxBatch.instances[18]).toBeCloseTo(1);
-    expect(boxBatch.instances[19]).toBeCloseTo(0);
-    expect(Array.from(boxBatch.instances.slice(20, 24))).toEqual([-1, -2, -3, 0.5]);
-    expect(boxBatch.instances[24]).toBeCloseTo(0.4);
-    expect(boxBatch.instances[25]).toBeCloseTo(0.5);
-    expect(boxBatch.instances[26]).toBeCloseTo(0.6);
-    expect(boxBatch.instances[27]).toBe(1);
-    expect(Array.from(boxBatch.instances.slice(28, 31))).toEqual([1, 1, 1]);
+    expect(Array.from(boxBatch.instances.slice(8, 11))).toEqual([1, 1, 1]);
 
-    expect(sphereBatch.geometry.key).toBe('sphere');
+    expect(sphereBatch.geometry.key).toBe('sphere:0.5:16:8');
     expect(sphereBatch.instanceCount).toBe(1);
     expect(sphereBatch.instanceIds).toEqual([sphere.uid]);
     expect(Array.from(sphereBatch.instances.slice(0, 4))).toEqual([7, 8, 9, 0.75]);
@@ -487,8 +491,8 @@ describe('TypeGPU renderer core', () => {
 
     expect(firstBatch.instanceCount).toBe(2);
     expect(secondBatch.instanceCount).toBe(1);
-    expect(firstBatch.material.map).toEqual({ kind: 'url', src: '/textures/a.png' });
-    expect(secondBatch.material.map).toEqual({ kind: 'url', src: '/textures/b.png' });
+    expect(firstBatch.material.map).toMatchObject({ kind: 'url', src: '/textures/a.png' });
+    expect(secondBatch.material.map).toMatchObject({ kind: 'url', src: '/textures/b.png' });
   });
 
   it('drops cached draw batch state after a texture key leaves the scene', () => {
@@ -678,7 +682,7 @@ describe('TypeGPU renderer core', () => {
     const proceduralBatch = drawBatch(state, 'mesh:box:standard:solid:white');
     const importedBatch = drawBatch(state, 'mesh:imported:box:standard:solid:white');
 
-    expect(proceduralBatch.geometry.key).toBe('box');
+    expect(proceduralBatch.geometry.key).toBe('box:1:1:1');
     expect(importedBatch.geometry.key).toBe('box');
     expect(proceduralBatch.instanceCount).toBe(1);
     expect(importedBatch.instanceCount).toBe(1);
@@ -1314,7 +1318,7 @@ describe('TypeGPU renderer core', () => {
     expect(scheduleSync).toHaveBeenCalledTimes(2);
   });
 
-  it('reuses cached draw batches for camera-only structural dirty masks', () => {
+  it('recomputes draw batches for structural dirty masks', () => {
     const cache = createTypeGpuSceneCache();
     const root = createFragment();
     const scene = createElement('scene');
@@ -1337,8 +1341,8 @@ describe('TypeGPU renderer core', () => {
       dirty: Dirty.Tree | Dirty.Camera
     });
 
-    expect(readDrawBatches).not.toHaveBeenCalled();
-    expect(secondState.drawBatches).toBe(cache.cleanDrawBatches);
+    expect(readDrawBatches).toHaveBeenCalledOnce();
+    expect(secondState.drawBatchesChanged).toBe(true);
     expect(secondState.drawBatches[0].instances).toBe(firstState.drawBatches[0].instances);
   });
 
@@ -1766,13 +1770,55 @@ describe('TypeGPU renderer core', () => {
 });
 
 function drawBatch(state: ReturnType<typeof createSceneState>, key: string) {
-  const batch = state.drawBatches.find((candidate) => candidate.key === key);
+  const batch =
+    state.drawBatches.find((candidate) => candidate.key === key) ??
+    state.drawBatches.find((candidate) => matchesLegacyBatchKey(candidate, key));
 
   if (!batch) {
     throw new Error(`Missing draw batch ${key}`);
   }
 
   return batch;
+}
+
+function drawBatchByGeometry(
+  state: ReturnType<typeof createSceneState>,
+  geometryKey: string,
+  textureKey = 'solid:white'
+) {
+  const batch = state.drawBatches.find(
+    (candidate) =>
+      candidate.geometryKey === geometryKey && (candidate.material.textureKey ?? 'solid:white') === textureKey
+  );
+
+  if (!batch) {
+    throw new Error(`Missing draw batch for geometry ${geometryKey}`);
+  }
+
+  return batch;
+}
+
+function matchesLegacyBatchKey(
+  batch: ReturnType<typeof createSceneState>['drawBatches'][number],
+  key: string
+): boolean {
+  if (!key.startsWith('mesh:')) return false;
+
+  const suffix = ':standard:';
+  const suffixIndex = key.lastIndexOf(suffix);
+  if (suffixIndex === -1) return false;
+
+  const geometryPart = key.slice('mesh:'.length, suffixIndex);
+  const textureKey = key.slice(suffixIndex + suffix.length);
+  const expectedTextureKey = textureKey === 'solid:white' ? 'solid:white' : textureKey;
+
+  if ((batch.material.textureKey ?? 'solid:white') !== expectedTextureKey) return false;
+
+  if (geometryPart.startsWith('imported:')) {
+    return batch.geometryKey === geometryPart.slice('imported:'.length);
+  }
+
+  return batch.geometry.kind === geometryPart;
 }
 
 function createTexturedBox(map: string) {

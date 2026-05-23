@@ -79,7 +79,7 @@ function readMesh(
     transform,
     phase: numberArg(mesh.attributes.phase, 0),
     spinSpeed: numberArg(mesh.attributes.spinSpeed, 0)
-  });
+  } as unknown as TypeGpuMeshDrawItem);
 
   return { transform, revision: meshRevision };
 }

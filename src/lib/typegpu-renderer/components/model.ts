@@ -64,7 +64,7 @@ function modelMeshDrawItem(
     transform: composeTransforms(modelTransform, mesh.transform),
     phase: numberArg(modelNode.attributes.phase, 0),
     spinSpeed: numberArg(modelNode.attributes.spinSpeed, 0)
-  };
+  } as unknown as TypeGpuMeshDrawItem;
 }
 
 function readModelMaterial(

@@ -40,21 +40,21 @@ export function collectSceneResources(root: TypeGpuNode): TypeGpuResourceCollect
     const geometry = readInlineGeometry(node);
     if (geometry) {
       resources.geometries.set(id, geometry);
-      resources.liveResourceKeys.geometry.add(geometry.key);
+      resources.liveResourceKeys.geometries.add(geometry.key);
       continue;
     }
 
     const texture = readInlineTexture(node);
     if (texture) {
       resources.textures.set(id, texture);
-      resources.liveResourceKeys.texture.add(texture.key ?? `texture:${id}`);
+      resources.liveResourceKeys.textures.add(texture.key ?? `texture:${id}`);
       continue;
     }
 
     const sampler = readInlineSampler(node);
     if (sampler) {
       resources.samplers.set(id, sampler);
-      resources.liveResourceKeys.sampler.add(sampler.key);
+      resources.liveResourceKeys.samplers.add(sampler.key);
     }
   }
 
@@ -66,9 +66,9 @@ export function collectSceneResources(root: TypeGpuNode): TypeGpuResourceCollect
     if (!material) continue;
 
     resources.materials.set(id, material);
-    if (material.key) resources.liveResourceKeys.material.add(material.key);
-    if (material.textureKey) resources.liveResourceKeys.texture.add(material.textureKey);
-    if (material.samplerKey) resources.liveResourceKeys.sampler.add(material.samplerKey);
+    if (material.key) resources.liveResourceKeys.materials.add(material.key);
+    if (material.textureKey) resources.liveResourceKeys.textures.add(material.textureKey);
+    if (material.samplerKey) resources.liveResourceKeys.samplers.add(material.samplerKey);
   }
 
   return resources;
@@ -132,7 +132,7 @@ export function resolveGeometryReference(
   const geometry = resources.geometries.get(value);
   if (!geometry) return null;
 
-  resources.liveResourceKeys.geometry.add(geometry.key);
+  resources.liveResourceKeys.geometries.add(geometry.key);
   return geometry;
 }
 
@@ -145,9 +145,9 @@ export function resolveMaterialReference(
   const material = resources.materials.get(value);
   if (!material) return null;
 
-  if (material.key) resources.liveResourceKeys.material.add(material.key);
-  if (material.textureKey) resources.liveResourceKeys.texture.add(material.textureKey);
-  if (material.samplerKey) resources.liveResourceKeys.sampler.add(material.samplerKey);
+  if (material.key) resources.liveResourceKeys.materials.add(material.key);
+  if (material.textureKey) resources.liveResourceKeys.textures.add(material.textureKey);
+  if (material.samplerKey) resources.liveResourceKeys.samplers.add(material.samplerKey);
   return material;
 }
 
@@ -158,10 +158,11 @@ function createResourceCollection(): TypeGpuResourceCollection {
     textures: new Map(),
     samplers: new Map(),
     liveResourceKeys: {
-      geometry: new Set(),
-      material: new Set(),
-      texture: new Set(),
-      sampler: new Set()
+      geometries: new Set(),
+      materials: new Set(),
+      textures: new Set(),
+      samplers: new Set(),
+      pipelines: new Set()
     }
   };
 }
