@@ -1,4 +1,5 @@
 import type { TypeGpuNode } from './core';
+import { Dirty } from './dirty';
 
 export type Vector3Tuple = [number, number, number];
 export type RgbaTuple = [number, number, number, number];
@@ -169,6 +170,7 @@ export interface TypeGpuDrawBatch {
 }
 
 export interface TypeGpuSceneState {
+  dirty?: Dirty;
   camera: TypeGpuCameraSettings;
   cameraNode: TypeGpuNode | null;
   cameraControllerNode: TypeGpuNode | null;

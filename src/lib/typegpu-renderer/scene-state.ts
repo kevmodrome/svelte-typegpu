@@ -5,6 +5,7 @@ import { createDrawBatchCache, type TypeGpuDrawBatchCache } from './draw-batch-c
 import { createModelCache, type TypeGpuModelCache } from './model-cache';
 import type { TypeGpuNode } from './core';
 import type { TypeGpuDrawBatch, TypeGpuLight, TypeGpuSceneState } from './types';
+import { Dirty, hasDirty } from './dirty';
 
 export interface TypeGpuSceneCache {
   drawBatchCache: TypeGpuDrawBatchCache;
@@ -19,6 +20,7 @@ export interface CreateTypeGpuSceneCacheOptions {
 }
 
 export interface TypeGpuSceneStateOptions {
+  dirty?: Dirty;
   reuseDrawBatches?: boolean;
   reuseLights?: boolean;
 }
@@ -43,22 +45,26 @@ export function createSceneState(
   cache: TypeGpuSceneCache = createTypeGpuSceneCache(),
   options: TypeGpuSceneStateOptions = {}
 ): TypeGpuSceneState {
+  const dirty = options.dirty ?? Dirty.All;
+  const reuseDrawBatches = options.reuseDrawBatches ?? !invalidatesDrawBatches(dirty);
+  const reuseLights = options.reuseLights ?? !hasDirty(dirty, Dirty.Lights);
   const scene = readSceneSettings(root);
-  const drawBatches = options.reuseDrawBatches
+  const drawBatches = reuseDrawBatches
     ? cache.cleanDrawBatches
     : cache.drawBatchCache.read(root, cache.modelCache);
-  const lights = options.reuseLights ? cache.cleanLights : collectLights(root);
+  const lights = reuseLights ? cache.cleanLights : collectLights(root);
   const camera = readPerspectiveCameraState(root);
 
-  if (!options.reuseDrawBatches) {
+  if (!reuseDrawBatches) {
     cache.cleanDrawBatches = cleanDrawBatches(drawBatches);
   }
 
-  if (!options.reuseLights) {
+  if (!reuseLights) {
     cache.cleanLights = lights;
   }
 
   return {
+    dirty,
     camera: camera.settings,
     cameraNode: camera.node,
     cameraControllerNode: camera.controllerNode,
@@ -67,9 +73,24 @@ export function createSceneState(
     animationSpeed: scene.animationSpeed,
     colorShift: scene.colorShift,
     lights,
-    lightsChanged: !options.reuseLights,
+    lightsChanged: !reuseLights,
     drawBatches
   };
+}
+
+function invalidatesDrawBatches(dirty: Dirty): boolean {
+  return (
+    hasDirty(dirty, Dirty.Tree) ||
+    hasDirty(dirty, Dirty.Transform) ||
+    hasDirty(dirty, Dirty.InstanceData) ||
+    hasDirty(dirty, Dirty.DrawBatches) ||
+    hasDirty(dirty, Dirty.Geometry) ||
+    hasDirty(dirty, Dirty.Material) ||
+    hasDirty(dirty, Dirty.MaterialUniform) ||
+    hasDirty(dirty, Dirty.Texture) ||
+    hasDirty(dirty, Dirty.BindGroup) ||
+    hasDirty(dirty, Dirty.Pipeline)
+  );
 }
 
 function cleanDrawBatches(drawBatches: TypeGpuDrawBatch[]): TypeGpuDrawBatch[] {

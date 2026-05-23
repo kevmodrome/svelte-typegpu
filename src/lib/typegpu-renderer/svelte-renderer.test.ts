@@ -3,6 +3,7 @@ import { createElement, createFragment, addEventListener, insert, setAttribute }
 import { createTypeGpuRuntimeForTest } from './svelte-renderer';
 import type { TypeGpuRenderer } from './gpu-renderer';
 import type { TypeGpuLoadedModel } from './glb-loader';
+import { Dirty, hasDirty } from './dirty';
 
 class FakeCanvas {
   clientHeight = 600;
@@ -163,5 +164,38 @@ describe('TypeGPU Svelte renderer runtime', () => {
     await Promise.resolve();
 
     expect(renderer.setScene).toHaveBeenCalledTimes(2);
+  });
+
+  it('coalesces scheduled dirty masks into the next scene state', async () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const mesh = createElement('mesh');
+    const light = createElement('pointLight');
+    const canvas = new FakeCanvas();
+    const renderer = fakeRenderer();
+    const runtime = createTypeGpuRuntimeForTest(
+      root,
+      canvas as unknown as HTMLCanvasElement,
+      renderer
+    );
+
+    insert(scene, mesh, null);
+    insert(scene, light, null);
+    insert(root, scene, null);
+
+    runtime.scheduleSync(root);
+    await Promise.resolve();
+    vi.mocked(renderer.setScene).mockClear();
+
+    runtime.scheduleSync(root, mesh, Dirty.Transform);
+    runtime.scheduleSync(root, light, Dirty.Lights);
+    await Promise.resolve();
+
+    expect(renderer.setScene).toHaveBeenCalledTimes(1);
+    const [sceneState] = vi.mocked(renderer.setScene).mock.lastCall ?? [];
+    const dirty = sceneState.dirty ?? Dirty.None;
+    expect(dirty).toBe(Dirty.Transform | Dirty.Lights);
+    expect(hasDirty(dirty, Dirty.Transform)).toBe(true);
+    expect(hasDirty(dirty, Dirty.Lights)).toBe(true);
   });
 });

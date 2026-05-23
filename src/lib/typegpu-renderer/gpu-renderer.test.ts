@@ -180,12 +180,11 @@ describe('TypeGPU GPU renderer', () => {
     expect(rendererSource).toContain('this.setCamera(scene.camera);');
   });
 
-  it('loads renderer runtime source for lighting dirtiness assertions', () => {
+  it('loads renderer runtime source for dirty mask scheduling assertions', () => {
+    expect(svelteRendererSource).toContain('let dirty = Dirty.All;');
+    expect(svelteRendererSource).toMatch(/dirty\s*=\s*\(dirty\s*\|\s*dirtyMask\)\s*as\s*Dirty/);
     expect(svelteRendererSource).toMatch(
-      /lightsDirty\s*\|\|=\s*invalidatesLights\(root,\s*dirtyNode,\s*syncedTreeRevision\)/
-    );
-    expect(svelteRendererSource).toMatch(
-      /createSceneState\(\s*root,\s*sceneCache,\s*{[\s\S]*reuseLights:\s*!lightsDirty[\s\S]*}\s*\)/
+      /createSceneState\(\s*root,\s*sceneCache,\s*{[\s\S]*dirty:\s*sceneDirty[\s\S]*}\s*\)/
     );
   });
 

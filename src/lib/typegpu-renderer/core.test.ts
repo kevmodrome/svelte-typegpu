@@ -8,6 +8,8 @@ import {
   getNextSibling,
   insert,
   remove,
+  removeAttribute,
+  removeEventListener,
   setAttribute
 } from './core';
 import { collectLights } from './components/lights';
@@ -23,6 +25,7 @@ import { createModelCache } from './model-cache';
 import { invalidatesDrawBatches, invalidatesLights } from './scene-dirtiness';
 import { createSceneState, createTypeGpuSceneCache } from './scene-state';
 import { MAX_TYPEGPU_LIGHTS } from './types';
+import { Dirty, hasDirty } from './dirty';
 
 function readyModelCache(model: TypeGpuLoadedModel) {
   return createModelCache({
@@ -1006,7 +1009,7 @@ describe('TypeGPU renderer core', () => {
     insert(controls, pointer, null);
     insert(camera, controls, null);
 
-    expect(scheduleSync).toHaveBeenLastCalledWith(root, controls);
+    expect(scheduleSync).toHaveBeenLastCalledWith(root, controls, Dirty.Tree | Dirty.Camera);
     expect(invalidatesDrawBatches(root, controls, syncedTreeRevision)).toBe(false);
     expect(invalidatesLights(root, controls, syncedTreeRevision)).toBe(false);
   });
@@ -1028,7 +1031,7 @@ describe('TypeGPU renderer core', () => {
 
     remove(controls);
 
-    expect(scheduleSync).toHaveBeenLastCalledWith(root, controls);
+    expect(scheduleSync).toHaveBeenLastCalledWith(root, controls, Dirty.Tree | Dirty.Camera);
     expect(invalidatesDrawBatches(root, controls, syncedTreeRevision)).toBe(false);
     expect(invalidatesLights(root, controls, syncedTreeRevision)).toBe(false);
   });
@@ -1045,7 +1048,11 @@ describe('TypeGPU renderer core', () => {
 
     insert(scene, mesh, null);
 
-    expect(scheduleSync).toHaveBeenLastCalledWith(root, mesh);
+    expect(scheduleSync).toHaveBeenLastCalledWith(
+      root,
+      mesh,
+      Dirty.Tree | Dirty.DrawBatches | Dirty.Interaction
+    );
     expect(invalidatesDrawBatches(root, mesh, syncedTreeRevision)).toBe(true);
     expect(invalidatesLights(root, mesh, syncedTreeRevision)).toBe(false);
   });
@@ -1064,7 +1071,7 @@ describe('TypeGPU renderer core', () => {
 
     insert(root, scene, null);
 
-    expect(scheduleSync).toHaveBeenLastCalledWith(root, scene);
+    expect(scheduleSync).toHaveBeenLastCalledWith(root, scene, Dirty.All);
     expect(invalidatesDrawBatches(root, scene, syncedTreeRevision)).toBe(true);
     expect(invalidatesLights(root, scene, syncedTreeRevision)).toBe(true);
   });
@@ -1084,7 +1091,7 @@ describe('TypeGPU renderer core', () => {
 
     remove(scene);
 
-    expect(scheduleSync).toHaveBeenLastCalledWith(root, scene);
+    expect(scheduleSync).toHaveBeenLastCalledWith(root, scene, Dirty.All);
     expect(invalidatesDrawBatches(root, scene, syncedTreeRevision)).toBe(true);
     expect(invalidatesLights(root, scene, syncedTreeRevision)).toBe(true);
   });
@@ -1105,7 +1112,11 @@ describe('TypeGPU renderer core', () => {
 
     insert(camera, controls, null);
 
-    expect(scheduleSync).toHaveBeenLastCalledWith(root, controls);
+    expect(scheduleSync).toHaveBeenLastCalledWith(
+      root,
+      controls,
+      Dirty.Tree | Dirty.Camera
+    );
     expect(invalidatesDrawBatches(root, controls, syncedTreeRevision)).toBe(true);
     expect(invalidatesLights(root, controls, syncedTreeRevision)).toBe(false);
   });
@@ -1123,7 +1134,7 @@ describe('TypeGPU renderer core', () => {
 
     setAttribute(scene, 'scale', 1.5);
 
-    expect(scheduleSync).toHaveBeenLastCalledWith(root, scene);
+    expect(scheduleSync).toHaveBeenLastCalledWith(root, scene, Dirty.InstanceData);
   });
 
   it('passes updated light nodes to runtime sync scheduling', () => {
@@ -1139,7 +1150,83 @@ describe('TypeGPU renderer core', () => {
 
     setAttribute(light, 'position', [2, 3, 4]);
 
-    expect(scheduleSync).toHaveBeenLastCalledWith(root, light);
+    expect(scheduleSync).toHaveBeenLastCalledWith(root, light, Dirty.Lights);
+  });
+
+  it('schedules mesh attribute changes with descriptor dirty bits', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const mesh = createElement('mesh');
+    const scheduleSync = vi.fn();
+
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+    root.runtime = { scheduleSync };
+
+    setAttribute(mesh, 'position', [1, 2, 3]);
+
+    const [, dirtyNode, dirtyMask] = scheduleSync.mock.lastCall ?? [];
+
+    expect(dirtyNode).toBe(mesh);
+    expect(hasDirty(dirtyMask, Dirty.Transform)).toBe(true);
+    expect(hasDirty(dirtyMask, Dirty.InstanceData)).toBe(true);
+  });
+
+  it('schedules material attribute removal from the previous value', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const mesh = createElement('mesh');
+    const material = createElement('standardMaterial');
+    const scheduleSync = vi.fn();
+
+    setAttribute(material, 'map', '/textures/checker.png');
+    insert(mesh, material, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+    root.runtime = { scheduleSync };
+
+    removeAttribute(material, 'map');
+
+    const [, dirtyNode, dirtyMask] = scheduleSync.mock.lastCall ?? [];
+
+    expect(dirtyNode).toBe(material);
+    expect(hasDirty(dirtyMask, Dirty.Texture)).toBe(true);
+    expect(hasDirty(dirtyMask, Dirty.BindGroup)).toBe(true);
+  });
+
+  it('schedules host tree and listener changes with descriptor dirty bits', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const mesh = createElement('mesh');
+    const light = createElement('pointLight');
+    const scheduleSync = vi.fn();
+    const onClick = vi.fn();
+
+    insert(root, scene, null);
+    root.runtime = { scheduleSync };
+
+    insert(scene, mesh, null);
+    let [, dirtyNode, dirtyMask] = scheduleSync.mock.lastCall ?? [];
+    expect(dirtyNode).toBe(mesh);
+    expect(hasDirty(dirtyMask, Dirty.DrawBatches)).toBe(true);
+    expect(hasDirty(dirtyMask, Dirty.Interaction)).toBe(true);
+
+    insert(scene, light, null);
+    remove(light);
+    [, dirtyNode, dirtyMask] = scheduleSync.mock.lastCall ?? [];
+    expect(dirtyNode).toBe(light);
+    expect(hasDirty(dirtyMask, Dirty.Lights)).toBe(true);
+
+    addEventListener(mesh, 'click', onClick);
+    [, dirtyNode, dirtyMask] = scheduleSync.mock.lastCall ?? [];
+    expect(dirtyNode).toBe(mesh);
+    expect(hasDirty(dirtyMask, Dirty.Interaction)).toBe(true);
+
+    removeEventListener(mesh, 'click', onClick);
+    [, dirtyNode, dirtyMask] = scheduleSync.mock.lastCall ?? [];
+    expect(dirtyNode).toBe(mesh);
+    expect(hasDirty(dirtyMask, Dirty.Interaction)).toBe(true);
+    expect(mesh.listeners.has('click')).toBe(false);
   });
 
   it('re-packs only changed mesh nodes when the mesh structure is stable', () => {

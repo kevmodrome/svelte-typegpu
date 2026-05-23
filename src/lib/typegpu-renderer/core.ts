@@ -1,3 +1,12 @@
+import { Dirty } from './dirty';
+import {
+  dirtyForAttribute,
+  dirtyForEventListener,
+  dirtyForInsert,
+  dirtyForRemove,
+  normalizePrimitiveName
+} from './primitives';
+
 export type TypeGpuNodeKind = 'fragment' | 'element' | 'text' | 'comment';
 
 export interface TypeGpuNode {
@@ -6,6 +15,7 @@ export interface TypeGpuNode {
   revision: number;
   treeRevision: number;
   name?: string;
+  originalName?: string;
   parent: TypeGpuNode | null;
   firstChild: TypeGpuNode | null;
   lastChild: TypeGpuNode | null;
@@ -21,7 +31,7 @@ export interface TypeGpuNode {
 let nextNodeUid = 1;
 
 export interface TypeGpuRuntime {
-  scheduleSync(root: TypeGpuNode, dirtyNode?: TypeGpuNode): void;
+  scheduleSync(root: TypeGpuNode, dirtyNode?: TypeGpuNode, dirtyMask?: Dirty): void;
 }
 
 export interface TypeGpuNodeEvent {
@@ -38,7 +48,8 @@ export function createFragment(): TypeGpuNode {
 
 export function createElement(name: string): TypeGpuNode {
   const node = createStub('element');
-  node.name = name;
+  node.name = normalizePrimitiveName(name);
+  node.originalName = name;
   return node;
 }
 
@@ -55,15 +66,17 @@ export function createComment(value = ''): TypeGpuNode {
 }
 
 export function setAttribute(node: TypeGpuNode, key: string, value: unknown): void {
+  const previous = node.attributes[key];
   node.attributes[key] = value;
   node.revision += 1;
-  invalidateFrom(node);
+  invalidateFrom(node, dirtyForAttribute(node.name, key, previous, value));
 }
 
 export function removeAttribute(node: TypeGpuNode, key: string): void {
+  const previous = node.attributes[key];
   delete node.attributes[key];
   node.revision += 1;
-  invalidateFrom(node);
+  invalidateFrom(node, dirtyForAttribute(node.name, key, previous, undefined));
 }
 
 export function getAttribute(node: TypeGpuNode, key: string): string | null {
@@ -113,7 +126,7 @@ export function insert(parent: TypeGpuNode, node: TypeGpuNode, anchor: TypeGpuNo
   }
 
   const root = markTreeChanged(parent);
-  invalidateRoot(root, node);
+  invalidateRoot(root, node, dirtyForInsert(node.name));
 }
 
 export function remove(node: TypeGpuNode): void {
@@ -122,6 +135,7 @@ export function remove(node: TypeGpuNode): void {
   const parent = node.parent;
   const previous = node.previousSibling;
   const next = node.nextSibling;
+  const dirtyMask = dirtyForRemove(node.name);
 
   if (previous) {
     previous.nextSibling = next;
@@ -140,7 +154,7 @@ export function remove(node: TypeGpuNode): void {
   node.parent = null;
   node.previousSibling = null;
   node.nextSibling = null;
-  invalidateRoot(root, node);
+  invalidateRoot(root, node, dirtyMask);
 }
 
 export function getParent(node: TypeGpuNode): TypeGpuNode | null {
@@ -167,6 +181,7 @@ export function addEventListener(
   const listeners = node.listeners.get(type) ?? new Set();
   listeners.add(handler);
   node.listeners.set(type, listeners);
+  invalidateFrom(node, dirtyForEventListener(node.name, type));
 }
 
 export function removeEventListener(
@@ -174,7 +189,14 @@ export function removeEventListener(
   type: string,
   handler: (event: TypeGpuNodeEvent) => void
 ): void {
-  node.listeners.get(type)?.delete(handler);
+  const listeners = node.listeners.get(type);
+  if (!listeners) return;
+
+  listeners.delete(handler);
+  if (listeners.size === 0) {
+    node.listeners.delete(type);
+  }
+  invalidateFrom(node, dirtyForEventListener(node.name, type));
 }
 
 export function dispatchNodeEvent(
@@ -246,13 +268,15 @@ export function walk(node: TypeGpuNode, visitor: (node: TypeGpuNode) => void): v
   }
 }
 
-function invalidateFrom(node: TypeGpuNode): void {
+function invalidateFrom(node: TypeGpuNode, dirtyMask: Dirty): void {
   const root = findRoot(node);
-  invalidateRoot(root, node);
+  invalidateRoot(root, node, dirtyMask);
 }
 
-function invalidateRoot(root: TypeGpuNode, dirtyNode: TypeGpuNode): void {
-  root.runtime?.scheduleSync(root, dirtyNode);
+function invalidateRoot(root: TypeGpuNode, dirtyNode: TypeGpuNode, dirtyMask: Dirty): void {
+  if (dirtyMask === Dirty.None) return;
+
+  root.runtime?.scheduleSync(root, dirtyNode, dirtyMask);
 }
 
 function findRoot(node: TypeGpuNode): TypeGpuNode {

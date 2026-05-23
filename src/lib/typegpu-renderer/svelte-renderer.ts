@@ -24,7 +24,7 @@ import {
   type TypeGpuNode,
   type TypeGpuRuntime
 } from './core';
-import { invalidatesDrawBatches, invalidatesLights } from './scene-dirtiness';
+import { Dirty } from './dirty';
 import { createSceneState, createTypeGpuSceneCache } from './scene-state';
 import { createModelCache, type TypeGpuModelCacheOptions } from './model-cache';
 
@@ -106,9 +106,7 @@ function createRuntime(
   options: RuntimeOptions = {}
 ): RuntimeState {
   let queued = false;
-  let drawBatchesDirty = true;
-  let lightsDirty = true;
-  let syncedTreeRevision = -1;
+  let dirty = Dirty.All;
   const onModelSettled = () => scheduleSync(root);
   const hasInjectedModelLoader = Boolean(options.loadUrl || options.loadData);
   const sceneCache = createTypeGpuSceneCache({
@@ -127,25 +125,26 @@ function createRuntime(
     windowTarget: options.windowTarget
   });
 
-  function scheduleSync(nextRoot: TypeGpuNode, dirtyNode?: TypeGpuNode) {
+  function scheduleSync(
+    nextRoot: TypeGpuNode,
+    _dirtyNode?: TypeGpuNode,
+    dirtyMask: Dirty = Dirty.All
+  ) {
     root = nextRoot;
-    drawBatchesDirty ||= invalidatesDrawBatches(root, dirtyNode, syncedTreeRevision);
-    lightsDirty ||= invalidatesLights(root, dirtyNode, syncedTreeRevision);
+    dirty = (dirty | dirtyMask) as Dirty;
 
     if (queued) return;
 
     queued = true;
     queueMicrotask(() => {
       queued = false;
+      const sceneDirty = dirty;
+      dirty = Dirty.None;
       const scene = createSceneState(root, sceneCache, {
-        reuseDrawBatches: !drawBatchesDirty,
-        reuseLights: !lightsDirty
+        dirty: sceneDirty
       });
       gpu.setScene(scene);
       cameraInteraction.reconcile(scene);
-      syncedTreeRevision = root.treeRevision;
-      drawBatchesDirty = false;
-      lightsDirty = false;
     });
   }
 
