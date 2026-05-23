@@ -492,6 +492,35 @@ describe('TypeGPU camera interaction controller', () => {
     expect(controller.consumeSuppressedClick()).toBe(false);
   });
 
+  it('suppresses the next click after small mouse drag movement', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    controller.reconcile(sceneState({ pointer: true }));
+    canvas.dispatch<MouseEvent>('mousedown', { button: 0, clientX: 10, clientY: 20 } as Partial<
+      MouseEvent
+    >);
+    windowTarget.dispatch<MouseEvent>('mousemove', {
+      buttons: 1,
+      clientX: 13,
+      clientY: 20
+    } as Partial<MouseEvent>);
+    windowTarget.dispatch<MouseEvent>('mouseup', { button: 0 } as Partial<MouseEvent>);
+
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+    expect(controller.consumeSuppressedClick()).toBe(true);
+  });
+
   it('does not suppress clicks for stationary mouse presses', () => {
     const canvas = fakeCanvas();
     const windowTarget = new FakeEventTarget();

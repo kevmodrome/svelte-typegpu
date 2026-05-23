@@ -20,7 +20,6 @@ type CancelFrame = (handle: number) => void;
 type ListenerTarget = Pick<Window, 'addEventListener' | 'removeEventListener'>;
 type ListenerRegistration = [string, EventListener, AddEventListenerOptions?];
 type TypeGpuCameraRenderer = Pick<TypeGpuRenderer, 'setCamera'>;
-const CLICK_SUPPRESSION_DISTANCE = 4;
 
 const defaultRequestFrame: RequestFrame = (callback) => {
   if (typeof globalThis.requestAnimationFrame === 'function') {
@@ -141,7 +140,7 @@ export function createCameraInteractionController({
   const markClickSuppression = (x: number, y: number) => {
     if (!dragStartPosition) return;
 
-    if (Math.hypot(x - dragStartPosition.x, y - dragStartPosition.y) > CLICK_SUPPRESSION_DISTANCE) {
+    if (x !== dragStartPosition.x || y !== dragStartPosition.y) {
       suppressNextClick = true;
     }
   };
