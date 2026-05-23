@@ -1,9 +1,10 @@
 import { numberArg } from '../attributes';
 import type { TypeGpuNode } from '../core';
 import type { TypeGpuLoadedModelMesh } from '../glb-loader';
+import { isStandardMaterialObject, normalizeStandardMaterial } from '../materials';
 import type { TypeGpuModelCache } from '../model-cache';
 import { composeTransforms, readLocalTransform } from '../transform';
-import type { TypeGpuMeshDrawItem, TypeGpuTransform } from '../types';
+import type { TypeGpuMeshDrawItem, TypeGpuStandardMaterialDescriptor, TypeGpuTransform } from '../types';
 
 export interface ModelWalkContext {
   transform: TypeGpuTransform;
@@ -48,19 +49,43 @@ function modelMeshDrawItem(
   baseRevision: number,
   index: number
 ): TypeGpuMeshDrawItem {
+  const material = readModelMaterial(modelNode, mesh.material);
+
   return {
     id: `model:${modelNode.uid}:primitive:${index}`,
-    revision: combineRevision(baseRevision, null, index),
+    revision: combineRevision(combineRevision(baseRevision, material.node), null, index),
     geometry: {
       kind: 'imported',
       key: mesh.geometry.key,
       size: [1, 1, 1],
       data: mesh.geometry
     },
-    material: mesh.material,
+    material: material.descriptor,
     transform: composeTransforms(modelTransform, mesh.transform),
     phase: numberArg(modelNode.attributes.phase, 0),
     spinSpeed: numberArg(modelNode.attributes.spinSpeed, 0)
+  };
+}
+
+function readModelMaterial(
+  modelNode: TypeGpuNode,
+  fallback: TypeGpuStandardMaterialDescriptor
+): { node: TypeGpuNode | null; descriptor: TypeGpuStandardMaterialDescriptor } {
+  for (let child = modelNode.firstChild; child; child = child.nextSibling) {
+    if (child.name !== 'standardMaterial') continue;
+
+    const materialAttr = child.attributes.material;
+    const base = isStandardMaterialObject(materialAttr) ? materialAttr : fallback;
+
+    return {
+      node: child,
+      descriptor: normalizeStandardMaterial(base, child.attributes)
+    };
+  }
+
+  return {
+    node: null,
+    descriptor: fallback
   };
 }
 

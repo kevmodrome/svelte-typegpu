@@ -91,14 +91,16 @@ describe('TypeGPU component renderer integration', () => {
     expect(material.attributes.map).toBe('/textures/checker.svg');
   });
 
-  it('renders public model nodes with url and data sources', () => {
+  it('renders public model nodes with url, data, and material children', () => {
     const ModelScene = compileTypeGpuSource(`
       <script>
         const data = new ArrayBuffer(8);
       </script>
 
       <scene>
-        <model src="/models/chair.glb" position={[1, 2, 3]} rotation={[0.1, 0.2, 0.3]} scale={2}></model>
+        <model src="/models/chair.glb" position={[1, 2, 3]} rotation={[0.1, 0.2, 0.3]} scale={2}>
+          <standardMaterial color={[1, 0.2, 0.1, 1]} roughness={0.8}></standardMaterial>
+        </model>
         <model data={data} position={[4, 5, 6]}></model>
       </scene>
     `);
@@ -120,6 +122,13 @@ describe('TypeGPU component renderer integration', () => {
       position: [1, 2, 3],
       rotation: [0.1, 0.2, 0.3],
       scale: 2
+    });
+    expect(srcModel.children[0]).toMatchObject({
+      name: 'standardMaterial',
+      attributes: {
+        color: [1, 0.2, 0.1, 1],
+        roughness: 0.8
+      }
     });
     expect(dataModel.name).toBe('model');
     expect(dataModel.attributes).toMatchObject({

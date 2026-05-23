@@ -512,6 +512,63 @@ describe('TypeGPU renderer core', () => {
     expect(Array.from(batch.instances.slice(0, 4))).toEqual([3, 4, 5, 0]);
   });
 
+  it('overrides imported model materials from a standard material child', async () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const modelNode = createElement('model');
+    const material = createElement('standardMaterial');
+    const model: TypeGpuLoadedModel = {
+      key: 'url:/models/painted.glb',
+      meshes: [
+        {
+          geometry: {
+            key: 'url:/models/painted.glb:primitive:0',
+            vertexData: new Float32Array([0, 0, 0, 0, 0, 1, 0, 0]),
+            vertexCount: 1,
+            vertexFloats: 8
+          },
+          material: {
+            kind: 'standard',
+            color: [0.2, 0.3, 0.4, 1],
+            roughness: 0.67,
+            metalness: 0.12,
+            opacity: 0.9,
+            map: null
+          },
+          transform: {
+            position: [0, 0, 0],
+            rotation: [0, 0, 0],
+            scale: [1, 1, 1]
+          }
+        }
+      ]
+    };
+    const cache = createTypeGpuSceneCache({
+      modelCache: readyModelCache(model)
+    });
+
+    setAttribute(modelNode, 'src', '/models/painted.glb');
+    setAttribute(material, 'color', [1, 0.2, 0.1, 1]);
+    insert(modelNode, material, null);
+    insert(scene, modelNode, null);
+    insert(root, scene, null);
+
+    createSceneState(root, cache);
+    await Promise.resolve();
+    const state = createSceneState(root, cache);
+    const batch = drawBatch(
+      state,
+      'mesh:imported:url:/models/painted.glb:primitive:0:standard:solid:white'
+    );
+
+    expect(batch.material).toMatchObject({
+      color: [1, 0.2, 0.1, 1],
+      roughness: 0.67,
+      metalness: 0.12,
+      opacity: 0.9
+    });
+  });
+
   it('keeps imported geometry keys separate from procedural geometry keys', async () => {
     const root = createFragment();
     const scene = createElement('scene');
