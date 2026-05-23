@@ -806,7 +806,9 @@ function rotateCamera(
   dy: number,
   rotateSpeed: number
 ): TypeGpuOrbitState {
-  const controller = scene.cameraController!;
+  const controller = scene.cameraController;
+  if (!controller || controller.kind !== 'controls') return orbit;
+
   const rotated = rotateOrbit(orbit, dx, dy, {
     minDistance: controller.minDistance,
     maxDistance: controller.maxDistance,

@@ -9,6 +9,7 @@ import type {
 } from '../types';
 
 export const DEFAULT_CAMERA: TypeGpuCameraSettings = {
+  projection: 'perspective',
   position: [9, 7, 13],
   target: [0, 0, 0],
   fov: 45,
@@ -44,7 +45,9 @@ const DEFAULT_KEYBOARD_CONTROLS: TypeGpuKeyboardControls = {
 };
 
 export function readPerspectiveCamera(root: TypeGpuNode): TypeGpuCameraSettings {
-  return readPerspectiveCameraState(root).settings;
+  const { position, target, fov, near, far } = readPerspectiveCameraState(root).settings;
+
+  return { position, target, fov: fov ?? 45, near, far };
 }
 
 export function readPerspectiveCameraState(root: TypeGpuNode): TypeGpuCameraState {
@@ -58,9 +61,10 @@ export function readPerspectiveCameraState(root: TypeGpuNode): TypeGpuCameraStat
   return {
     node: camera,
     settings: {
+      projection: 'perspective',
       position: vectorTuple(poseAttributes.position, DEFAULT_CAMERA.position),
       target: vectorTuple(poseAttributes.target, DEFAULT_CAMERA.target),
-      fov: numberArg(lensAttributes.fov, DEFAULT_CAMERA.fov),
+      fov: numberArg(lensAttributes.fov, 45),
       near: numberArg(lensAttributes.near, DEFAULT_CAMERA.near),
       far: numberArg(lensAttributes.far, DEFAULT_CAMERA.far)
     },

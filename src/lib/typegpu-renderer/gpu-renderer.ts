@@ -44,6 +44,7 @@ export const SCENE_UNIFORM_FLOATS = TYPEGPU_SCENE_UNIFORM_FLOATS;
 const DEGREES_TO_RADIANS = Math.PI / 180;
 const MAX_DEVICE_PIXEL_RATIO = 1.5;
 const DEFAULT_TYPEGPU_CAMERA: TypeGpuCameraSettings = {
+  projection: 'perspective',
   position: [9, 7, 13],
   target: [0, 0, 0],
   fov: 45,
