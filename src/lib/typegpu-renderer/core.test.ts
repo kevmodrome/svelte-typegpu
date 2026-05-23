@@ -1229,6 +1229,62 @@ describe('TypeGPU renderer core', () => {
     expect(mesh.listeners.has('click')).toBe(false);
   });
 
+  it('does not reschedule unchanged listener registrations', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const mesh = createElement('mesh');
+    const scheduleSync = vi.fn();
+    const onClick = vi.fn();
+    const onPointerMove = vi.fn();
+
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+    root.runtime = { scheduleSync };
+
+    addEventListener(mesh, 'click', onClick);
+    expect(scheduleSync).toHaveBeenCalledTimes(1);
+
+    addEventListener(mesh, 'click', onClick);
+    expect(scheduleSync).toHaveBeenCalledTimes(1);
+
+    removeEventListener(mesh, 'pointermove', onPointerMove);
+    expect(scheduleSync).toHaveBeenCalledTimes(1);
+
+    removeEventListener(mesh, 'click', onPointerMove);
+    expect(scheduleSync).toHaveBeenCalledTimes(1);
+
+    removeEventListener(mesh, 'click', onClick);
+    expect(scheduleSync).toHaveBeenCalledTimes(2);
+  });
+
+  it('reuses cached draw batches for camera-only structural dirty masks', () => {
+    const cache = createTypeGpuSceneCache();
+    const root = createFragment();
+    const scene = createElement('scene');
+    const camera = createElement('perspectiveCamera');
+    const controls = createElement('controls');
+    const mesh = createElement('mesh');
+    const geometry = createElement('boxGeometry');
+    const material = createElement('standardMaterial');
+
+    insert(mesh, geometry, null);
+    insert(mesh, material, null);
+    insert(camera, controls, null);
+    insert(scene, camera, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+
+    const firstState = createSceneState(root, cache);
+    const readDrawBatches = vi.spyOn(cache.drawBatchCache, 'read');
+    const secondState = createSceneState(root, cache, {
+      dirty: Dirty.Tree | Dirty.Camera
+    });
+
+    expect(readDrawBatches).not.toHaveBeenCalled();
+    expect(secondState.drawBatches).toBe(cache.cleanDrawBatches);
+    expect(secondState.drawBatches[0].instances).toBe(firstState.drawBatches[0].instances);
+  });
+
   it('re-packs only changed mesh nodes when the mesh structure is stable', () => {
     const cache = createTypeGpuSceneCache();
     const root = createFragment();

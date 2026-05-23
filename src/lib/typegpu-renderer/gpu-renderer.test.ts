@@ -6,10 +6,6 @@ import { MESH_INSTANCE_FLOATS, MESH_ROTATION_OFFSET } from './instance-data';
 
 describe('TypeGPU GPU renderer', () => {
   const rendererSource = readFileSync('src/lib/typegpu-renderer/gpu-renderer.ts', 'utf8');
-  const svelteRendererSource = readFileSync(
-    'src/lib/typegpu-renderer/svelte-renderer.ts',
-    'utf8'
-  );
   const pipelineSource = readFileSync('src/lib/typegpu-renderer/typegpu-pipeline.ts', 'utf8');
   const layoutsSource = readFileSync('src/lib/typegpu-renderer/typegpu-layouts.ts', 'utf8');
   const source = [rendererSource, pipelineSource, layoutsSource].join('\n');
@@ -178,14 +174,6 @@ describe('TypeGPU GPU renderer', () => {
     expect(rendererSource).toContain('setCamera(camera: TypeGpuCameraSettings): void');
     expect(rendererSource).toContain('setCamera(camera: TypeGpuCameraSettings): void {');
     expect(rendererSource).toContain('this.setCamera(scene.camera);');
-  });
-
-  it('loads renderer runtime source for dirty mask scheduling assertions', () => {
-    expect(svelteRendererSource).toContain('let dirty = Dirty.All;');
-    expect(svelteRendererSource).toMatch(/dirty\s*=\s*\(dirty\s*\|\s*dirtyMask\)\s*as\s*Dirty/);
-    expect(svelteRendererSource).toMatch(
-      /createSceneState\(\s*root,\s*sceneCache,\s*{[\s\S]*dirty:\s*sceneDirty[\s\S]*}\s*\)/
-    );
   });
 
   it('treats lighting changes as buffer writes separate from mesh uploads', () => {

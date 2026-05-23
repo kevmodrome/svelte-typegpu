@@ -179,6 +179,8 @@ export function addEventListener(
   handler: (event: TypeGpuNodeEvent) => void
 ): void {
   const listeners = node.listeners.get(type) ?? new Set();
+  if (listeners.has(handler)) return;
+
   listeners.add(handler);
   node.listeners.set(type, listeners);
   invalidateFrom(node, dirtyForEventListener(node.name, type));
@@ -190,7 +192,7 @@ export function removeEventListener(
   handler: (event: TypeGpuNodeEvent) => void
 ): void {
   const listeners = node.listeners.get(type);
-  if (!listeners) return;
+  if (!listeners?.has(handler)) return;
 
   listeners.delete(handler);
   if (listeners.size === 0) {

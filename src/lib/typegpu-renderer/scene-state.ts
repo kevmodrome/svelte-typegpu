@@ -80,7 +80,6 @@ export function createSceneState(
 
 function invalidatesDrawBatches(dirty: Dirty): boolean {
   return (
-    hasDirty(dirty, Dirty.Tree) ||
     hasDirty(dirty, Dirty.Transform) ||
     hasDirty(dirty, Dirty.InstanceData) ||
     hasDirty(dirty, Dirty.DrawBatches) ||

@@ -192,7 +192,9 @@ describe('TypeGPU Svelte renderer runtime', () => {
     await Promise.resolve();
 
     expect(renderer.setScene).toHaveBeenCalledTimes(1);
-    const [sceneState] = vi.mocked(renderer.setScene).mock.lastCall ?? [];
+    const lastCall = vi.mocked(renderer.setScene).mock.lastCall;
+    expect(lastCall).toBeDefined();
+    const [sceneState] = lastCall!;
     const dirty = sceneState.dirty ?? Dirty.None;
     expect(dirty).toBe(Dirty.Transform | Dirty.Lights);
     expect(hasDirty(dirty, Dirty.Transform)).toBe(true);
