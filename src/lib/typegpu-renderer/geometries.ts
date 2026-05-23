@@ -108,13 +108,18 @@ export function createBufferGeometryData(input: {
     return null;
   }
 
+  const vertexData = new Float32Array(input.vertices);
+
   return {
     key: input.key,
     kind: 'buffer',
-    vertexData: input.vertices,
-    vertexCount: input.vertices.length / MESH_VERTEX_FLOATS,
+    vertexData,
+    vertexCount: vertexData.length / MESH_VERTEX_FLOATS,
     vertexFloats: MESH_VERTEX_FLOATS,
-    bounds: input.bounds,
+    bounds: {
+      min: [...input.bounds.min],
+      max: [...input.bounds.max]
+    },
     topology: input.topology ?? 'triangle-list',
     layoutKey: LAYOUT_KEY
   };

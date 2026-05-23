@@ -7,6 +7,7 @@ import {
   resolveGeometryReference,
   resolveMaterialReference
 } from './resources';
+import type { TypeGpuStandardMaterialDescriptor } from './types';
 
 describe('TypeGPU resource descriptors', () => {
   it('reads inline box geometry with stable key and bounds', () => {
@@ -52,7 +53,7 @@ describe('TypeGPU resource descriptors', () => {
       1, 0, -1, 0, 1, 0, 1, 0,
       0, 0, 1, 0, 1, 0, 0.5, 1
     ]);
-    const bounds = { min: [-1, 0, -1], max: [1, 0, 1] } as const;
+    const bounds = { min: [-1, 0, -1], max: [1, 0, 1] };
     const node = createElement('bufferGeometry');
     setAttribute(node, 'key', 'triangle');
     setAttribute(node, 'vertices', vertices);
@@ -67,7 +68,14 @@ describe('TypeGPU resource descriptors', () => {
       vertexCount: 3,
       vertexFloats: 8
     });
-    expect(geometry?.vertexData).toBe(vertices);
+    expect(geometry?.vertexData).not.toBe(vertices);
+    expect(Array.from(geometry?.vertexData ?? [])).toEqual(Array.from(vertices));
+
+    vertices[0] = 99;
+    expect(geometry?.vertexData[0]).toBe(-1);
+
+    bounds.min[0] = -99;
+    expect(geometry?.bounds?.min[0]).toBe(-1);
   });
 
   it('normalizes inline material descriptor variants', () => {
@@ -116,6 +124,47 @@ describe('TypeGPU resource descriptors', () => {
       samplerKey: 'sampler:default',
       pipelineKey: expect.stringContaining('material:standard')
     });
+  });
+
+  it('keys inline sampler objects by normalized sampler fields', () => {
+    const defaultSamplerMaterial = createElement('standardMaterial');
+    const nearestSamplerMaterial = createElement('standardMaterial');
+    setAttribute(nearestSamplerMaterial, 'sampler', { minFilter: 'nearest' });
+
+    const defaultDescriptor = readInlineMaterial(defaultSamplerMaterial);
+    const nearestDescriptor = readInlineMaterial(nearestSamplerMaterial);
+
+    expect(defaultDescriptor?.samplerKey).toBe('sampler:default');
+    expect(nearestDescriptor?.samplerKey).not.toBe('sampler:default');
+    expect(nearestDescriptor?.samplerKey).toContain('min:nearest');
+    expect(nearestDescriptor?.bindGroupKey).not.toBe(defaultDescriptor?.bindGroupKey);
+  });
+
+  it('keys inline data textures by deterministic content identity', () => {
+    const first = createElement('standardMaterial');
+    const second = createElement('standardMaterial');
+    setAttribute(first, 'map', {
+      kind: 'data',
+      data: new Uint8Array([255, 0, 0, 255]),
+      width: 1,
+      height: 1,
+      format: 'rgba8unorm'
+    });
+    setAttribute(second, 'map', {
+      kind: 'data',
+      data: new Uint8Array([0, 255, 0, 255]),
+      width: 1,
+      height: 1,
+      format: 'rgba8unorm'
+    });
+
+    const firstDescriptor = readInlineMaterial(first);
+    const secondDescriptor = readInlineMaterial(second);
+
+    expect(firstDescriptor?.textureKey).toMatch(/^data:1:1:rgba8unorm:[a-f0-9]+$/);
+    expect(secondDescriptor?.textureKey).toMatch(/^data:1:1:rgba8unorm:[a-f0-9]+$/);
+    expect(firstDescriptor?.textureKey).not.toBe(secondDescriptor?.textureKey);
+    expect(firstDescriptor?.bindGroupKey).not.toBe(secondDescriptor?.bindGroupKey);
   });
 
   it('collects reusable scene resources and resolves references', () => {
@@ -169,3 +218,15 @@ describe('TypeGPU resource descriptors', () => {
     expect(resources.liveResourceKeys.sampler.has('sampler:repeatLinear')).toBe(true);
   });
 });
+
+const standardOnlyMaterial: TypeGpuStandardMaterialDescriptor = {
+  // @ts-expect-error TypeGpuStandardMaterialDescriptor must not accept non-standard material kinds.
+  kind: 'basic',
+  color: [1, 1, 1, 1],
+  opacity: 1,
+  roughness: 1,
+  metalness: 0,
+  map: null
+};
+
+void standardOnlyMaterial;

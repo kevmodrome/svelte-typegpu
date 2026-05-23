@@ -206,11 +206,11 @@ export interface TypeGpuSamplerDescriptor {
   addressModeW: GPUAddressMode;
 }
 
-export interface TypeGpuMaterialDescriptor {
+export interface TypeGpuMaterialDescriptorBase<K extends TypeGpuMaterialKind> {
   key?: string;
   pipelineKey?: string;
   bindGroupKey?: string;
-  kind: TypeGpuMaterialKind;
+  kind: K;
   color: RgbaTuple;
   opacity: number;
   roughness: number;
@@ -227,9 +227,13 @@ export interface TypeGpuMaterialDescriptor {
   map: TypeGpuTextureSource | null;
 }
 
-export type TypeGpuStandardMaterialDescriptor = TypeGpuMaterialDescriptor & {
-  map: TypeGpuTextureSource | null;
-};
+export type TypeGpuBasicMaterialDescriptor = TypeGpuMaterialDescriptorBase<'basic'>;
+export type TypeGpuPhongMaterialDescriptor = TypeGpuMaterialDescriptorBase<'phong'>;
+export type TypeGpuStandardMaterialDescriptor = TypeGpuMaterialDescriptorBase<'standard'>;
+export type TypeGpuMaterialDescriptor =
+  | TypeGpuBasicMaterialDescriptor
+  | TypeGpuPhongMaterialDescriptor
+  | TypeGpuStandardMaterialDescriptor;
 
 export interface TypeGpuLiveResourceKeys {
   geometry: Set<string>;

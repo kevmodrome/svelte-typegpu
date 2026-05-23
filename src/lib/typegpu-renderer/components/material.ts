@@ -4,14 +4,14 @@ import {
   normalizeStandardMaterial
 } from '../materials';
 import type { TypeGpuNode } from '../core';
-import type { TypeGpuMaterialDescriptor } from '../types';
+import type { TypeGpuStandardMaterialDescriptor } from '../types';
 
 export interface TypeGpuMaterialReadResult {
   node: TypeGpuNode | null;
-  descriptor: TypeGpuMaterialDescriptor;
+  descriptor: TypeGpuStandardMaterialDescriptor;
 }
 
-export function readMeshMaterial(mesh: TypeGpuNode): TypeGpuMaterialDescriptor {
+export function readMeshMaterial(mesh: TypeGpuNode): TypeGpuStandardMaterialDescriptor {
   return readMeshMaterialWithNode(mesh).descriptor;
 }
 

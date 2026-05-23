@@ -138,14 +138,15 @@ export function textureSourceFor(
   ) {
     const width = numberArg(source.width, 1);
     const height = numberArg(source.height, 1);
+    const format = source.format ?? 'rgba8unorm';
     return {
       kind: 'data',
-      key: source.key ?? `data:${width}:${height}:${source.format ?? 'rgba8unorm'}`,
+      key: source.key ?? `data:${width}:${height}:${format}:${hashTextureData(source.data)}`,
       src: source.src ?? '',
       data: source.data,
       width,
       height,
-      format: source.format
+      format
     };
   }
 
@@ -163,14 +164,19 @@ export function samplerDescriptorFor(
   if (!value || typeof value !== 'object') return DEFAULT_SAMPLER;
 
   const sampler = value as Partial<TypeGpuSamplerDescriptor>;
-  return {
-    key: sampler.key ?? DEFAULT_SAMPLER.key,
+  const descriptor = {
+    key: '',
     magFilter: filterMode(sampler.magFilter, DEFAULT_SAMPLER.magFilter),
     minFilter: filterMode(sampler.minFilter, DEFAULT_SAMPLER.minFilter),
     mipmapFilter: mipmapFilterMode(sampler.mipmapFilter, DEFAULT_SAMPLER.mipmapFilter),
     addressModeU: addressMode(sampler.addressModeU, DEFAULT_SAMPLER.addressModeU),
     addressModeV: addressMode(sampler.addressModeV, DEFAULT_SAMPLER.addressModeV),
     addressModeW: addressMode(sampler.addressModeW, DEFAULT_SAMPLER.addressModeW)
+  };
+
+  return {
+    ...descriptor,
+    key: sampler.key ?? canonicalSamplerKey(descriptor)
   };
 }
 
@@ -238,4 +244,38 @@ function addressMode(value: unknown, fallback: GPUAddressMode): GPUAddressMode {
 
 function samplerKey(value: string): string {
   return value.startsWith('sampler:') ? value : `sampler:${value}`;
+}
+
+function canonicalSamplerKey(sampler: Omit<TypeGpuSamplerDescriptor, 'key'>): string {
+  if (
+    sampler.magFilter === DEFAULT_SAMPLER.magFilter &&
+    sampler.minFilter === DEFAULT_SAMPLER.minFilter &&
+    sampler.mipmapFilter === DEFAULT_SAMPLER.mipmapFilter &&
+    sampler.addressModeU === DEFAULT_SAMPLER.addressModeU &&
+    sampler.addressModeV === DEFAULT_SAMPLER.addressModeV &&
+    sampler.addressModeW === DEFAULT_SAMPLER.addressModeW
+  ) {
+    return DEFAULT_SAMPLER.key;
+  }
+
+  return [
+    `sampler:min:${sampler.minFilter}`,
+    `mag:${sampler.magFilter}`,
+    `mipmap:${sampler.mipmapFilter}`,
+    `u:${sampler.addressModeU}`,
+    `v:${sampler.addressModeV}`,
+    `w:${sampler.addressModeW}`
+  ].join('|');
+}
+
+function hashTextureData(data: Uint8Array | Uint8ClampedArray | Float32Array): string {
+  const bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+  let hash = 0x811c9dc5;
+
+  for (const byte of bytes) {
+    hash ^= byte;
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return (hash >>> 0).toString(16).padStart(8, '0');
 }
