@@ -233,6 +233,93 @@ describe('TypeGPU Svelte renderer runtime', () => {
     expect(onNearMove).toHaveBeenCalledOnce();
   });
 
+  it('dispatches leave and enter before pointermove when the picked target changes', async () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const camera = createElement('perspectiveCamera');
+    const left = createElement('mesh');
+    const right = createElement('mesh');
+    const leftGeometry = createElement('boxGeometry');
+    const rightGeometry = createElement('boxGeometry');
+    const events: string[] = [];
+    const canvas = new FakeCanvas();
+    const runtime = createTypeGpuRuntimeForTest(
+      root,
+      canvas as unknown as HTMLCanvasElement,
+      fakeRenderer()
+    );
+
+    canvas.clientWidth = 100;
+    canvas.clientHeight = 100;
+    setAttribute(camera, 'position', [0, 0, 10]);
+    setAttribute(camera, 'target', [0, 0, 0]);
+    setAttribute(left, 'position', [-2, 0, 0]);
+    setAttribute(right, 'position', [2, 0, 0]);
+    addEventListener(left, 'pointerenter', () => events.push('left:enter'));
+    addEventListener(left, 'pointerleave', () => events.push('left:leave'));
+    addEventListener(left, 'pointermove', () => events.push('left:move'));
+    addEventListener(right, 'pointerenter', () => events.push('right:enter'));
+    addEventListener(right, 'pointermove', () => events.push('right:move'));
+    insert(left, leftGeometry, null);
+    insert(right, rightGeometry, null);
+    insert(scene, camera, null);
+    insert(scene, left, null);
+    insert(scene, right, null);
+    insert(root, scene, null);
+
+    runtime.scheduleSync(root, scene, Dirty.All);
+    await Promise.resolve();
+    canvas.dispatch<PointerEvent>('pointermove', { offsetX: 30, offsetY: 50 } as Partial<
+      PointerEvent
+    >);
+    events.length = 0;
+    canvas.dispatch<PointerEvent>('pointermove', { offsetX: 70, offsetY: 50 } as Partial<
+      PointerEvent
+    >);
+
+    expect(events).toEqual(['left:leave', 'right:enter', 'right:move']);
+  });
+
+  it('clears hover when the pointer leaves the canvas before re-entering the same mesh', async () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const camera = createElement('perspectiveCamera');
+    const mesh = createElement('mesh');
+    const geometry = createElement('boxGeometry');
+    const onEnter = vi.fn();
+    const onLeave = vi.fn();
+    const canvas = new FakeCanvas();
+    const runtime = createTypeGpuRuntimeForTest(
+      root,
+      canvas as unknown as HTMLCanvasElement,
+      fakeRenderer()
+    );
+
+    canvas.clientWidth = 100;
+    canvas.clientHeight = 100;
+    setAttribute(camera, 'position', [0, 0, 10]);
+    setAttribute(camera, 'target', [0, 0, 0]);
+    addEventListener(mesh, 'pointerenter', onEnter);
+    addEventListener(mesh, 'pointerleave', onLeave);
+    insert(mesh, geometry, null);
+    insert(scene, camera, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+
+    runtime.scheduleSync(root, scene, Dirty.All);
+    await Promise.resolve();
+    canvas.dispatch<PointerEvent>('pointermove', { offsetX: 50, offsetY: 50 } as Partial<
+      PointerEvent
+    >);
+    canvas.dispatch<PointerEvent>('pointerleave');
+    canvas.dispatch<PointerEvent>('pointermove', { offsetX: 50, offsetY: 50 } as Partial<
+      PointerEvent
+    >);
+
+    expect(onLeave).toHaveBeenCalledOnce();
+    expect(onEnter).toHaveBeenCalledTimes(2);
+  });
+
   it('schedules a second sync after an async model cache entry settles', async () => {
     const root = createFragment();
     const scene = createElement('scene');

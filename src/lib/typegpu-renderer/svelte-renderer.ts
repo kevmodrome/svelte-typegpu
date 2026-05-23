@@ -167,18 +167,21 @@ function createRuntime(
   }
 
   function dispatchCanvasPointerMove(event: PointerEvent) {
-    const moveHit = pickCanvasTarget(event, 'pointermove');
-    if (moveHit) {
-      dispatchNodeEvent(moveHit.node, 'pointermove', {
+    const hit = pickCanvasTarget(event);
+    updateHoveredTarget(hit, event);
+
+    if (hit?.target.handlers.has('pointermove')) {
+      dispatchNodeEvent(hit.node, 'pointermove', {
         originalEvent: event,
         detail: {
-          instanceId: moveHit.instanceId,
-          point: moveHit.point
+          instanceId: hit.instanceId,
+          point: hit.point
         }
       });
     }
+  }
 
-    const hit = pickCanvasTarget(event);
+  function updateHoveredTarget(hit: TypeGpuInteractionHit | null, event: PointerEvent) {
     const nextTarget = hit?.target ?? null;
 
     if (sameInteractionTarget(hoveredTarget, nextTarget)) return;
@@ -205,6 +208,18 @@ function createRuntime(
     hoveredTarget = nextTarget;
   }
 
+  function dispatchCanvasPointerExit(event: PointerEvent) {
+    if (!hoveredTarget) return;
+
+    dispatchNodeEvent(hoveredTarget.node, 'pointerleave', {
+      originalEvent: event,
+      detail: {
+        instanceId: hoveredTarget.instanceId
+      }
+    });
+    hoveredTarget = null;
+  }
+
   function pickCanvasTarget(event: MouseEvent, type?: string): TypeGpuInteractionHit | null {
     if (!currentScene) return null;
 
@@ -221,6 +236,8 @@ function createRuntime(
 
   canvas.addEventListener('click', dispatchCanvasClick);
   canvas.addEventListener('pointermove', dispatchCanvasPointerMove);
+  canvas.addEventListener('pointerleave', dispatchCanvasPointerExit);
+  canvas.addEventListener('pointerout', dispatchCanvasPointerExit);
 
   return {
     scheduleSync,
@@ -228,6 +245,8 @@ function createRuntime(
       cameraInteraction.dispose();
       canvas.removeEventListener('click', dispatchCanvasClick);
       canvas.removeEventListener('pointermove', dispatchCanvasPointerMove);
+      canvas.removeEventListener('pointerleave', dispatchCanvasPointerExit);
+      canvas.removeEventListener('pointerout', dispatchCanvasPointerExit);
       gpu.dispose();
     }
   };
