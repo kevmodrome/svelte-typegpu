@@ -62,7 +62,7 @@ describe('TypeGPU resource descriptors', () => {
     const geometry = readInlineGeometry(node);
 
     expect(geometry).toMatchObject({
-      key: 'triangle',
+      key: 'triangle@rev:3',
       kind: 'buffer',
       bounds,
       vertexCount: 3,
@@ -198,24 +198,70 @@ describe('TypeGPU resource descriptors', () => {
     expect(resources.geometries.get('cube')?.key).toBe('box:1:1:1');
     expect(resources.textures.get('checker')).toMatchObject({
       kind: 'url',
-      key: 'texture:checker',
+      key: expect.stringMatching(/^texture:checker@rev:\d+$/),
       src: '/textures/checker.png'
     });
-    expect(resources.samplers.get('repeatLinear')?.key).toBe('sampler:repeatLinear');
+    expect(resources.samplers.get('repeatLinear')?.key).toMatch(/^sampler:repeatLinear@rev:\d+$/);
     expect(resources.materials.get('crate')).toMatchObject({
       kind: 'phong',
-      textureKey: 'texture:checker',
-      samplerKey: 'sampler:repeatLinear'
+      textureKey: expect.stringMatching(/^texture:checker@rev:\d+$/),
+      samplerKey: expect.stringMatching(/^sampler:repeatLinear@rev:\d+$/)
     });
 
     expect(resolveGeometryReference('cube', resources)?.key).toBe('box:1:1:1');
 
     const resolvedMaterial = resolveMaterialReference('crate', resources);
-    expect(resolvedMaterial?.textureKey).toBe('texture:checker');
+    expect(resolvedMaterial?.textureKey).toMatch(/^texture:checker@rev:\d+$/);
     expect(resources.liveResourceKeys.geometries.has('box:1:1:1')).toBe(true);
     expect(resources.liveResourceKeys.materials.has(resolvedMaterial!.key!)).toBe(true);
-    expect(resources.liveResourceKeys.textures.has('texture:checker')).toBe(true);
-    expect(resources.liveResourceKeys.samplers.has('sampler:repeatLinear')).toBe(true);
+    expect([...resources.liveResourceKeys.textures].some((key) => key.startsWith('texture:checker@rev:'))).toBe(true);
+    expect([...resources.liveResourceKeys.samplers].some((key) => key.startsWith('sampler:repeatLinear@rev:'))).toBe(true);
+  });
+
+  it('versions mutable reusable texture and buffer geometry identities', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const texture = createElement('texture');
+    const geometry = createElement('bufferGeometry');
+    const bounds = { min: [0, 0, 0], max: [1, 1, 1] };
+
+    setAttribute(texture, 'id', 'albedo');
+    setAttribute(texture, 'src', '/textures/a.png');
+    setAttribute(geometry, 'id', 'triangle');
+    setAttribute(geometry, 'key', 'triangle-buffer');
+    setAttribute(geometry, 'bounds', bounds);
+    setAttribute(
+      geometry,
+      'vertices',
+      new Float32Array([
+        0, 0, 0, 0, 1, 0, 0, 0,
+        1, 0, 0, 0, 1, 0, 1, 0,
+        0, 1, 0, 0, 1, 0, 0, 1
+      ])
+    );
+    insert(scene, texture, null);
+    insert(scene, geometry, null);
+    insert(root, scene, null);
+
+    const first = collectSceneResources(root);
+    setAttribute(texture, 'src', '/textures/b.png');
+    setAttribute(
+      geometry,
+      'vertices',
+      new Float32Array([
+        0, 0, 0, 0, 1, 0, 0, 0,
+        2, 0, 0, 0, 1, 0, 1, 0,
+        0, 2, 0, 0, 1, 0, 0, 1
+      ])
+    );
+    const second = collectSceneResources(root);
+
+    expect(second.textures.get('albedo')?.key).not.toBe(first.textures.get('albedo')?.key);
+    expect(second.textures.get('albedo')).toMatchObject({ src: '/textures/b.png' });
+    expect(second.geometries.get('triangle')?.key).not.toBe(
+      first.geometries.get('triangle')?.key
+    );
+    expect(second.geometries.get('triangle')?.key).toContain('triangle-buffer');
   });
 });
 

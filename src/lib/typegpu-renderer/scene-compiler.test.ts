@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { addEventListener, createElement, createFragment, insert, setAttribute } from './core';
 import { Dirty, hasDirty } from './dirty';
+import type { TypeGpuLoadedModel } from './glb-loader';
+import { createModelCache } from './model-cache';
 import { createSceneState, createTypeGpuSceneCache } from './scene-compiler';
 
 describe('TypeGPU scene compiler', () => {
@@ -101,7 +103,11 @@ describe('TypeGPU scene compiler', () => {
       materialKey: expect.stringContaining('material:standard')
     });
     expect(state.liveResourceKeys.geometries.has('box:2:1:1')).toBe(true);
-    expect(state.liveResourceKeys.textures.has('texture:crateTexture')).toBe(true);
+    expect(
+      [...state.liveResourceKeys.textures].some((key) =>
+        key.startsWith('texture:crateTexture@rev:')
+      )
+    ).toBe(true);
   });
 
   it('reuses clean draw batches, lights, and interaction indexes by dirty mask', () => {
@@ -126,5 +132,98 @@ describe('TypeGPU scene compiler', () => {
     expect(second.drawBatchesChanged).toBe(false);
     expect(second.lightsChanged).toBe(false);
     expect(second.interactionChanged).toBe(false);
+  });
+
+  it('re-packs instances when a referenced material uniform changes', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const material = createElement('standardMaterial');
+    const mesh = createElement('mesh');
+    const geometry = createElement('boxGeometry');
+    const cache = createTypeGpuSceneCache();
+
+    setAttribute(material, 'id', 'paint');
+    setAttribute(material, 'transparent', true);
+    setAttribute(mesh, 'material', 'paint');
+    insert(mesh, geometry, null);
+    insert(scene, material, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+
+    const first = createSceneState(root, cache, { dirty: Dirty.All });
+    setAttribute(material, 'color', [0.2, 0.3, 0.4, 0.5]);
+    setAttribute(material, 'roughness', 0.25);
+    setAttribute(material, 'opacity', 0.5);
+    const second = createSceneState(root, cache, { dirty: Dirty.MaterialUniform });
+
+    expect(second.drawBatches[0].instances).toBe(first.drawBatches[0].instances);
+    expect(second.drawBatches[0].instancesChanged).toBe(true);
+    expect(second.drawBatches[0].dirtyRanges).toEqual([{ start: 0, count: 1 }]);
+    expect(second.drawBatches[0].instances[4]).toBeCloseTo(0.2);
+    expect(second.drawBatches[0].instances[5]).toBeCloseTo(0.3);
+    expect(second.drawBatches[0].instances[6]).toBeCloseTo(0.4);
+    expect(second.drawBatches[0].instances[7]).toBeCloseTo(0.5);
+    expect(second.drawBatches[0].instances[16]).toBeCloseTo(0.25);
+    expect(second.drawBatches[0].instances[18]).toBeCloseTo(0.5);
+  });
+
+  it('preserves loaded model textures when material children override only color', async () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const model = createElement('model');
+    const material = createElement('standardMaterial');
+    const loaded: TypeGpuLoadedModel = {
+      key: 'url:/models/textured.glb',
+      meshes: [
+        {
+          geometry: {
+            key: 'url:/models/textured.glb:primitive:0',
+            vertexData: new Float32Array([0, 0, 0, 0, 0, 1, 0, 0]),
+            vertexCount: 1,
+            vertexFloats: 8,
+            bounds: { min: [0, 0, 0], max: [1, 1, 1] }
+          },
+          material: {
+            kind: 'standard',
+            color: [1, 1, 1, 1],
+            roughness: 0.6,
+            metalness: 0.1,
+            opacity: 1,
+            textureKey: 'url:/textures/albedo.png',
+            samplerKey: 'sampler:default',
+            map: { kind: 'url', key: 'url:/textures/albedo.png', src: '/textures/albedo.png' }
+          },
+          transform: {
+            position: [0, 0, 0],
+            rotation: [0, 0, 0],
+            scale: [1, 1, 1]
+          }
+        }
+      ]
+    };
+    const cache = createTypeGpuSceneCache({
+      modelCache: createModelCache({
+        loadUrl: async () => loaded,
+        loadData: async () => loaded
+      })
+    });
+
+    setAttribute(model, 'src', '/models/textured.glb');
+    setAttribute(material, 'color', [0.2, 0.3, 0.4, 1]);
+    insert(model, material, null);
+    insert(scene, model, null);
+    insert(root, scene, null);
+
+    createSceneState(root, cache, { dirty: Dirty.All });
+    await Promise.resolve();
+    const state = createSceneState(root, cache, { dirty: Dirty.All });
+
+    expect(state.drawBatches[0].material).toMatchObject({
+      color: [0.2, 0.3, 0.4, 1],
+      roughness: 0.6,
+      metalness: 0.1,
+      textureKey: 'url:/textures/albedo.png',
+      map: { kind: 'url', src: '/textures/albedo.png' }
+    });
   });
 });

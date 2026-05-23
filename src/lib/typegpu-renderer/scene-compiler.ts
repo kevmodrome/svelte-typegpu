@@ -11,8 +11,8 @@ import {
   collectSceneResources,
   readInlineGeometry,
   readInlineMaterial,
-  resolveGeometryReference,
-  resolveMaterialReference,
+  resolveGeometryResourceReference,
+  resolveMaterialResourceReference,
   type TypeGpuResourceCollection
 } from './resources';
 import {
@@ -247,8 +247,10 @@ function readMeshGeometry(
     if (geometry) return { node: child, value: withGeometryShape(geometry) };
   }
 
-  const referenced = resolveGeometryReference(mesh.attributes.geometry, resources);
-  return referenced ? { node: null, value: withGeometryShape(referenced) } : null;
+  const referenced = resolveGeometryResourceReference(mesh.attributes.geometry, resources);
+  return referenced
+    ? { node: referenced.node, value: withGeometryShape(referenced.value) }
+    : null;
 }
 
 function readMeshMaterial(
@@ -260,8 +262,10 @@ function readMeshMaterial(
     if (material) return { node: child, value: batchMaterialDescriptor(material) };
   }
 
-  const referenced = resolveMaterialReference(mesh.attributes.material, resources);
-  if (referenced) return { node: null, value: batchMaterialDescriptor(referenced) };
+  const referenced = resolveMaterialResourceReference(mesh.attributes.material, resources);
+  if (referenced) {
+    return { node: referenced.node, value: batchMaterialDescriptor(referenced.value) };
+  }
 
   return { node: null, value: defaultMaterial() };
 }
@@ -319,20 +323,11 @@ function readModelMaterial(
   resources: TypeGpuResourceCollection
 ): MeshResourceResult<TypeGpuMaterialDescriptor> {
   for (let child = modelNode.firstChild; child; child = child.nextSibling) {
-    const material = readInlineMaterial(child, resources);
-    if (material) {
+    const override = readInlineMaterial(child, resources);
+    if (override) {
       return {
         node: child,
-        value: batchMaterialDescriptor({
-          ...mesh.material,
-          ...material,
-          color: child.attributes.color === undefined ? mesh.material.color : material.color,
-          roughness:
-            child.attributes.roughness === undefined ? mesh.material.roughness : material.roughness,
-          metalness:
-            child.attributes.metalness === undefined ? mesh.material.metalness : material.metalness,
-          opacity: child.attributes.opacity === undefined ? mesh.material.opacity : material.opacity
-        })
+        value: batchMaterialDescriptor(mergeModelMaterial(mesh.material, override, child))
       };
     }
   }
@@ -482,6 +477,70 @@ function batchMaterialDescriptor(material: TypeGpuMaterialDescriptor): TypeGpuMa
   return {
     ...descriptor,
     key: `material:${descriptor.kind}`
+  };
+}
+
+function mergeModelMaterial(
+  base: TypeGpuMaterialDescriptor,
+  override: TypeGpuMaterialDescriptor,
+  node: TypeGpuNode
+): TypeGpuMaterialDescriptor {
+  const merged = ensureMaterialDescriptor(base);
+  const attrs = node.attributes;
+
+  if (attrs.color !== undefined) merged.color = override.color;
+  if (attrs.roughness !== undefined) merged.roughness = override.roughness;
+  if (attrs.metalness !== undefined) merged.metalness = override.metalness;
+  if (attrs.opacity !== undefined) merged.opacity = override.opacity;
+  if (attrs.map !== undefined) {
+    merged.map = override.map;
+    merged.texture = override.texture;
+    merged.textureKey = override.textureKey;
+  }
+  if (attrs.sampler !== undefined) {
+    merged.sampler = override.sampler;
+    merged.samplerKey = override.samplerKey;
+  }
+  if (attrs.transparent !== undefined) merged.transparent = override.transparent;
+  if (attrs.depthWrite !== undefined) merged.depthWrite = override.depthWrite;
+  if (attrs.depthTest !== undefined) merged.depthTest = override.depthTest;
+  if (attrs.cullMode !== undefined) merged.cullMode = override.cullMode;
+  if (attrs.blendMode !== undefined) merged.blendMode = override.blendMode;
+
+  return recomputeMaterialKeys(merged);
+}
+
+function recomputeMaterialKeys(material: TypeGpuMaterialDescriptor): TypeGpuMaterialDescriptor {
+  const textureKey = material.textureKey ?? textureKeyFor(material.map);
+  const samplerKey = material.samplerKey ?? DEFAULT_SAMPLER.key;
+  const transparent =
+    Boolean(material.transparent) || material.opacity < 1 || material.color[3] < 1;
+  const blendMode = material.blendMode ?? (transparent ? 'alpha' : 'opaque');
+  const depthWrite = material.depthWrite ?? !transparent;
+  const depthTest = material.depthTest ?? true;
+  const cullMode = material.cullMode ?? 'back';
+  const keyed = {
+    ...material,
+    textureKey,
+    samplerKey,
+    transparent,
+    blendMode,
+    depthWrite,
+    depthTest,
+    cullMode
+  };
+
+  return {
+    ...keyed,
+    pipelineKey: [
+      `material:${keyed.kind}`,
+      `blend:${blendMode}`,
+      `depthWrite:${depthWrite}`,
+      `depthTest:${depthTest}`,
+      `cull:${cullMode}`
+    ].join('|'),
+    bindGroupKey: [textureKey, samplerKey].join('|'),
+    key: materialKeyFor(keyed)
   };
 }
 

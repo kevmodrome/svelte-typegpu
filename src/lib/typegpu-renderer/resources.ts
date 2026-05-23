@@ -23,10 +23,19 @@ import type {
 
 export interface TypeGpuResourceCollection {
   geometries: Map<string, TypeGpuGeometryData>;
+  geometryNodes: Map<string, TypeGpuNode>;
   materials: Map<string, TypeGpuMaterialDescriptor>;
+  materialNodes: Map<string, TypeGpuNode>;
   textures: Map<string, TypeGpuTextureSource>;
+  textureNodes: Map<string, TypeGpuNode>;
   samplers: Map<string, TypeGpuSamplerDescriptor>;
+  samplerNodes: Map<string, TypeGpuNode>;
   liveResourceKeys: TypeGpuLiveResourceKeys;
+}
+
+export interface TypeGpuResolvedResource<T> {
+  node: TypeGpuNode;
+  value: T;
 }
 
 export function collectSceneResources(root: TypeGpuNode): TypeGpuResourceCollection {
@@ -40,6 +49,7 @@ export function collectSceneResources(root: TypeGpuNode): TypeGpuResourceCollect
     const geometry = readInlineGeometry(node);
     if (geometry) {
       resources.geometries.set(id, geometry);
+      resources.geometryNodes.set(id, node);
       resources.liveResourceKeys.geometries.add(geometry.key);
       continue;
     }
@@ -47,6 +57,7 @@ export function collectSceneResources(root: TypeGpuNode): TypeGpuResourceCollect
     const texture = readInlineTexture(node);
     if (texture) {
       resources.textures.set(id, texture);
+      resources.textureNodes.set(id, node);
       resources.liveResourceKeys.textures.add(texture.key ?? `texture:${id}`);
       continue;
     }
@@ -54,6 +65,7 @@ export function collectSceneResources(root: TypeGpuNode): TypeGpuResourceCollect
     const sampler = readInlineSampler(node);
     if (sampler) {
       resources.samplers.set(id, sampler);
+      resources.samplerNodes.set(id, node);
       resources.liveResourceKeys.samplers.add(sampler.key);
     }
   }
@@ -66,6 +78,7 @@ export function collectSceneResources(root: TypeGpuNode): TypeGpuResourceCollect
     if (!material) continue;
 
     resources.materials.set(id, material);
+    resources.materialNodes.set(id, node);
     if (material.key) resources.liveResourceKeys.materials.add(material.key);
     if (material.textureKey) resources.liveResourceKeys.textures.add(material.textureKey);
     if (material.samplerKey) resources.liveResourceKeys.samplers.add(material.samplerKey);
@@ -106,7 +119,10 @@ export function readInlineGeometry(node: TypeGpuNode): TypeGpuGeometryData | nul
     if (!(vertices instanceof Float32Array) || !bounds) return null;
 
     return createBufferGeometryData({
-      key: stringArg(node.attributes.key) ?? stringArg(node.attributes.id) ?? `buffer:${node.uid}`,
+      key: versionedKey(
+        stringArg(node.attributes.key) ?? stringArg(node.attributes.id) ?? `buffer:${node.uid}`,
+        node
+      ),
       vertices,
       bounds,
       topology: node.attributes.topology === 'triangle-list' ? 'triangle-list' : undefined
@@ -127,36 +143,56 @@ export function resolveGeometryReference(
   value: unknown,
   resources: TypeGpuResourceCollection
 ): TypeGpuGeometryData | null {
-  if (typeof value !== 'string' || value.length === 0) return null;
-
-  const geometry = resources.geometries.get(value);
-  if (!geometry) return null;
-
-  resources.liveResourceKeys.geometries.add(geometry.key);
-  return geometry;
+  return resolveGeometryResourceReference(value, resources)?.value ?? null;
 }
 
 export function resolveMaterialReference(
   value: unknown,
   resources: TypeGpuResourceCollection
 ): TypeGpuMaterialDescriptor | null {
+  return resolveMaterialResourceReference(value, resources)?.value ?? null;
+}
+
+export function resolveGeometryResourceReference(
+  value: unknown,
+  resources: TypeGpuResourceCollection
+): TypeGpuResolvedResource<TypeGpuGeometryData> | null {
+  if (typeof value !== 'string' || value.length === 0) return null;
+
+  const geometry = resources.geometries.get(value);
+  const node = resources.geometryNodes.get(value);
+  if (!geometry || !node) return null;
+
+  resources.liveResourceKeys.geometries.add(geometry.key);
+  return { node, value: geometry };
+}
+
+export function resolveMaterialResourceReference(
+  value: unknown,
+  resources: TypeGpuResourceCollection
+): TypeGpuResolvedResource<TypeGpuMaterialDescriptor> | null {
   if (typeof value !== 'string' || value.length === 0) return null;
 
   const material = resources.materials.get(value);
-  if (!material) return null;
+  const node = resources.materialNodes.get(value);
+  if (!material || !node) return null;
 
   if (material.key) resources.liveResourceKeys.materials.add(material.key);
   if (material.textureKey) resources.liveResourceKeys.textures.add(material.textureKey);
   if (material.samplerKey) resources.liveResourceKeys.samplers.add(material.samplerKey);
-  return material;
+  return { node, value: material };
 }
 
 function createResourceCollection(): TypeGpuResourceCollection {
   return {
     geometries: new Map(),
+    geometryNodes: new Map(),
     materials: new Map(),
+    materialNodes: new Map(),
     textures: new Map(),
+    textureNodes: new Map(),
     samplers: new Map(),
+    samplerNodes: new Map(),
     liveResourceKeys: {
       geometries: new Set(),
       materials: new Set(),
@@ -184,7 +220,7 @@ function readInlineTexture(node: TypeGpuNode): TypeGpuTextureSource | null {
   if (src) {
     return {
       kind: 'url',
-      key: `texture:${id}`,
+      key: versionedKey(`texture:${id}`, node),
       src,
       format: formatArg(node.attributes.format)
     };
@@ -192,7 +228,7 @@ function readInlineTexture(node: TypeGpuNode): TypeGpuTextureSource | null {
 
   const source = textureSourceFor({
     kind: 'data',
-    key: `texture:${id}`,
+    key: versionedKey(`texture:${id}`, node),
     src: '',
     data: node.attributes.data,
     width: node.attributes.width,
@@ -211,7 +247,7 @@ function readInlineSampler(node: TypeGpuNode): TypeGpuSamplerDescriptor | null {
 
   return samplerDescriptorFor({
     ...node.attributes,
-    key: `sampler:${id}`
+    key: versionedKey(`sampler:${id}`, node)
   });
 }
 
@@ -252,4 +288,8 @@ function vector3Arg(value: unknown): Vector3Tuple | null {
 
 function formatArg(value: unknown): GPUTextureFormat | undefined {
   return typeof value === 'string' && value.length > 0 ? (value as GPUTextureFormat) : undefined;
+}
+
+function versionedKey(base: string, node: TypeGpuNode): string {
+  return `${base}@rev:${node.revision}`;
 }
