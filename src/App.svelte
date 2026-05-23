@@ -138,6 +138,7 @@
               max="40"
               step="0.1"
               bind:value={controls.camera.position[axis]}
+              oninput={clampControls}
               onchange={clampControls}
               aria-label={`Camera position ${axisLabel(axis)}`}
             />
