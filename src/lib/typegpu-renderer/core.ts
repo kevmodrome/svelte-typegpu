@@ -286,9 +286,11 @@ function dirtyForStructuralSubtree(
   dirtyForNode: (nodeName: string | undefined) => Dirty
 ): Dirty {
   let dirty = dirtyForNode(node.name);
+  if (dirty === Dirty.All) return dirty;
 
   for (let child = node.firstChild; child; child = child.nextSibling) {
     dirty = mergeDirty(dirty, dirtyForStructuralSubtree(child, dirtyForNode));
+    if (dirty === Dirty.All) return dirty;
   }
 
   return dirty;

@@ -22,7 +22,6 @@ import {
 import type { TypeGpuLoadedModel } from './glb-loader';
 import { createStandardMaterial } from './materials';
 import { createModelCache } from './model-cache';
-import { invalidatesDrawBatches, invalidatesLights } from './scene-dirtiness';
 import { createSceneState, createTypeGpuSceneCache } from './scene-state';
 import { MAX_TYPEGPU_LIGHTS } from './types';
 import { Dirty, hasDirty } from './dirty';
@@ -896,7 +895,7 @@ describe('TypeGPU renderer core', () => {
     expect(secondBoxBatch.instancesChanged).toBe(false);
   });
 
-  it('updates light-only group transforms without repacking meshes', () => {
+  it('uses scheduled group transform masks for scene-state recompute decisions', () => {
     const cache = createTypeGpuSceneCache();
     const root = createFragment();
     const scene = createElement('scene');
@@ -905,6 +904,7 @@ describe('TypeGPU renderer core', () => {
     const meshGroup = createElement('group');
     const mesh = createElement('mesh');
     const geometry = createElement('boxGeometry');
+    const scheduleSync = vi.fn();
 
     setAttribute(light, 'position', [1, 0, 0]);
     insert(lightGroup, light, null);
@@ -914,58 +914,70 @@ describe('TypeGPU renderer core', () => {
     insert(scene, meshGroup, null);
     insert(root, scene, null);
 
-    const firstState = createSceneState(root, cache);
+    createSceneState(root, cache);
     const readDrawBatches = vi.spyOn(cache.drawBatchCache, 'read');
-    const drawBatchesDirty = invalidatesDrawBatches(root, lightGroup, root.treeRevision);
-    const lightsDirty = invalidatesLights(root, lightGroup, root.treeRevision);
+    root.runtime = { scheduleSync };
 
     setAttribute(lightGroup, 'position', [3, 0, 0]);
-    const secondState = createSceneState(root, cache, {
-      reuseDrawBatches: !drawBatchesDirty,
-      reuseLights: !lightsDirty
-    });
+    const [, dirtyNode, dirtyMask = Dirty.None] = scheduleSync.mock.lastCall ?? [];
+    const secondState = createSceneState(root, cache, { dirty: dirtyMask });
 
-    expect(drawBatchesDirty).toBe(false);
-    expect(lightsDirty).toBe(true);
-    expect(readDrawBatches).not.toHaveBeenCalled();
+    expect(dirtyNode).toBe(lightGroup);
+    expect(hasDirty(dirtyMask, Dirty.Transform)).toBe(true);
+    expect(hasDirty(dirtyMask, Dirty.DrawBatches)).toBe(false);
+    expect(hasDirty(dirtyMask, Dirty.Lights)).toBe(true);
+    expect(readDrawBatches).toHaveBeenCalledOnce();
     expect(secondState.lightsChanged).toBe(true);
     expect(secondState.lights[0].position).toEqual([4, 0, 0]);
-    expect(secondState.drawBatches[0].instances).toBe(firstState.drawBatches[0].instances);
+    expect(secondState.drawBatches[0].instanceIds).toEqual([mesh.uid]);
     expect(secondState.drawBatches[0].instancesChanged).toBe(false);
-    expect(invalidatesDrawBatches(root, meshGroup, root.treeRevision)).toBe(true);
   });
 
-  it('marks lighting dirty for light changes and parent group transforms', () => {
+  it('schedules lighting masks for light changes and parent group transforms', () => {
     const root = createFragment();
     const scene = createElement('scene');
     const group = createElement('group');
     const light = createElement('pointLight');
     const mesh = createElement('mesh');
+    const scheduleSync = vi.fn();
 
     insert(group, light, null);
     insert(scene, group, null);
     insert(scene, mesh, null);
     insert(root, scene, null);
+    root.runtime = { scheduleSync };
 
-    expect(invalidatesLights(root, light, root.treeRevision)).toBe(true);
-    expect(invalidatesLights(root, group, root.treeRevision)).toBe(true);
-    expect(invalidatesLights(root, mesh, root.treeRevision)).toBe(false);
-    expect(invalidatesDrawBatches(root, light, root.treeRevision)).toBe(false);
+    setAttribute(light, 'intensity', 2);
+    let [, dirtyNode, dirtyMask = Dirty.None] = scheduleSync.mock.lastCall ?? [];
+    expect(dirtyNode).toBe(light);
+    expect(hasDirty(dirtyMask, Dirty.Lights)).toBe(true);
+    expect(hasDirty(dirtyMask, Dirty.DrawBatches)).toBe(false);
+
+    setAttribute(group, 'position', [1, 2, 3]);
+    [, dirtyNode, dirtyMask = Dirty.None] = scheduleSync.mock.lastCall ?? [];
+    expect(dirtyNode).toBe(group);
+    expect(hasDirty(dirtyMask, Dirty.Lights)).toBe(true);
+    expect(hasDirty(dirtyMask, Dirty.Transform)).toBe(true);
   });
 
-  it('marks draw batches dirty for model node changes', () => {
+  it('schedules draw-batch masks for model node insertions', () => {
     const root = createFragment();
     const scene = createElement('scene');
     const modelNode = createElement('model');
+    const scheduleSync = vi.fn();
+
+    insert(root, scene, null);
+    root.runtime = { scheduleSync };
 
     insert(scene, modelNode, null);
-    insert(root, scene, null);
 
-    expect(invalidatesDrawBatches(root, modelNode, root.treeRevision)).toBe(true);
-    expect(invalidatesLights(root, modelNode, root.treeRevision)).toBe(false);
+    const [, dirtyNode, dirtyMask = Dirty.None] = scheduleSync.mock.lastCall ?? [];
+    expect(dirtyNode).toBe(modelNode);
+    expect(hasDirty(dirtyMask, Dirty.DrawBatches)).toBe(true);
+    expect(hasDirty(dirtyMask, Dirty.Lights)).toBe(false);
   });
 
-  it('keeps camera-control changes out of draw-batch and light dirtiness', () => {
+  it('keeps camera-control attribute changes out of draw-batch and light masks', () => {
     const root = createFragment();
     const scene = createElement('scene');
     const camera = createElement('perspectiveCamera');
@@ -973,6 +985,7 @@ describe('TypeGPU renderer core', () => {
     const pose = createElement('cameraPose');
     const lens = createElement('cameraLens');
     const pointer = createElement('pointerControls');
+    const scheduleSync = vi.fn();
 
     insert(controls, pointer, null);
     insert(camera, pose, null);
@@ -980,17 +993,22 @@ describe('TypeGPU renderer core', () => {
     insert(camera, controls, null);
     insert(scene, camera, null);
     insert(root, scene, null);
+    root.runtime = { scheduleSync };
 
-    expect(invalidatesDrawBatches(root, camera, root.treeRevision)).toBe(false);
-    expect(invalidatesDrawBatches(root, pose, root.treeRevision)).toBe(false);
-    expect(invalidatesDrawBatches(root, lens, root.treeRevision)).toBe(false);
-    expect(invalidatesDrawBatches(root, controls, root.treeRevision)).toBe(false);
-    expect(invalidatesDrawBatches(root, pointer, root.treeRevision)).toBe(false);
-    expect(invalidatesLights(root, camera, root.treeRevision)).toBe(false);
-    expect(invalidatesLights(root, pose, root.treeRevision)).toBe(false);
-    expect(invalidatesLights(root, lens, root.treeRevision)).toBe(false);
-    expect(invalidatesLights(root, controls, root.treeRevision)).toBe(false);
-    expect(invalidatesLights(root, pointer, root.treeRevision)).toBe(false);
+    for (const [node, key, value] of [
+      [camera, 'position', [1, 2, 3]],
+      [pose, 'position', [1, 2, 3]],
+      [lens, 'fov', 60],
+      [controls, 'mode', 'fly'],
+      [pointer, 'rotateSpeed', 2]
+    ] as const) {
+      setAttribute(node, key, value);
+      const [, dirtyNode, dirtyMask = Dirty.None] = scheduleSync.mock.lastCall ?? [];
+      expect(dirtyNode).toBe(node);
+      expect(hasDirty(dirtyMask, Dirty.Camera)).toBe(true);
+      expect(hasDirty(dirtyMask, Dirty.DrawBatches)).toBe(false);
+      expect(hasDirty(dirtyMask, Dirty.Lights)).toBe(false);
+    }
   });
 
   it('keeps structural camera-control insertions out of draw-batch and light dirtiness', () => {
@@ -1004,14 +1022,11 @@ describe('TypeGPU renderer core', () => {
     insert(scene, camera, null);
     insert(root, scene, null);
     root.runtime = { scheduleSync };
-    const syncedTreeRevision = root.treeRevision;
 
     insert(controls, pointer, null);
     insert(camera, controls, null);
 
     expect(scheduleSync).toHaveBeenLastCalledWith(root, controls, Dirty.Tree | Dirty.Camera);
-    expect(invalidatesDrawBatches(root, controls, syncedTreeRevision)).toBe(false);
-    expect(invalidatesLights(root, controls, syncedTreeRevision)).toBe(false);
   });
 
   it('keeps structural camera-control removals out of draw-batch and light dirtiness', () => {
@@ -1027,13 +1042,10 @@ describe('TypeGPU renderer core', () => {
     insert(scene, camera, null);
     insert(root, scene, null);
     root.runtime = { scheduleSync };
-    const syncedTreeRevision = root.treeRevision;
 
     remove(controls);
 
     expect(scheduleSync).toHaveBeenLastCalledWith(root, controls, Dirty.Tree | Dirty.Camera);
-    expect(invalidatesDrawBatches(root, controls, syncedTreeRevision)).toBe(false);
-    expect(invalidatesLights(root, controls, syncedTreeRevision)).toBe(false);
   });
 
   it('marks draw batches dirty for structural mesh insertions', () => {
@@ -1044,7 +1056,6 @@ describe('TypeGPU renderer core', () => {
 
     insert(root, scene, null);
     root.runtime = { scheduleSync };
-    const syncedTreeRevision = root.treeRevision;
 
     insert(scene, mesh, null);
 
@@ -1053,8 +1064,6 @@ describe('TypeGPU renderer core', () => {
       mesh,
       Dirty.Tree | Dirty.DrawBatches | Dirty.Interaction
     );
-    expect(invalidatesDrawBatches(root, mesh, syncedTreeRevision)).toBe(true);
-    expect(invalidatesLights(root, mesh, syncedTreeRevision)).toBe(false);
   });
 
   it('marks draw batches and lights dirty for structural scene subtree insertions', () => {
@@ -1067,13 +1076,10 @@ describe('TypeGPU renderer core', () => {
     insert(scene, mesh, null);
     insert(scene, light, null);
     root.runtime = { scheduleSync };
-    const syncedTreeRevision = root.treeRevision;
 
     insert(root, scene, null);
 
     expect(scheduleSync).toHaveBeenLastCalledWith(root, scene, Dirty.All);
-    expect(invalidatesDrawBatches(root, scene, syncedTreeRevision)).toBe(true);
-    expect(invalidatesLights(root, scene, syncedTreeRevision)).toBe(true);
   });
 
   it('marks draw batches and lights dirty for structural scene subtree removals', () => {
@@ -1087,13 +1093,10 @@ describe('TypeGPU renderer core', () => {
     insert(scene, light, null);
     insert(root, scene, null);
     root.runtime = { scheduleSync };
-    const syncedTreeRevision = root.treeRevision;
 
     remove(scene);
 
     expect(scheduleSync).toHaveBeenLastCalledWith(root, scene, Dirty.All);
-    expect(invalidatesDrawBatches(root, scene, syncedTreeRevision)).toBe(true);
-    expect(invalidatesLights(root, scene, syncedTreeRevision)).toBe(true);
   });
 
   it('marks draw batches dirty for malformed structural camera-control subtrees with meshes', () => {
@@ -1108,7 +1111,6 @@ describe('TypeGPU renderer core', () => {
     insert(root, scene, null);
     insert(controls, mesh, null);
     root.runtime = { scheduleSync };
-    const syncedTreeRevision = root.treeRevision;
 
     insert(camera, controls, null);
 
@@ -1117,7 +1119,6 @@ describe('TypeGPU renderer core', () => {
       controls,
       Dirty.Tree | Dirty.Camera | Dirty.DrawBatches | Dirty.Interaction
     );
-    expect(invalidatesLights(root, controls, syncedTreeRevision)).toBe(false);
   });
 
   it('passes the invalidated node to runtime sync scheduling', () => {

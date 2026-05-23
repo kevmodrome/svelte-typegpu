@@ -46,7 +46,7 @@ export function createSceneState(
   options: TypeGpuSceneStateOptions = {}
 ): TypeGpuSceneState {
   const dirty = options.dirty ?? Dirty.All;
-  const reuseDrawBatches = options.reuseDrawBatches ?? !invalidatesDrawBatches(dirty);
+  const reuseDrawBatches = options.reuseDrawBatches ?? !shouldRecomputeDrawBatches(dirty);
   const reuseLights = options.reuseLights ?? !hasDirty(dirty, Dirty.Lights);
   const scene = readSceneSettings(root);
   const drawBatches = reuseDrawBatches
@@ -78,7 +78,7 @@ export function createSceneState(
   };
 }
 
-function invalidatesDrawBatches(dirty: Dirty): boolean {
+function shouldRecomputeDrawBatches(dirty: Dirty): boolean {
   return (
     hasDirty(dirty, Dirty.Transform) ||
     hasDirty(dirty, Dirty.InstanceData) ||
