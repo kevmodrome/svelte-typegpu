@@ -43,6 +43,10 @@ interface RuntimeState extends TypeGpuRuntime {
   dispose(): void;
 }
 
+interface RuntimeOptions {
+  windowTarget?: Pick<Window, 'addEventListener' | 'removeEventListener'>;
+}
+
 const renderer = createRenderer({
   createFragment,
   createElement,
@@ -95,14 +99,19 @@ export async function createTypeGpuRoot({
 function createRuntime(
   root: TypeGpuNode,
   canvas: HTMLCanvasElement,
-  gpu: TypeGpuRenderer
+  gpu: TypeGpuRenderer,
+  options: RuntimeOptions = {}
 ): RuntimeState {
   let queued = false;
   let drawBatchesDirty = true;
   let lightsDirty = true;
   let syncedTreeRevision = -1;
   const sceneCache = createTypeGpuSceneCache();
-  const cameraInteraction = createCameraInteractionController({ canvas, renderer: gpu });
+  const cameraInteraction = createCameraInteractionController({
+    canvas,
+    renderer: gpu,
+    windowTarget: options.windowTarget
+  });
 
   function scheduleSync(nextRoot: TypeGpuNode, dirtyNode?: TypeGpuNode) {
     root = nextRoot;
@@ -127,6 +136,8 @@ function createRuntime(
   }
 
   function dispatchCanvasClick(event: MouseEvent) {
+    if (cameraInteraction.consumeSuppressedClick()) return;
+
     const mesh = findFirstInteractiveMesh(root, 'click');
     if (!mesh) return;
 
@@ -145,4 +156,13 @@ function createRuntime(
       gpu.dispose();
     }
   };
+}
+
+export function createTypeGpuRuntimeForTest(
+  root: TypeGpuNode,
+  canvas: HTMLCanvasElement,
+  gpu: TypeGpuRenderer,
+  windowTarget?: Pick<Window, 'addEventListener' | 'removeEventListener'>
+): RuntimeState {
+  return createRuntime(root, canvas, gpu, { windowTarget });
 }

@@ -20,6 +20,7 @@ type CancelFrame = (handle: number) => void;
 type ListenerTarget = Pick<Window, 'addEventListener' | 'removeEventListener'>;
 type ListenerRegistration = [string, EventListener, AddEventListenerOptions?];
 type TypeGpuCameraRenderer = Pick<TypeGpuRenderer, 'setCamera'>;
+const CLICK_SUPPRESSION_DISTANCE = 4;
 
 const defaultRequestFrame: RequestFrame = (callback) => {
   if (typeof globalThis.requestAnimationFrame === 'function') {
@@ -51,6 +52,7 @@ export interface TypeGpuCameraInteractionOptions {
 
 export interface TypeGpuCameraInteractionController {
   reconcile(scene: TypeGpuSceneState): void;
+  consumeSuppressedClick(): boolean;
   dispose(): void;
 }
 
@@ -71,6 +73,8 @@ export function createCameraInteractionController({
   let nextCamera: TypeGpuCameraSettings | null = null;
   let lastEvent: Event | undefined;
   let dragging = false;
+  let suppressNextClick = false;
+  let dragStartPosition: { x: number; y: number } | null = null;
   let previousPointerPosition: { x: number; y: number } | null = null;
   let lastPinchDistance: number | null = null;
   let activeTouchGesture: 'orbit' | 'pinch' | null = null;
@@ -128,9 +132,18 @@ export function createCameraInteractionController({
 
   const resetGestureState = () => {
     dragging = false;
+    dragStartPosition = null;
     previousPointerPosition = null;
     lastPinchDistance = null;
     activeTouchGesture = null;
+  };
+
+  const markClickSuppression = (x: number, y: number) => {
+    if (!dragStartPosition) return;
+
+    if (Math.hypot(x - dragStartPosition.x, y - dragStartPosition.y) > CLICK_SUPPRESSION_DISTANCE) {
+      suppressNextClick = true;
+    }
   };
 
   const onWheel = (event: Event) => {
@@ -163,7 +176,9 @@ export function createCameraInteractionController({
     }
 
     mouseEvent.preventDefault();
+    suppressNextClick = false;
     dragging = true;
+    dragStartPosition = { x: mouseEvent.clientX, y: mouseEvent.clientY };
     previousPointerPosition = { x: mouseEvent.clientX, y: mouseEvent.clientY };
   };
 
@@ -173,8 +188,11 @@ export function createCameraInteractionController({
       return;
     }
 
+    markClickSuppression(mouseEvent.clientX, mouseEvent.clientY);
+
     if ((mouseEvent.buttons & buttonMask(activePointerControls.dragButton)) === 0) {
       dragging = false;
+      dragStartPosition = null;
       previousPointerPosition = null;
       return;
     }
@@ -202,6 +220,7 @@ export function createCameraInteractionController({
     }
 
     dragging = false;
+    dragStartPosition = null;
     previousPointerPosition = null;
   };
 
@@ -217,14 +236,17 @@ export function createCameraInteractionController({
 
     if (touchEvent.touches.length === 1 && allowsTouchOrbit(activePointerControls)) {
       touchEvent.preventDefault();
+      suppressNextClick = false;
       activeTouchGesture = 'orbit';
       previousPointerPosition = touchPosition(touchEvent.touches[0]);
+      dragStartPosition = previousPointerPosition;
       lastPinchDistance = null;
       return;
     }
 
     if (touchEvent.touches.length >= 2 && allowsTouchPinch(activePointerControls)) {
       touchEvent.preventDefault();
+      suppressNextClick = false;
       activeTouchGesture = 'pinch';
       previousPointerPosition = null;
       lastPinchDistance = pinchDistance(touchEvent.touches[0], touchEvent.touches[1]);
@@ -245,6 +267,7 @@ export function createCameraInteractionController({
     ) {
       touchEvent.preventDefault();
       const position = touchPosition(touchEvent.touches[0]);
+      markClickSuppression(position.x, position.y);
       if (!previousPointerPosition) {
         previousPointerPosition = position;
         return;
@@ -270,6 +293,7 @@ export function createCameraInteractionController({
       allowsTouchPinch(activePointerControls)
     ) {
       touchEvent.preventDefault();
+      suppressNextClick = true;
       const distance = pinchDistance(touchEvent.touches[0], touchEvent.touches[1]);
       if (lastPinchDistance !== null) {
         orbit = zoomOrbit(orbit, lastPinchDistance - distance, {
@@ -323,6 +347,7 @@ export function createCameraInteractionController({
     activePointerControls = null;
     orbit = null;
     resetGestureState();
+    suppressNextClick = false;
 
     if (!attached) return;
 
@@ -338,6 +363,11 @@ export function createCameraInteractionController({
   }
 
   return {
+    consumeSuppressedClick() {
+      const suppressed = suppressNextClick;
+      suppressNextClick = false;
+      return suppressed;
+    },
     reconcile(nextScene) {
       if (disposed) return;
 
