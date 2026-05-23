@@ -6,6 +6,7 @@ import type { TypeGpuNode } from './core';
 import { Dirty, hasDirty } from './dirty';
 import { createDrawBatchCache, type TypeGpuDrawBatchCache } from './draw-batch-cache';
 import type { TypeGpuLoadedModelMesh } from './glb-loader';
+import { createInteractionIndex } from './interaction-index';
 import { createModelCache, type TypeGpuModelCache } from './model-cache';
 import {
   collectSceneResources,
@@ -452,15 +453,6 @@ function createLiveResourceKeys(): TypeGpuLiveResourceKeys {
   };
 }
 
-function createInteractionIndex(targets: TypeGpuInteractionTarget[]): TypeGpuInteractionIndex {
-  return {
-    targets,
-    pick() {
-      return null;
-    }
-  };
-}
-
 function cleanDrawBatches(drawBatches: TypeGpuDrawBatch[]): TypeGpuDrawBatch[] {
   return drawBatches.map((batch) => ({
     ...batch,
@@ -470,7 +462,9 @@ function cleanDrawBatches(drawBatches: TypeGpuDrawBatch[]): TypeGpuDrawBatch[] {
 }
 
 function interactionTargetFor(item: TypeGpuMeshDrawItem): TypeGpuInteractionTarget[] {
-  if (item.pointerEvents === 'none' || item.hitTest === 'none' || !hasPointerListener(item.node)) {
+  const handlers = pointerHandlersFor(item.node);
+
+  if (item.pointerEvents === 'none' || item.hitTest === 'none' || handlers.size === 0) {
     return [];
   }
 
@@ -478,21 +472,25 @@ function interactionTargetFor(item: TypeGpuMeshDrawItem): TypeGpuInteractionTarg
     {
       id: item.id,
       drawItemId: item.id,
+      instanceId: item.id,
       node: item.node,
       bounds: item.bounds,
       hitTest: item.hitTest,
       pointerEvents: item.pointerEvents,
+      handlers,
       renderOrder: item.renderOrder
     }
   ];
 }
 
-function hasPointerListener(node: TypeGpuNode): boolean {
+function pointerHandlersFor(node: TypeGpuNode): Set<string> {
+  const handlers = new Set<string>();
+
   for (const type of POINTER_EVENT_TYPES) {
-    if ((node.listeners.get(type)?.size ?? 0) > 0) return true;
+    if ((node.listeners.get(type)?.size ?? 0) > 0) handlers.add(type);
   }
 
-  return false;
+  return handlers;
 }
 
 function shouldRecomputeDrawBatches(dirty: Dirty): boolean {

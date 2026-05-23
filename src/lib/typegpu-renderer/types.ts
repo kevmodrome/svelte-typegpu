@@ -302,24 +302,36 @@ export interface TypeGpuDrawBatch {
 }
 
 export interface TypeGpuInteractionTarget {
-  id: TypeGpuInstanceId;
-  drawItemId: TypeGpuInstanceId;
+  id?: TypeGpuInstanceId;
+  drawItemId?: TypeGpuInstanceId;
+  instanceId: TypeGpuInstanceId;
   node: TypeGpuNode;
   bounds: TypeGpuBounds;
-  hitTest: 'bounds' | 'mesh';
-  pointerEvents: 'auto';
-  renderOrder: number;
+  hitTest: 'none' | 'bounds' | 'mesh';
+  pointerEvents?: 'auto' | 'none';
+  handlers: Set<string>;
+  renderOrder?: number;
 }
 
 export interface TypeGpuInteractionHit {
   target: TypeGpuInteractionTarget;
+  node: TypeGpuNode;
+  instanceId: TypeGpuInstanceId;
   distance: number;
   point: Vector3Tuple;
 }
 
+export interface TypeGpuInteractionPickInput {
+  x: number;
+  y: number;
+  viewport: { width: number; height: number };
+  camera: TypeGpuCameraSettings;
+  type?: string;
+}
+
 export interface TypeGpuInteractionIndex {
   targets: TypeGpuInteractionTarget[];
-  pick(ray: TypeGpuRay): TypeGpuInteractionHit | null;
+  pick(input: TypeGpuInteractionPickInput): TypeGpuInteractionHit | null;
 }
 
 export interface TypeGpuSceneState {

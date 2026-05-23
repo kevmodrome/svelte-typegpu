@@ -1,5 +1,4 @@
 import { createRenderer } from 'svelte/renderer';
-import { findFirstInteractiveMesh } from './components/mesh';
 import { createCameraInteractionController } from './camera-interaction';
 import { createTypeGpuRenderer, type TypeGpuRenderer } from './gpu-renderer';
 import {
@@ -27,6 +26,7 @@ import {
 import { Dirty } from './dirty';
 import { createSceneState, createTypeGpuSceneCache } from './scene-state';
 import { createModelCache, type TypeGpuModelCacheOptions } from './model-cache';
+import type { TypeGpuInteractionHit, TypeGpuInteractionTarget, TypeGpuSceneState } from './types';
 
 export interface TypeGpuRootOptions {
   target: HTMLElement;
@@ -124,6 +124,8 @@ function createRuntime(
     renderer: gpu,
     windowTarget: options.windowTarget
   });
+  let currentScene: TypeGpuSceneState | null = null;
+  let hoveredTarget: TypeGpuInteractionTarget | null = null;
 
   function scheduleSync(
     nextRoot: TypeGpuNode,
@@ -145,30 +147,124 @@ function createRuntime(
       });
       gpu.setScene(scene);
       cameraInteraction.reconcile(scene);
+      currentScene = scene;
     });
   }
 
   function dispatchCanvasClick(event: MouseEvent) {
     if (cameraInteraction.consumeSuppressedClick()) return;
 
-    const mesh = findFirstInteractiveMesh(root, 'click');
-    if (!mesh) return;
+    const hit = pickCanvasTarget(event, 'click');
+    if (!hit) return;
 
-    dispatchNodeEvent(mesh, 'click', {
-      originalEvent: event
+    dispatchNodeEvent(hit.node, 'click', {
+      originalEvent: event,
+      detail: {
+        instanceId: hit.instanceId,
+        point: hit.point
+      }
+    });
+  }
+
+  function dispatchCanvasPointerMove(event: PointerEvent) {
+    const moveHit = pickCanvasTarget(event, 'pointermove');
+    if (moveHit) {
+      dispatchNodeEvent(moveHit.node, 'pointermove', {
+        originalEvent: event,
+        detail: {
+          instanceId: moveHit.instanceId,
+          point: moveHit.point
+        }
+      });
+    }
+
+    const hit = pickCanvasTarget(event);
+    const nextTarget = hit?.target ?? null;
+
+    if (sameInteractionTarget(hoveredTarget, nextTarget)) return;
+
+    if (hoveredTarget) {
+      dispatchNodeEvent(hoveredTarget.node, 'pointerleave', {
+        originalEvent: event,
+        detail: {
+          instanceId: hoveredTarget.instanceId
+        }
+      });
+    }
+
+    if (hit) {
+      dispatchNodeEvent(hit.node, 'pointerenter', {
+        originalEvent: event,
+        detail: {
+          instanceId: hit.instanceId,
+          point: hit.point
+        }
+      });
+    }
+
+    hoveredTarget = nextTarget;
+  }
+
+  function pickCanvasTarget(event: MouseEvent, type?: string): TypeGpuInteractionHit | null {
+    if (!currentScene) return null;
+
+    const { x, y } = canvasPointFromEvent(canvas, event);
+
+    return currentScene.interaction.pick({
+      x,
+      y,
+      viewport: canvasViewport(canvas),
+      camera: currentScene.camera,
+      type
     });
   }
 
   canvas.addEventListener('click', dispatchCanvasClick);
+  canvas.addEventListener('pointermove', dispatchCanvasPointerMove);
 
   return {
     scheduleSync,
     dispose() {
       cameraInteraction.dispose();
       canvas.removeEventListener('click', dispatchCanvasClick);
+      canvas.removeEventListener('pointermove', dispatchCanvasPointerMove);
       gpu.dispose();
     }
   };
+}
+
+function canvasPointFromEvent(canvas: HTMLCanvasElement, event: MouseEvent): { x: number; y: number } {
+  if (Number.isFinite(event.offsetX) && Number.isFinite(event.offsetY)) {
+    return { x: event.offsetX, y: event.offsetY };
+  }
+
+  const rect =
+    typeof canvas.getBoundingClientRect === 'function'
+      ? canvas.getBoundingClientRect()
+      : { left: 0, top: 0 };
+
+  return {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top
+  };
+}
+
+function canvasViewport(canvas: HTMLCanvasElement): { width: number; height: number } {
+  return {
+    width: positiveSize(canvas.clientWidth) ?? positiveSize(canvas.width) ?? 1,
+    height: positiveSize(canvas.clientHeight) ?? positiveSize(canvas.height) ?? 1
+  };
+}
+
+function positiveSize(value: number): number | null {
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function sameInteractionTarget(
+  previous: TypeGpuInteractionTarget | null,
+  next: TypeGpuInteractionTarget | null
+): boolean {
+  return previous?.node === next?.node && previous?.instanceId === next?.instanceId;
 }
 
 export function createTypeGpuRuntimeForTest(
