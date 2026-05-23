@@ -36,8 +36,8 @@ describe('TypeGPU draw batch cache', () => {
     const batches = createDrawBatchCache().read(createFragment(), createModelCache());
 
     expect(batches.map((batch) => batch.key)).toEqual([
-      'mesh:model:chair:mesh:0:standard:solid:white',
-      'mesh:model:table:mesh:0:standard:solid:white'
+      'mesh:imported:model:chair:mesh:0:standard:solid:white',
+      'mesh:imported:model:table:mesh:0:standard:solid:white'
     ]);
     expect(batches).toHaveLength(2);
     expect(batches[0].geometry).toBe(chairGeometry);

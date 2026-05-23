@@ -502,11 +502,157 @@ describe('TypeGPU renderer core', () => {
     createSceneState(root, cache);
     await Promise.resolve();
     const state = createSceneState(root, cache);
-    const batch = drawBatch(state, 'mesh:url:/models/triangle.glb:primitive:0:standard:solid:white');
+    const batch = drawBatch(
+      state,
+      'mesh:imported:url:/models/triangle.glb:primitive:0:standard:solid:white'
+    );
 
     expect(batch.geometry.key).toBe('url:/models/triangle.glb:primitive:0');
     expect(batch.instanceCount).toBe(1);
     expect(Array.from(batch.instances.slice(0, 4))).toEqual([3, 4, 5, 0]);
+  });
+
+  it('keeps imported geometry keys separate from procedural geometry keys', async () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const mesh = createElement('mesh');
+    const geometry = createElement('boxGeometry');
+    const modelNode = createElement('model');
+    const model: TypeGpuLoadedModel = {
+      key: 'url:/models/box-key.glb',
+      meshes: [
+        {
+          geometry: {
+            key: 'box',
+            vertexData: new Float32Array([0, 0, 0, 0, 0, 1, 0, 0]),
+            vertexCount: 1,
+            vertexFloats: 8
+          },
+          material: {
+            kind: 'standard',
+            color: [0.8, 0.2, 0.1, 1],
+            roughness: 0.5,
+            metalness: 0,
+            opacity: 1,
+            map: null
+          },
+          transform: {
+            position: [0, 0, 0],
+            rotation: [0, 0, 0],
+            scale: [1, 1, 1]
+          }
+        }
+      ]
+    };
+    const cache = createTypeGpuSceneCache({
+      modelCache: readyModelCache(model)
+    });
+
+    setAttribute(mesh, 'position', [1, 2, 3]);
+    setAttribute(modelNode, 'src', '/models/box-key.glb');
+    setAttribute(modelNode, 'position', [4, 5, 6]);
+    insert(mesh, geometry, null);
+    insert(scene, mesh, null);
+    insert(scene, modelNode, null);
+    insert(root, scene, null);
+
+    createSceneState(root, cache);
+    await Promise.resolve();
+    const state = createSceneState(root, cache);
+    const proceduralBatch = drawBatch(state, 'mesh:box:standard:solid:white');
+    const importedBatch = drawBatch(state, 'mesh:imported:box:standard:solid:white');
+
+    expect(proceduralBatch.geometry.key).toBe('box');
+    expect(importedBatch.geometry.key).toBe('box');
+    expect(proceduralBatch.instanceCount).toBe(1);
+    expect(importedBatch.instanceCount).toBe(1);
+    expect(proceduralBatch.instances).not.toBe(importedBatch.instances);
+    expect(Array.from(proceduralBatch.instances.slice(0, 4))).toEqual([1, 2, 3, 0]);
+    expect(Array.from(importedBatch.instances.slice(0, 4))).toEqual([4, 5, 6, 0]);
+  });
+
+  it('uses stable string instance ids for imported model primitives', async () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const firstModelNode = createElement('model');
+    const secondModelNode = createElement('model');
+    const model: TypeGpuLoadedModel = {
+      key: 'url:/models/multi.glb',
+      meshes: [
+        {
+          geometry: {
+            key: 'url:/models/multi.glb:primitive:0',
+            vertexData: new Float32Array([0, 0, 0, 0, 0, 1, 0, 0]),
+            vertexCount: 1,
+            vertexFloats: 8
+          },
+          material: {
+            kind: 'standard',
+            color: [1, 1, 1, 1],
+            roughness: 0.5,
+            metalness: 0,
+            opacity: 1,
+            map: null
+          },
+          transform: {
+            position: [0, 0, 0],
+            rotation: [0, 0, 0],
+            scale: [1, 1, 1]
+          }
+        },
+        {
+          geometry: {
+            key: 'url:/models/multi.glb:primitive:1',
+            vertexData: new Float32Array([0, 0, 0, 0, 0, 1, 0, 0]),
+            vertexCount: 1,
+            vertexFloats: 8
+          },
+          material: {
+            kind: 'standard',
+            color: [1, 1, 1, 1],
+            roughness: 0.5,
+            metalness: 0,
+            opacity: 1,
+            map: null
+          },
+          transform: {
+            position: [0, 0, 0],
+            rotation: [0, 0, 0],
+            scale: [1, 1, 1]
+          }
+        }
+      ]
+    };
+    const cache = createTypeGpuSceneCache({
+      modelCache: readyModelCache(model)
+    });
+
+    setAttribute(firstModelNode, 'src', '/models/multi.glb');
+    setAttribute(secondModelNode, 'src', '/models/multi.glb');
+    insert(scene, firstModelNode, null);
+    insert(scene, secondModelNode, null);
+    insert(root, scene, null);
+
+    createSceneState(root, cache);
+    await Promise.resolve();
+    const state = createSceneState(root, cache);
+    const firstPrimitiveBatch = drawBatch(
+      state,
+      'mesh:imported:url:/models/multi.glb:primitive:0:standard:solid:white'
+    );
+    const secondPrimitiveBatch = drawBatch(
+      state,
+      'mesh:imported:url:/models/multi.glb:primitive:1:standard:solid:white'
+    );
+
+    expect(firstPrimitiveBatch.instanceIds).toEqual([
+      `model:${firstModelNode.uid}:primitive:0`,
+      `model:${secondModelNode.uid}:primitive:0`
+    ]);
+    expect(secondPrimitiveBatch.instanceIds).toEqual([
+      `model:${firstModelNode.uid}:primitive:1`,
+      `model:${secondModelNode.uid}:primitive:1`
+    ]);
   });
 
   it('stores and dispatches element events', () => {

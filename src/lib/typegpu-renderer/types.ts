@@ -9,6 +9,7 @@ export type TypeGpuProceduralGeometryKind = 'box' | 'sphere';
 export type TypeGpuGeometryKind = TypeGpuProceduralGeometryKind | 'imported';
 export type TypeGpuMaterialKind = 'standard';
 export type TypeGpuLightKind = 'ambient' | 'hemisphere' | 'directional' | 'point' | 'spot';
+export type TypeGpuInstanceId = number | string;
 
 export interface TypeGpuCameraSettings {
   position: Vector3Tuple;
@@ -129,7 +130,7 @@ export interface TypeGpuStandardMaterialDescriptor {
 export type TypeGpuMaterialDescriptor = TypeGpuStandardMaterialDescriptor;
 
 export interface TypeGpuMeshDrawItem {
-  id: number;
+  id: TypeGpuInstanceId;
   revision: number;
   geometry: TypeGpuGeometryDescriptor;
   material: TypeGpuMaterialDescriptor;
@@ -161,7 +162,7 @@ export interface TypeGpuDrawBatch {
   material: TypeGpuMaterialDescriptor;
   floatsPerInstance: number;
   instances: Float32Array;
-  instanceIds: number[];
+  instanceIds: TypeGpuInstanceId[];
   instanceCount: number;
   instancesChanged: boolean;
   dirtyRanges: TypeGpuInstanceDirtyRange[];

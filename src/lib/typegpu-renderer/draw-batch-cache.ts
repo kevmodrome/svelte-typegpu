@@ -8,6 +8,7 @@ import type {
   TypeGpuDrawBatch,
   TypeGpuGeometryData,
   TypeGpuProceduralGeometryKind,
+  TypeGpuInstanceId,
   TypeGpuInstanceDirtyRange,
   TypeGpuMaterialKind,
   TypeGpuMeshDrawItem
@@ -18,7 +19,7 @@ type GeometryBatchKey = TypeGpuProceduralGeometryKind | string;
 type DrawBatchKey = `mesh:${GeometryBatchKey}:${TypeGpuMaterialKind}:${string}`;
 
 interface DrawBatchState {
-  itemIds: number[];
+  itemIds: TypeGpuInstanceId[];
   itemRevisions: number[];
   instances: Float32Array;
 }
@@ -85,7 +86,7 @@ function groupMeshDrawItems(items: TypeGpuMeshDrawItem[]): Map<DrawBatchKey, Typ
 
 function geometryBatchKey(item: TypeGpuMeshDrawItem): GeometryBatchKey {
   return item.geometry.kind === 'imported'
-    ? item.geometry.data.key
+    ? `imported:${item.geometry.data.key}`
     : item.geometry.kind;
 }
 
@@ -140,7 +141,7 @@ function readDrawBatch(
   };
 }
 
-function sameItemIds(next: number[], previous: number[]): boolean {
+function sameItemIds(next: TypeGpuInstanceId[], previous: TypeGpuInstanceId[]): boolean {
   if (next.length !== previous.length) return false;
 
   return next.every((id, index) => id === previous[index]);

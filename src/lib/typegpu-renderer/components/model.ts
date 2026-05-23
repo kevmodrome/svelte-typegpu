@@ -49,7 +49,7 @@ function modelMeshDrawItem(
   index: number
 ): TypeGpuMeshDrawItem {
   return {
-    id: modelNode.uid * 1000 + index,
+    id: `model:${modelNode.uid}:primitive:${index}`,
     revision: combineRevision(baseRevision, null, index),
     geometry: {
       kind: 'imported',
