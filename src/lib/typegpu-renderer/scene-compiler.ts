@@ -543,6 +543,7 @@ function mergeModelMaterial(
   const merged = ensureMaterialDescriptor(base);
   const attrs = node.attributes;
 
+  merged.kind = override.kind;
   if (attrs.color !== undefined) merged.color = override.color;
   if (attrs.roughness !== undefined) merged.roughness = override.roughness;
   if (attrs.metalness !== undefined) merged.metalness = override.metalness;
@@ -715,12 +716,30 @@ function valueRevision(seed: number, values: unknown[]): number {
 }
 
 function hashValue(value: unknown): number {
-  if (typeof value === 'number') return Number.isFinite(value) ? Math.round(value * 100000) : 0;
+  if (typeof value === 'number') return hashNumber(value);
   if (typeof value === 'string') return hashString(value);
   if (typeof value === 'boolean') return value ? 1 : 0;
   if (Array.isArray(value)) return value.reduce((hash, item) => hash * 31 + hashValue(item), 17);
   if (!value || typeof value !== 'object') return 0;
   return hashString(String(value));
+}
+
+function hashNumber(value: number): number {
+  const bytes = new ArrayBuffer(8);
+  const view = new DataView(bytes);
+  view.setFloat64(0, value, true);
+
+  return hashBytes(new Uint8Array(bytes));
+}
+
+function hashBytes(bytes: Uint8Array): number {
+  let hash = 0;
+
+  for (const byte of bytes) {
+    hash = (hash * 31 + byte) | 0;
+  }
+
+  return hash;
 }
 
 function hashString(value: string): number {

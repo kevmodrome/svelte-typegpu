@@ -1,4 +1,5 @@
 import { numberArg } from '../attributes';
+import { transformBounds } from '../bounds';
 import type { TypeGpuNode } from '../core';
 import type { TypeGpuLoadedModelMesh } from '../glb-loader';
 import {
@@ -11,7 +12,9 @@ import { composeTransforms, readLocalTransform } from '../transform';
 import type {
   TypeGpuMaterialDescriptor,
   TypeGpuMeshDrawItem,
-  TypeGpuTransform
+  TypeGpuTransform,
+  RgbaTuple,
+  Vector3Tuple
 } from '../types';
 
 export interface ModelWalkContext {
@@ -58,21 +61,24 @@ function modelMeshDrawItem(
   index: number
 ): TypeGpuMeshDrawItem {
   const material = readModelMaterial(modelNode, mesh.material);
+  const transform = composeTransforms(modelTransform, mesh.transform);
+  const localBounds = mesh.geometry.bounds ?? defaultBounds();
 
   return {
     id: `model:${modelNode.uid}:primitive:${index}`,
+    node: modelNode,
     revision: combineRevision(combineRevision(baseRevision, material.node), null, index),
-    geometry: {
-      kind: 'imported',
-      key: mesh.geometry.key,
-      size: [1, 1, 1],
-      data: mesh.geometry
-    },
+    geometry: mesh.geometry,
     material: material.descriptor,
-    transform: composeTransforms(modelTransform, mesh.transform),
+    transform,
+    bounds: transformBounds(localBounds, transform),
+    color: rgbaArg(modelNode.attributes.color, material.descriptor.color),
     phase: numberArg(modelNode.attributes.phase, 0),
-    spinSpeed: numberArg(modelNode.attributes.spinSpeed, 0)
-  } as unknown as TypeGpuMeshDrawItem;
+    spinSpeed: numberArg(modelNode.attributes.spinSpeed, 0),
+    renderOrder: numberArg(modelNode.attributes.renderOrder, 0),
+    hitTest: hitTestMode(modelNode.attributes.hitTest),
+    pointerEvents: modelNode.attributes.pointerEvents === 'none' ? 'none' : 'auto'
+  };
 }
 
 function readModelMaterial(
@@ -104,4 +110,27 @@ function readModelMaterial(
 function combineRevision(seed: number, node: TypeGpuNode | null, extra = 0): number {
   const nodeRevision = node ? (seed * 31 + node.uid) * 31 + node.revision : seed * 31;
   return nodeRevision * 31 + extra;
+}
+
+function rgbaArg(value: unknown, fallback: RgbaTuple): RgbaTuple {
+  if (!Array.isArray(value)) return [...fallback] as RgbaTuple;
+
+  return [
+    numberArg(value[0], fallback[0]),
+    numberArg(value[1], fallback[1]),
+    numberArg(value[2], fallback[2]),
+    numberArg(value[3], fallback[3])
+  ];
+}
+
+function hitTestMode(value: unknown): 'none' | 'bounds' | 'mesh' {
+  if (value === 'none' || value === 'mesh') return value;
+  return 'bounds';
+}
+
+function defaultBounds() {
+  return {
+    min: [-0.5, -0.5, -0.5] as Vector3Tuple,
+    max: [0.5, 0.5, 0.5] as Vector3Tuple
+  };
 }

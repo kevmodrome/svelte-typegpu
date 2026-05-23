@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { readModelDrawItems as readLegacyModelDrawItems } from './components/model';
 import { addEventListener, createElement, createFragment, insert, setAttribute } from './core';
 import { Dirty, hasDirty } from './dirty';
 import type { TypeGpuLoadedModel } from './glb-loader';
-import { createModelCache } from './model-cache';
+import { createModelCache, type TypeGpuModelCache } from './model-cache';
 import { createSceneState, createTypeGpuSceneCache } from './scene-compiler';
+import { IDENTITY_TRANSFORM } from './transform';
 
 describe('TypeGPU scene compiler', () => {
   it('compiles render settings, camera, lights, draw batches, interaction, and live keys', () => {
@@ -285,6 +287,34 @@ describe('TypeGPU scene compiler', () => {
     expect(second.drawBatches[0].instances[20]).toBe(4);
   });
 
+  it('re-packs instancedMesh dirty ranges for tiny callback-derived position changes', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const geometry = createElement('boxGeometry');
+    const instanced = createElement('instancedMesh');
+    const cache = createTypeGpuSceneCache();
+    const instances = [{ id: 'a', position: [0, 0, 0] as [number, number, number] }];
+
+    setAttribute(instanced, 'instances', instances);
+    setAttribute(instanced, 'getKey', (item: (typeof instances)[number]) => item.id);
+    setAttribute(instanced, 'getTransform', (item: (typeof instances)[number]) => ({
+      position: item.position
+    }));
+
+    insert(instanced, geometry, null);
+    insert(scene, instanced, null);
+    insert(root, scene, null);
+
+    const first = createSceneState(root, cache, { dirty: Dirty.All });
+    instances[0].position = [0.000004, 0, 0];
+    const second = createSceneState(root, cache, { dirty: Dirty.InstanceData });
+
+    expect(second.drawBatches[0].instances).toBe(first.drawBatches[0].instances);
+    expect(second.drawBatches[0].instancesChanged).toBe(true);
+    expect(second.drawBatches[0].dirtyRanges).toEqual([{ start: 0, count: 1 }]);
+    expect(second.drawBatches[0].instances[0]).toBeCloseTo(0.000004);
+  });
+
   it('compiles ready model cache entries into imported draw batches', async () => {
     const root = createFragment();
     const scene = createElement('scene');
@@ -340,6 +370,54 @@ describe('TypeGPU scene compiler', () => {
     expect(state.drawBatches[0].geometry.kind).toBe('imported');
     expect(state.drawBatches[0].instanceCount).toBe(1);
     expect(Array.from(state.drawBatches[0].instances.slice(0, 3))).toEqual([3, 4, 5]);
+  });
+
+  it('uses basic material kind when a basicMaterial child overrides a loaded model material', async () => {
+    const { state } = await compileLoadedModelWithMaterialChild('basicMaterial');
+
+    expect(state.drawBatches[0].material.kind).toBe('basic');
+    expect(state.drawBatches[0].pipelineKey).toContain('material:basic');
+    expect(state.drawBatches[0].materialKey).toContain('material:basic');
+  });
+
+  it('uses phong material kind when a phongMaterial child overrides a loaded model material', async () => {
+    const { state } = await compileLoadedModelWithMaterialChild('phongMaterial');
+
+    expect(state.drawBatches[0].material.kind).toBe('phong');
+    expect(state.drawBatches[0].pipelineKey).toContain('material:phong');
+    expect(state.drawBatches[0].materialKey).toContain('material:phong');
+  });
+
+  it('legacy model component draw items use current geometry and interaction shape', () => {
+    const model = createElement('model');
+    const loaded = loadedModelFixture('url:/models/legacy.glb');
+    const cache: TypeGpuModelCache = {
+      read: () => ({ status: 'ready', model: loaded, revision: 7 })
+    };
+
+    setAttribute(model, 'position', [2, 3, 4]);
+    setAttribute(model, 'color', [0.2, 0.3, 0.4, 0.5]);
+    setAttribute(model, 'renderOrder', 5);
+    setAttribute(model, 'hitTest', 'mesh');
+    setAttribute(model, 'pointerEvents', 'none');
+
+    const [item] = readLegacyModelDrawItems(
+      model,
+      { transform: IDENTITY_TRANSFORM, revision: 1 },
+      cache
+    );
+
+    expect(item).toMatchObject({
+      id: `model:${model.uid}:primitive:0`,
+      node: model,
+      geometry: loaded.meshes[0].geometry,
+      bounds: { min: [2, 3, 4], max: [3, 4, 5] },
+      color: [0.2, 0.3, 0.4, 0.5],
+      renderOrder: 5,
+      hitTest: 'mesh',
+      pointerEvents: 'none'
+    });
+    expect(item.geometry.vertexData).toBe(loaded.meshes[0].geometry.vertexData);
   });
 
   it('preserves loaded model textures when material children override only color', async () => {
@@ -402,3 +480,63 @@ describe('TypeGPU scene compiler', () => {
     });
   });
 });
+
+async function compileLoadedModelWithMaterialChild(materialName: string) {
+  const root = createFragment();
+  const scene = createElement('scene');
+  const model = createElement('model');
+  const material = createElement(materialName);
+  const loaded = loadedModelFixture(`url:/models/${materialName}.glb`);
+  const cache = createTypeGpuSceneCache({
+    modelCache: createModelCache({
+      loadUrl: async () => loaded,
+      loadData: async () => loaded
+    })
+  });
+
+  setAttribute(model, 'src', `/models/${materialName}.glb`);
+  setAttribute(material, 'color', [0.2, 0.3, 0.4, 1]);
+  insert(model, material, null);
+  insert(scene, model, null);
+  insert(root, scene, null);
+
+  createSceneState(root, cache, { dirty: Dirty.All });
+  await Promise.resolve();
+
+  return {
+    state: createSceneState(root, cache, { dirty: Dirty.All })
+  };
+}
+
+function loadedModelFixture(key: string): TypeGpuLoadedModel {
+  return {
+    key,
+    meshes: [
+      {
+        geometry: {
+          key: `${key}:primitive:0`,
+          kind: 'imported',
+          vertexData: new Float32Array([0, 0, 0, 0, 1, 0, 0, 0]),
+          vertexCount: 1,
+          vertexFloats: 8,
+          bounds: { min: [0, 0, 0], max: [1, 1, 1] },
+          topology: 'triangle-list',
+          layoutKey: 'pnu8'
+        },
+        material: {
+          kind: 'standard',
+          color: [1, 1, 1, 1],
+          roughness: 0.6,
+          metalness: 0.1,
+          opacity: 1,
+          map: null
+        },
+        transform: {
+          position: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [1, 1, 1]
+        }
+      }
+    ]
+  };
+}
