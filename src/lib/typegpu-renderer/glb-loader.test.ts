@@ -464,6 +464,38 @@ describe('GLB loader', () => {
     expect(Array.from(model.meshes[0].geometry.vertexData.slice(3, 6))).toEqual([0, 1, 0]);
   });
 
+  it('uses inverse-transpose normals for non-uniform node scale', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const normals = float32Bytes([1, 1, 0, 1, 1, 0, 1, 1, 0]);
+    const binary = concatBytes([positions, normals]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0, scale: [2, 1, 1] }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0, NORMAL: 1 } }] }],
+          buffers: [{ byteLength: binary.byteLength }],
+          bufferViews: [
+            { buffer: 0, byteOffset: 0, byteLength: positions.byteLength },
+            { buffer: 0, byteOffset: positions.byteLength, byteLength: normals.byteLength }
+          ],
+          accessors: [
+            { bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' },
+            { bufferView: 1, componentType: 5126, count: 3, type: 'VEC3' }
+          ]
+        },
+        binary
+      ),
+      'model:scaled-normals'
+    );
+
+    const normal = Array.from(model.meshes[0].geometry.vertexData.slice(3, 6));
+    expect(normal[0]).toBeCloseTo(0.4472136, 6);
+    expect(normal[1]).toBeCloseTo(0.8944272, 6);
+    expect(normal[2]).toBe(0);
+  });
+
   it('reverses emitted winding for mirrored node transforms', () => {
     const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
     const model = loadGlbModel(
@@ -565,6 +597,30 @@ describe('GLB loader', () => {
       roughness: 1,
       metalness: 1,
       opacity: 1
+    });
+  });
+
+  it('uses glTF metallic-roughness defaults when primitive material is omitted', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0 }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+          buffers: [{ byteLength: positions.byteLength }],
+          bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: positions.byteLength }],
+          accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' }]
+        },
+        positions
+      ),
+      'model:no-material'
+    );
+
+    expect(model.meshes[0].material).toMatchObject({
+      roughness: 1,
+      metalness: 1
     });
   });
 

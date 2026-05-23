@@ -432,8 +432,8 @@ function readMaterial(
     color: color?.length === 4
       ? [color[0] ?? 1, color[1] ?? 1, color[2] ?? 1, color[3] ?? 1]
       : [...DEFAULT_STANDARD_MATERIAL.color],
-    roughness: material ? pbr?.roughnessFactor ?? 1 : DEFAULT_STANDARD_MATERIAL.roughness,
-    metalness: material ? pbr?.metallicFactor ?? 1 : DEFAULT_STANDARD_MATERIAL.metalness,
+    roughness: pbr?.roughnessFactor ?? 1,
+    metalness: pbr?.metallicFactor ?? 1,
     opacity: 1,
     map: readEmbeddedTextureSource(container, modelKey, pbr?.baseColorTexture?.index)
   };
