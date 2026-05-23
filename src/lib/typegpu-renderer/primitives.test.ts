@@ -145,11 +145,48 @@ describe('TypeGPU primitive descriptors', () => {
     expectExactDirty(dirtyForAttribute('point-light', 'position', [0, 0, 0], [1, 2, 3]), Dirty.Lights);
   });
 
-  it('returns no dirtiness when values are Object.is-equal', () => {
+  it('returns no dirtiness when stable scalar values are Object.is-equal', () => {
     const material = { color: [1, 1, 1, 1] };
 
-    expectExactDirty(dirtyForAttribute('standardMaterial', 'material', material, material), Dirty.None);
+    expectExactDirty(dirtyForAttribute('scene', 'activeCamera', 'main', 'main'), Dirty.None);
     expectExactDirty(dirtyForAttribute('mesh', 'phase', Number.NaN, Number.NaN), Dirty.None);
+    expectExactDirty(dirtyForAttribute('mesh', 'visible', true, true), Dirty.None);
+    expectExactDirty(
+      dirtyForAttribute('standardMaterial', 'material', material, material),
+      Dirty.Material,
+      Dirty.MaterialUniform,
+      Dirty.Texture,
+      Dirty.BindGroup,
+      Dirty.Pipeline,
+      Dirty.DrawBatches
+    );
+  });
+
+  it('does not suppress mutable dirty-relevant values with the same reference', () => {
+    const position = [0, 0, 0];
+    const material = { color: [1, 1, 1, 1] };
+    const accessor = () => null;
+
+    expectExactDirty(
+      dirtyForAttribute('mesh', 'position', position, position),
+      Dirty.Transform,
+      Dirty.InstanceData,
+      Dirty.Interaction
+    );
+    expectExactDirty(
+      dirtyForAttribute('standardMaterial', 'material', material, material),
+      Dirty.Material,
+      Dirty.MaterialUniform,
+      Dirty.Texture,
+      Dirty.BindGroup,
+      Dirty.Pipeline,
+      Dirty.DrawBatches
+    );
+    expectExactDirty(
+      dirtyForAttribute('instancedMesh', 'getTransform', accessor, accessor),
+      Dirty.InstanceData,
+      Dirty.Interaction
+    );
   });
 
   it('bridges transitional camera control nodes to camera dirtiness', () => {
@@ -161,22 +198,40 @@ describe('TypeGPU primitive descriptors', () => {
   });
 
   it('marks geometry, material, texture, and pipeline-affecting attributes distinctly', () => {
-    expect(hasDirty(dirtyForAttribute('boxGeometry', 'width', 1, 2), Dirty.Geometry)).toBe(true);
-    expect(hasDirty(dirtyForAttribute('boxGeometry', 'width', 1, 2), Dirty.DrawBatches)).toBe(true);
-    expect(
-      hasDirty(
-        dirtyForAttribute('phongMaterial', 'color', [1, 1, 1, 1], [1, 0, 0, 1]),
-        Dirty.MaterialUniform
-      )
-    ).toBe(true);
-    expect(hasDirty(dirtyForAttribute('phongMaterial', 'map', '/a.png', '/b.png'), Dirty.Texture)).toBe(
-      true
+    expectExactDirty(
+      dirtyForAttribute('boxGeometry', 'width', 1, 2),
+      Dirty.Geometry,
+      Dirty.DrawBatches,
+      Dirty.Interaction
     );
-    expect(
-      hasDirty(dirtyForAttribute('phongMaterial', 'map', '/a.png', '/b.png'), Dirty.BindGroup)
-    ).toBe(true);
-    expect(hasDirty(dirtyForAttribute('standardMaterial', 'transparent', false, true), Dirty.Pipeline)).toBe(
-      true
+    expectExactDirty(
+      dirtyForAttribute('phongMaterial', 'color', [1, 1, 1, 1], [1, 0, 0, 1]),
+      Dirty.MaterialUniform
+    );
+    expectExactDirty(
+      dirtyForAttribute('phongMaterial', 'map', '/a.png', '/b.png'),
+      Dirty.Material,
+      Dirty.Texture,
+      Dirty.BindGroup,
+      Dirty.DrawBatches
+    );
+    expectExactDirty(
+      dirtyForAttribute('standardMaterial', 'transparent', false, true),
+      Dirty.Material,
+      Dirty.Pipeline,
+      Dirty.DrawBatches
+    );
+    expectExactDirty(
+      dirtyForAttribute('texture', 'src', '/a.png', '/b.png'),
+      Dirty.Texture,
+      Dirty.BindGroup,
+      Dirty.DrawBatches
+    );
+    expectExactDirty(
+      dirtyForAttribute('sampler', 'minFilter', 'nearest', 'linear'),
+      Dirty.Sampler,
+      Dirty.BindGroup,
+      Dirty.DrawBatches
     );
   });
 
@@ -191,6 +246,11 @@ describe('TypeGPU primitive descriptors', () => {
       Dirty.BindGroup,
       Dirty.DrawBatches
     );
+    expectExactDirty(dirtyForInsert('cameraPose'), Dirty.Tree, Dirty.Camera);
+    expectExactDirty(dirtyForRemove('cameraLens'), Dirty.Tree, Dirty.Camera);
+    expectExactDirty(dirtyForInsert('controls'), Dirty.Tree, Dirty.Camera);
+    expectExactDirty(dirtyForRemove('pointerControls'), Dirty.Tree, Dirty.Camera);
+    expectExactDirty(dirtyForInsert('keyboardControls'), Dirty.Tree, Dirty.Camera);
     expect(hasDirty(dirtyForEventListener('mesh', 'click'), Dirty.Interaction)).toBe(true);
     expect(hasDirty(dirtyForEventListener('mesh', 'keydown'), Dirty.Interaction)).toBe(false);
   });

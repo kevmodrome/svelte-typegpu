@@ -119,7 +119,7 @@ export function dirtyForAttribute(
   previous: unknown,
   next: unknown
 ): Dirty {
-  if (Object.is(previous, next)) return Dirty.None;
+  if (sameStableScalar(previous, next)) return Dirty.None;
 
   const name = normalizePrimitiveName(nodeName ?? '');
 
@@ -228,6 +228,7 @@ function dirtyForTreeChange(nodeName: string | undefined): Dirty {
   if (name === 'perspectiveCamera' || name === 'orthographicCamera' || name === 'orbitControls') {
     return mergeDirty(Dirty.Tree, Dirty.Camera);
   }
+  if (cameraBridgeAttributes.has(name)) return mergeDirty(Dirty.Tree, Dirty.Camera);
   if (lightNames.has(name)) return mergeDirty(Dirty.Tree, Dirty.Lights);
   if (geometryNames.has(name)) {
     return mergeDirty(Dirty.Tree, Dirty.Geometry, Dirty.DrawBatches, Dirty.Interaction);
@@ -240,4 +241,20 @@ function dirtyForTreeChange(nodeName: string | undefined): Dirty {
   }
 
   return Dirty.Tree;
+}
+
+function sameStableScalar(previous: unknown, next: unknown): boolean {
+  return isStableScalar(previous) && isStableScalar(next) && Object.is(previous, next);
+}
+
+function isStableScalar(value: unknown): boolean {
+  return (
+    value === null ||
+    value === undefined ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'symbol' ||
+    typeof value === 'bigint'
+  );
 }
