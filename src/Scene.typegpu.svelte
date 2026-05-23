@@ -49,6 +49,10 @@
       onShapeClick();
     }
   }
+
+  function handleCameraChange(event: CustomEvent<CameraChangeDetail>) {
+    onCameraChange(event.detail);
+  }
 </script>
 
 <scene
@@ -74,6 +78,7 @@
     maxDistance={100}
     rotateSpeed={controls.mouseSensitivity}
     zoomSpeed={1}
+    oncamerachange={handleCameraChange}
   ></orbitControls>
 
   <resources>

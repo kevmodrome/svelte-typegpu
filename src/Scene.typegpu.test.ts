@@ -4,7 +4,11 @@ import * as svelteClient from 'svelte/internal/client';
 import { describe, expect, it, vi } from 'vitest';
 import { createCubeField, sceneCameraForCount } from './lib/cube-field';
 import { demoColorForIndex } from './lib/demo-colors';
-import { DEFAULT_SCENE_CONTROLS, type SceneControls } from './lib/scene-controls';
+import {
+  DEFAULT_SCENE_CONTROLS,
+  type CameraChangeDetail,
+  type SceneControls
+} from './lib/scene-controls';
 import {
   createFragment,
   dispatchNodeEvent,
@@ -36,6 +40,7 @@ describe('TypeGPU demo scene authoring API', () => {
     const root = createFragment();
     const Scene = loadTypeGpuSceneComponent(source);
     const onShapeClick = vi.fn();
+    const onCameraChange = vi.fn();
     const controls: SceneControls = {
       ...DEFAULT_SCENE_CONTROLS,
       spinSpeed: 1.25,
@@ -52,7 +57,7 @@ describe('TypeGPU demo scene authoring API', () => {
 
     renderer.render(Scene, {
       target: root,
-      props: { controls, onShapeClick }
+      props: { controls, onShapeClick, onCameraChange }
     });
 
     const scene = onlyElement(root, 'scene');
@@ -160,8 +165,24 @@ describe('TypeGPU demo scene authoring API', () => {
 
     dispatchNodeEvent(meshes[0], 'click');
     dispatchNodeEvent(meshes[1], 'keydown', { key: 'Enter' } as never);
+    const cameraChange: CameraChangeDetail = {
+      camera: {
+        position: [2, 3, 4],
+        target: [0, 0, 0],
+        fov: 50,
+        near: 0.2,
+        far: 400
+      },
+      orbit: {
+        radius: 6,
+        yaw: 0.25,
+        pitch: 0.1
+      }
+    };
+    dispatchNodeEvent(orbitControls, 'camerachange', { detail: cameraChange });
 
     expect(onShapeClick).toHaveBeenCalledTimes(2);
+    expect(onCameraChange).toHaveBeenCalledWith(cameraChange);
   });
 });
 

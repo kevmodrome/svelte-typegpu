@@ -10,7 +10,9 @@ import {
 import type { TypeGpuRenderer } from './gpu-renderer';
 import type {
   TypeGpuCameraSettings,
+  TypeGpuCameraController,
   TypeGpuKeyboardControls,
+  TypeGpuOrbitCameraController,
   TypeGpuPointerControls,
   TypeGpuPointerDragButton,
   TypeGpuSceneState
@@ -252,6 +254,7 @@ export function createCameraInteractionController({
     if (
       !activePointerControls ||
       !orbit ||
+      activePointerControls.rotateSpeed <= 0 ||
       mouseEvent.button !== buttonNumber(activePointerControls.dragButton)
     ) {
       return;
@@ -283,8 +286,11 @@ export function createCameraInteractionController({
     const dx = mouseEvent.clientX - previousPointerPosition.x;
     const dy = mouseEvent.clientY - previousPointerPosition.y;
     previousPointerPosition = { x: mouseEvent.clientX, y: mouseEvent.clientY };
-    orbit = rotateCamera(orbit, activeScene, dx, dy, activePointerControls.rotateSpeed);
-    queueCameraUpdate(mouseEvent);
+    const nextOrbit = rotateCamera(orbit, activeScene, dx, dy, activePointerControls.rotateSpeed);
+    if (!orbitStateEqual(orbit, nextOrbit)) {
+      orbit = nextOrbit;
+      queueCameraUpdate(mouseEvent);
+    }
   };
 
   const onMouseUp = (event: Event) => {
@@ -573,11 +579,13 @@ export function createCameraInteractionController({
       if (disposed) return;
 
       const cameraController = nextScene.cameraController;
+      const activeControls = activeInputControlsFor(cameraController);
       if (
         nextScene.cameraNode !== null &&
         nextScene.cameraControllerNode !== null &&
-        cameraController?.kind === 'controls' &&
-        (cameraController.pointer !== null || cameraController.keyboard !== null)
+        cameraController !== null &&
+        activeControls !== null &&
+        (activeControls.pointer !== null || activeControls.keyboard !== null)
       ) {
         const sameCameraState =
           activeScene !== null && hasSameInteractiveCameraState(activeScene, nextScene);
@@ -589,21 +597,21 @@ export function createCameraInteractionController({
         }
 
         activeScene = nextScene;
-        activePointerControls = cameraController.pointer;
-        activeKeyboardControls = cameraController.keyboard;
+        activePointerControls = activeControls.pointer;
+        activeKeyboardControls = activeControls.keyboard;
         if (!sameCameraState || !framePending) {
           orbit = deriveOrbitState(nextScene.camera, {
             minDistance: cameraController.minDistance,
             maxDistance: cameraController.maxDistance
           });
         }
-        if (cameraController.pointer) {
+        if (activeControls.pointer) {
           attachPointer();
         } else {
           detachPointer();
         }
 
-        if (cameraController.keyboard) {
+        if (activeControls.keyboard) {
           attachKeyboard();
         } else {
           detachKeyboard();
@@ -653,15 +661,88 @@ function hasSameInteractiveCameraState(
     previous.cameraNode === next.cameraNode &&
     previous.cameraControllerNode === next.cameraControllerNode &&
     cameraSettingsEqual(previous.camera, next.camera) &&
-    previous.cameraController?.kind === 'controls' &&
-    next.cameraController?.kind === 'controls' &&
-    previous.cameraController.mode === next.cameraController.mode &&
-    previous.cameraController.minDistance === next.cameraController.minDistance &&
-    previous.cameraController.maxDistance === next.cameraController.maxDistance &&
-    previous.cameraController.invert === next.cameraController.invert &&
-    pointerControlsEqual(previous.cameraController.pointer, next.cameraController.pointer) &&
-    keyboardControlsEqual(previous.cameraController.keyboard, next.cameraController.keyboard)
+    cameraControllersEqual(previous.cameraController, next.cameraController)
   );
+}
+
+function activeInputControlsFor(
+  controller: TypeGpuCameraController | null
+): {
+  pointer: TypeGpuPointerControls | null;
+  keyboard: TypeGpuKeyboardControls | null;
+} | null {
+  if (!controller) return null;
+
+  if (controller.kind === 'controls') {
+    return {
+      pointer: controller.pointer,
+      keyboard: controller.keyboard
+    };
+  }
+
+  if (!controller.enabled) return null;
+
+  const pointer = pointerControlsForOrbitController(controller);
+
+  return {
+    pointer,
+    keyboard: null
+  };
+}
+
+function pointerControlsForOrbitController(
+  controller: TypeGpuOrbitCameraController
+): TypeGpuPointerControls | null {
+  if (!controller.enableRotate && !controller.enableZoom) return null;
+
+  return {
+    dragButton: 'primary',
+    rotateSpeed: controller.enableRotate ? controller.rotateSpeed : 0,
+    wheel: controller.enableZoom ? 'zoom' : 'none',
+    zoomSpeed: controller.zoomSpeed,
+    touch:
+      controller.enableRotate && controller.enableZoom
+        ? 'orbit-pinch'
+        : controller.enableRotate
+          ? 'orbit'
+          : 'pinch'
+  };
+}
+
+function cameraControllersEqual(
+  previous: TypeGpuCameraController | null,
+  next: TypeGpuCameraController | null
+): boolean {
+  if (previous === next) return true;
+  if (!previous || !next || previous.kind !== next.kind) return false;
+
+  if (previous.kind === 'controls' && next.kind === 'controls') {
+    return (
+      previous.mode === next.mode &&
+      previous.minDistance === next.minDistance &&
+      previous.maxDistance === next.maxDistance &&
+      previous.invert === next.invert &&
+      pointerControlsEqual(previous.pointer, next.pointer) &&
+      keyboardControlsEqual(previous.keyboard, next.keyboard)
+    );
+  }
+
+  if (previous.kind === 'orbit' && next.kind === 'orbit') {
+    return (
+      previous.camera === next.camera &&
+      previous.enabled === next.enabled &&
+      vectorEqual(previous.target, next.target) &&
+      previous.minDistance === next.minDistance &&
+      previous.maxDistance === next.maxDistance &&
+      previous.enablePan === next.enablePan &&
+      previous.enableZoom === next.enableZoom &&
+      previous.enableRotate === next.enableRotate &&
+      previous.rotateSpeed === next.rotateSpeed &&
+      previous.zoomSpeed === next.zoomSpeed
+    );
+  }
+
+  return false;
 }
 
 function cameraSettingsEqual(
@@ -807,16 +888,17 @@ function rotateCamera(
   rotateSpeed: number
 ): TypeGpuOrbitState {
   const controller = scene.cameraController;
-  if (!controller || controller.kind !== 'controls') return orbit;
+  if (!controller) return orbit;
+  if (controller.kind === 'orbit' && !controller.enableRotate) return orbit;
 
   const rotated = rotateOrbit(orbit, dx, dy, {
     minDistance: controller.minDistance,
     maxDistance: controller.maxDistance,
-    invert: controller.invert,
+    invert: controller.kind === 'controls' ? controller.invert : false,
     rotateSpeed
   });
 
-  if (controller.mode === 'fly') {
+  if (controller.kind === 'controls' && controller.mode === 'fly') {
     return pinOrbitToCameraPosition(rotated, cameraFromOrbit(orbit, scene.camera).position);
   }
 

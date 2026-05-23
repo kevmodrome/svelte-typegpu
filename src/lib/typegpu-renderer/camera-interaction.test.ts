@@ -11,6 +11,7 @@ import type {
   TypeGpuKeyboardControls,
   TypeGpuCameraSettings,
   TypeGpuControlsController,
+  TypeGpuOrbitCameraController,
   TypeGpuPointerControls,
   TypeGpuSceneState
 } from './types';
@@ -114,7 +115,7 @@ function sceneState({
   cameraSettings?: TypeGpuCameraSettings;
   cameraNode?: TypeGpuNode | null;
   cameraControllerNode?: TypeGpuNode | null;
-  controller?: 'orbit' | 'fly' | null;
+  controller?: 'orbit' | 'fly' | TypeGpuOrbitCameraController | null;
   pointer?: TypeGpuPointerControls | null | true;
   keyboard?: TypeGpuKeyboardControls | null | true;
 } = {}): TypeGpuSceneState {
@@ -124,7 +125,9 @@ function sceneState({
     cameraNode,
     cameraControllerNode,
     cameraController:
-      controller !== null
+      typeof controller === 'object'
+        ? controller
+        : controller !== null
         ? {
             kind: 'controls',
             mode: controller,
@@ -174,6 +177,25 @@ function fakeRenderer(): { setCamera: SetCameraMock } {
 
 function fakeCanvas(): FakeEventTarget & { clientHeight: number } {
   return Object.assign(new FakeEventTarget(), { clientHeight: 600 });
+}
+
+function directOrbitControls(
+  overrides: Partial<TypeGpuOrbitCameraController> = {}
+): TypeGpuOrbitCameraController {
+  return {
+    kind: 'orbit',
+    camera: 'main',
+    enabled: true,
+    target: [0, 0, 0],
+    minDistance: 1,
+    maxDistance: 100,
+    enablePan: true,
+    enableZoom: true,
+    enableRotate: true,
+    rotateSpeed: 1,
+    zoomSpeed: 1,
+    ...overrides
+  };
 }
 
 function fakeFocusableCanvas(): FakeEventTarget & {
@@ -275,6 +297,141 @@ describe('TypeGPU camera interaction controller', () => {
     expect(canvas.listenerOptions('touchmove')).toEqual({ passive: false });
     expect(windowTarget.listenerOptions('mousemove')).toEqual({ passive: false });
     expect(windowTarget.listenerOptions('touchmove')).toEqual({ passive: false });
+  });
+
+  it('attaches pointer listeners for direct orbit controls', () => {
+    const canvas = new FakeEventTarget();
+    const windowTarget = new FakeEventTarget();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer: fakeRenderer(),
+      windowTarget: windowTarget as unknown as Window
+    });
+
+    controller.reconcile(
+      sceneState({
+        controller: directOrbitControls({
+          rotateSpeed: 1.5,
+          zoomSpeed: 0.75
+        })
+      })
+    );
+
+    expect(canvas.listenerCount('wheel')).toBe(1);
+    expect(canvas.listenerCount('mousedown')).toBe(1);
+    expect(windowTarget.listenerCount('mousemove')).toBe(1);
+  });
+
+  it('does not attach input listeners for disabled direct orbit controls', () => {
+    const canvas = new FakeEventTarget();
+    const windowTarget = new FakeEventTarget();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer: fakeRenderer(),
+      windowTarget: windowTarget as unknown as Window
+    });
+
+    controller.reconcile(
+      sceneState({
+        controller: directOrbitControls({ enabled: false })
+      })
+    );
+
+    expect(canvas.listenerCount()).toBe(0);
+    expect(windowTarget.listenerCount()).toBe(0);
+  });
+
+  it('zooms from direct orbit controls and dispatches camerachange from the orbit node', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const orbitNode = createElement('orbitControls');
+    const cameraChanges: unknown[] = [];
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    addEventListener(orbitNode, 'camerachange', (event) => {
+      cameraChanges.push(event);
+    });
+
+    const scene = sceneState({
+      cameraControllerNode: orbitNode,
+      controller: directOrbitControls({
+        minDistance: 3,
+        maxDistance: 6,
+        rotateSpeed: 1.25,
+        zoomSpeed: 2
+      })
+    });
+    controller.reconcile(scene);
+    const wheelEvent = canvas.dispatch<WheelEvent>('wheel', {
+      deltaY: 120,
+      deltaMode: 0,
+      preventDefault: vi.fn()
+    } as Partial<WheelEvent>);
+
+    expect(wheelEvent.preventDefault).toHaveBeenCalledOnce();
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+    const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+    expect(nextCamera.position[2]).toBe(6);
+    expect(cameraChanges).toHaveLength(1);
+    expect(cameraChanges[0]).toMatchObject({
+      target: orbitNode,
+      originalEvent: wheelEvent,
+      detail: {
+        camera: nextCamera,
+        orbit: {
+          radius: 6,
+          yaw: expect.any(Number),
+          pitch: expect.any(Number)
+        }
+      }
+    });
+  });
+
+  it('honors disabled direct orbit rotation while keeping wheel zoom active', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    controller.reconcile(
+      sceneState({
+        controller: directOrbitControls({
+          enableRotate: false,
+          enableZoom: true
+        })
+      })
+    );
+    canvas.dispatch<MouseEvent>('mousedown', { button: 0, clientX: 10, clientY: 20 } as Partial<
+      MouseEvent
+    >);
+    windowTarget.dispatch<MouseEvent>('mousemove', {
+      buttons: 1,
+      clientX: 110,
+      clientY: 20
+    } as Partial<MouseEvent>);
+
+    expect(renderer.setCamera).not.toHaveBeenCalled();
+
+    canvas.dispatch<WheelEvent>('wheel', { deltaY: 60, deltaMode: 0 } as Partial<WheelEvent>);
+
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
   });
 
   it('attaches scoped canvas listeners for active keyboard controls', () => {
