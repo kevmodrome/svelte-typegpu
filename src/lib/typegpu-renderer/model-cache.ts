@@ -44,34 +44,32 @@ export function createModelCache({
   return {
     read(request) {
       if (request.data instanceof ArrayBuffer) {
-        const existing = data.get(request.data);
+        const buffer = request.data;
+        const existing = data.get(buffer);
         if (existing) return existing;
 
         const key = `data:${nextDataKey++}`;
         const loading: TypeGpuModelCacheEntry = { status: 'loading' };
-        data.set(request.data, loading);
-        void loadData(request.data, key)
-          .then((model) =>
-            settleData(request.data as ArrayBuffer, { status: 'ready', model, revision: revision++ })
-          )
-          .catch((error: unknown) =>
-            settleData(request.data as ArrayBuffer, { status: 'failed', error, revision: revision++ })
+        data.set(buffer, loading);
+        void loadData(buffer, key).then(
+          (model) => settleData(buffer, { status: 'ready', model, revision: revision++ }),
+          (error: unknown) =>
+            settleData(buffer, { status: 'failed', error, revision: revision++ })
           );
         return loading;
       }
 
       if (typeof request.src === 'string' && request.src.length > 0) {
-        const existing = urls.get(request.src);
+        const src = request.src;
+        const existing = urls.get(src);
         if (existing) return existing;
 
         const loading: TypeGpuModelCacheEntry = { status: 'loading' };
-        urls.set(request.src, loading);
-        void loadUrl(request.src)
-          .then((model) =>
-            settleUrl(request.src as string, { status: 'ready', model, revision: revision++ })
-          )
-          .catch((error: unknown) =>
-            settleUrl(request.src as string, { status: 'failed', error, revision: revision++ })
+        urls.set(src, loading);
+        void loadUrl(src).then(
+          (model) => settleUrl(src, { status: 'ready', model, revision: revision++ }),
+          (error: unknown) =>
+            settleUrl(src, { status: 'failed', error, revision: revision++ })
           );
         return loading;
       }
