@@ -6,7 +6,6 @@ import { createSphereGeometryData } from './sphere-data';
 import type {
   TypeGpuDrawBatch,
   TypeGpuGeometryData,
-  TypeGpuGeometryKind,
   TypeGpuProceduralGeometryKind,
   TypeGpuInstanceDirtyRange,
   TypeGpuMaterialKind,
@@ -14,7 +13,8 @@ import type {
 } from './types';
 import type { TypeGpuNode } from './core';
 
-type DrawBatchKey = `mesh:${TypeGpuGeometryKind}:${TypeGpuMaterialKind}:${string}`;
+type GeometryBatchKey = TypeGpuProceduralGeometryKind | `imported:${string}`;
+type DrawBatchKey = `mesh:${GeometryBatchKey}:${TypeGpuMaterialKind}:${string}`;
 
 interface DrawBatchState {
   itemIds: number[];
@@ -69,7 +69,7 @@ function groupMeshDrawItems(items: TypeGpuMeshDrawItem[]): Map<DrawBatchKey, Typ
   const groupedItems = new Map<DrawBatchKey, TypeGpuMeshDrawItem[]>();
 
   for (const item of items) {
-    const key: DrawBatchKey = `mesh:${item.geometry.kind}:${item.material.kind}:${textureKeyForMaterial(item.material)}`;
+    const key: DrawBatchKey = `mesh:${geometryBatchKey(item)}:${item.material.kind}:${textureKeyForMaterial(item.material)}`;
     const group = groupedItems.get(key);
 
     if (group) {
@@ -80,6 +80,12 @@ function groupMeshDrawItems(items: TypeGpuMeshDrawItem[]): Map<DrawBatchKey, Typ
   }
 
   return groupedItems;
+}
+
+function geometryBatchKey(item: TypeGpuMeshDrawItem): GeometryBatchKey {
+  return item.geometry.kind === 'imported'
+    ? `imported:${item.geometry.data.key}`
+    : item.geometry.kind;
 }
 
 function readDrawBatch(
