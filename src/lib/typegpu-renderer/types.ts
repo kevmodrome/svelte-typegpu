@@ -9,8 +9,9 @@ export type RgbaTuple = [number, number, number, number];
 export const MAX_TYPEGPU_LIGHTS = 32;
 
 export type TypeGpuProceduralGeometryKind = 'box' | 'sphere';
-export type TypeGpuGeometryKind = TypeGpuProceduralGeometryKind | 'imported';
-export type TypeGpuMaterialKind = 'standard';
+export type TypeGpuGeometryKind = 'box' | 'plane' | 'sphere' | 'buffer' | 'imported';
+export type TypeGpuMaterialKind = 'basic' | 'phong' | 'standard';
+export type TypeGpuPrimitiveTopology = 'triangle-list';
 export type TypeGpuLightKind = 'ambient' | 'hemisphere' | 'directional' | 'point' | 'spot';
 export type TypeGpuInstanceId = number | string;
 
@@ -121,9 +122,13 @@ export interface TypeGpuInstanceDirtyRange {
 
 export interface TypeGpuGeometryData {
   key: string;
+  kind?: TypeGpuGeometryKind;
   vertexData: Float32Array;
   vertexCount: number;
   vertexFloats: number;
+  bounds?: TypeGpuBounds;
+  topology?: TypeGpuPrimitiveTopology;
+  layoutKey?: string;
 }
 
 export interface TypeGpuProceduralGeometryDescriptor {
@@ -160,7 +165,9 @@ export interface TypeGpuRay {
 
 export interface TypeGpuUrlTextureSource {
   kind: 'url';
+  key?: string;
   src: string;
+  format?: GPUTextureFormat;
 }
 
 export interface TypeGpuEmbeddedTextureSource {
@@ -168,26 +175,74 @@ export interface TypeGpuEmbeddedTextureSource {
   key: string;
   mimeType: string;
   data: Uint8Array;
+  width?: number;
+  height?: number;
+  format?: GPUTextureFormat;
 }
 
-export type TypeGpuTextureSource = TypeGpuUrlTextureSource | TypeGpuEmbeddedTextureSource;
+export interface TypeGpuDataTextureSource {
+  kind: 'data';
+  key: string;
+  src: string;
+  mimeType?: string;
+  data: Uint8Array | Uint8ClampedArray | Float32Array;
+  width?: number;
+  height?: number;
+  format?: GPUTextureFormat;
+}
 
-export interface TypeGpuStandardMaterialDescriptor {
-  kind: 'standard';
+export type TypeGpuTextureSource =
+  | TypeGpuUrlTextureSource
+  | TypeGpuEmbeddedTextureSource
+  | TypeGpuDataTextureSource;
+
+export interface TypeGpuSamplerDescriptor {
+  key: string;
+  magFilter: GPUFilterMode;
+  minFilter: GPUFilterMode;
+  mipmapFilter: GPUMipmapFilterMode;
+  addressModeU: GPUAddressMode;
+  addressModeV: GPUAddressMode;
+  addressModeW: GPUAddressMode;
+}
+
+export interface TypeGpuMaterialDescriptor {
+  key?: string;
+  pipelineKey?: string;
+  bindGroupKey?: string;
+  kind: TypeGpuMaterialKind;
   color: RgbaTuple;
+  opacity: number;
   roughness: number;
   metalness: number;
-  opacity: number;
+  textureKey?: string;
+  samplerKey?: string;
+  texture?: TypeGpuTextureSource | null;
+  sampler?: TypeGpuSamplerDescriptor;
+  transparent?: boolean;
+  depthWrite?: boolean;
+  depthTest?: boolean;
+  cullMode?: GPUCullMode;
+  blendMode?: 'opaque' | 'alpha' | 'additive';
   map: TypeGpuTextureSource | null;
 }
 
-export type TypeGpuMaterialDescriptor = TypeGpuStandardMaterialDescriptor;
+export type TypeGpuStandardMaterialDescriptor = TypeGpuMaterialDescriptor & {
+  map: TypeGpuTextureSource | null;
+};
+
+export interface TypeGpuLiveResourceKeys {
+  geometry: Set<string>;
+  material: Set<string>;
+  texture: Set<string>;
+  sampler: Set<string>;
+}
 
 export interface TypeGpuMeshDrawItem {
   id: TypeGpuInstanceId;
   revision: number;
   geometry: TypeGpuGeometryDescriptor;
-  material: TypeGpuMaterialDescriptor;
+  material: TypeGpuStandardMaterialDescriptor;
   transform: TypeGpuTransform;
   phase: number;
   spinSpeed: number;
@@ -213,7 +268,7 @@ export interface TypeGpuLight {
 export interface TypeGpuDrawBatch {
   key: string;
   geometry: TypeGpuGeometryData;
-  material: TypeGpuMaterialDescriptor;
+  material: TypeGpuStandardMaterialDescriptor;
   floatsPerInstance: number;
   instances: Float32Array;
   instanceIds: TypeGpuInstanceId[];
