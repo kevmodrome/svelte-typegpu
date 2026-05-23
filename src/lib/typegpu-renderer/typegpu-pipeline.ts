@@ -7,6 +7,7 @@ import {
   meshVertexLayout,
   sceneBindGroupLayout
 } from './typegpu-layouts';
+import type { TypeGpuMaterialDescriptor } from './types';
 
 const rotateX = tgpu
   .fn([d.vec3f, d.f32], d.vec3f)/* wgsl */ `(position, angle) {
@@ -268,6 +269,10 @@ export const meshFragmentMain = tgpu
 
 export interface TypeGpuMeshPipelineOptions {
   depth?: boolean;
+  blendMode?: TypeGpuMaterialDescriptor['blendMode'];
+  cullMode?: GPUCullMode;
+  depthWrite?: boolean;
+  depthTest?: boolean;
 }
 
 export function createMeshPipeline(
@@ -290,10 +295,13 @@ export function createMeshPipeline(
     },
     vertex: meshVertexMain,
     fragment: meshFragmentMain,
-    targets: { format },
+    targets: {
+      format,
+      blend: blendStateFor(options.blendMode)
+    },
     primitive: {
       topology: 'triangle-list',
-      cullMode: 'back'
+      cullMode: options.cullMode ?? 'back'
     }
   } as const;
 
@@ -303,12 +311,46 @@ export function createMeshPipeline(
         ...descriptor,
         depthStencil: {
           format: DEPTH_FORMAT,
-          depthWriteEnabled: true,
-          depthCompare: 'less'
+          depthWriteEnabled: options.depthWrite !== false,
+          depthCompare: options.depthTest === false ? 'always' : 'less'
         }
       })
       .$name('TypeGPU mesh pipeline');
   }
 
   return root.createRenderPipeline(descriptor).$name('TypeGPU mesh pipeline');
+}
+
+function blendStateFor(blendMode: TypeGpuMaterialDescriptor['blendMode']): GPUBlendState | undefined {
+  if (blendMode === 'alpha') {
+    return {
+      color: {
+        srcFactor: 'src-alpha',
+        dstFactor: 'one-minus-src-alpha',
+        operation: 'add'
+      },
+      alpha: {
+        srcFactor: 'one',
+        dstFactor: 'one-minus-src-alpha',
+        operation: 'add'
+      }
+    };
+  }
+
+  if (blendMode === 'additive') {
+    return {
+      color: {
+        srcFactor: 'src-alpha',
+        dstFactor: 'one',
+        operation: 'add'
+      },
+      alpha: {
+        srcFactor: 'one',
+        dstFactor: 'one',
+        operation: 'add'
+      }
+    };
+  }
+
+  return undefined;
 }

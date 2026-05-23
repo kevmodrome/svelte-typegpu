@@ -182,7 +182,9 @@ export class InstanceBufferCache {
 }
 
 export class TextureResourceCache {
+  #disposed = false;
   readonly #fallback: TypeGpuTextureResource;
+  readonly #generations = new Map<string, number>();
   readonly #resources = new Map<string, TypeGpuTextureResource>();
 
   constructor(
@@ -221,9 +223,10 @@ export class TextureResourceCache {
       texture: this.#fallback.texture,
       status: 'loading' as const
     };
+    const generation = this.#nextGeneration(key);
 
     this.#resources.set(key, resource);
-    void this.#load(key, source);
+    void this.#load(key, source, generation);
     return resource;
   }
 
@@ -235,11 +238,14 @@ export class TextureResourceCache {
         resource.texture.destroy();
       }
 
+      this.#nextGeneration(key);
       this.#resources.delete(key);
     }
   }
 
   dispose(): void {
+    this.#disposed = true;
+
     for (const resource of this.#resources.values()) {
       if (resource.texture !== this.#fallback.texture) {
         resource.texture.destroy();
@@ -248,14 +254,17 @@ export class TextureResourceCache {
 
     this.#fallback.texture.destroy();
     this.#resources.clear();
+    this.#generations.clear();
   }
 
-  async #load(key: string, source: TypeGpuTextureSource): Promise<void> {
+  async #load(key: string, source: TypeGpuTextureSource, generation: number): Promise<void> {
     let image: LoadedTextureImage | null = null;
     let texture: TypeGpuMaterialTexture | null = null;
 
     try {
       image = await loadMaterialTextureImageSource(source);
+
+      if (!this.#isLiveGeneration(key, generation)) return;
 
       const root = this.root;
       texture = root.createTexture({
@@ -267,6 +276,12 @@ export class TextureResourceCache {
         .$name(`TypeGPU material texture ${textureSourceLabel(source)}`);
 
       writeLoadedTexture(texture, image);
+
+      if (!this.#isLiveGeneration(key, generation)) {
+        texture.destroy();
+        texture = null;
+        return;
+      }
 
       const previous = this.#resources.get(key);
       if (!previous) {
@@ -289,7 +304,7 @@ export class TextureResourceCache {
     } catch {
       texture?.destroy();
 
-      if (this.#resources.has(key)) {
+      if (this.#isLiveGeneration(key, generation)) {
         this.#resources.set(key, {
           key,
           texture: this.#fallback.texture,
@@ -300,6 +315,16 @@ export class TextureResourceCache {
     } finally {
       image?.close();
     }
+  }
+
+  #nextGeneration(key: string): number {
+    const generation = (this.#generations.get(key) ?? 0) + 1;
+    this.#generations.set(key, generation);
+    return generation;
+  }
+
+  #isLiveGeneration(key: string, generation: number): boolean {
+    return !this.#disposed && this.#resources.has(key) && this.#generations.get(key) === generation;
   }
 }
 
@@ -345,7 +370,7 @@ export class MaterialResourceCache {
   ) {}
 
   getOrCreate(material: TypeGpuMaterialDescriptor): TypeGpuMaterialResource {
-    const key = material.key ?? material.bindGroupKey ?? 'material:default';
+    const key = materialResourceKeyFor(material);
     const textureResource = this.textureResources.getOrLoad(material.map ?? material.texture ?? null);
     const samplerResource = this.samplerResources.getOrCreate(material.sampler ?? DEFAULT_SAMPLER);
     const samplerKey = material.samplerKey ?? DEFAULT_SAMPLER.key;
@@ -401,7 +426,7 @@ export class PipelineResourceCache {
 
     if (existing) return existing;
 
-    const pipeline = createMeshPipeline(this.root, this.format, { depth });
+    const pipeline = createMeshPipeline(this.root, this.format, meshPipelineOptionsFor(batch, depth));
     this.#resources.set(key, pipeline);
     return pipeline;
   }
@@ -414,7 +439,38 @@ export class PipelineResourceCache {
 }
 
 export function pipelineResourceKeyFor(batch: TypeGpuDrawBatch, depth: boolean): string {
-  return `${batch.pipelineKey}|depth:${depth ? 'enabled' : 'disabled'}`;
+  return [
+    batch.pipelineKey,
+    meshMaterialPipelineKeyFor(batch.material),
+    `sceneDepth:${depth ? 'enabled' : 'disabled'}`
+  ].join('|');
+}
+
+export function materialResourceKeyFor(material: TypeGpuMaterialDescriptor): string {
+  return material.bindGroupKey ?? [
+    material.textureKey ?? 'solid:white',
+    material.samplerKey ?? DEFAULT_SAMPLER.key
+  ].join('|');
+}
+
+function meshPipelineOptionsFor(batch: TypeGpuDrawBatch, depth: boolean) {
+  return {
+    depth,
+    blendMode: batch.material.blendMode ?? 'opaque',
+    cullMode: batch.material.cullMode ?? 'back',
+    depthWrite: batch.material.depthWrite !== false,
+    depthTest: batch.material.depthTest !== false
+  };
+}
+
+function meshMaterialPipelineKeyFor(material: TypeGpuMaterialDescriptor): string {
+  return [
+    material.pipelineKey ?? 'pipeline:mesh',
+    `blend:${material.blendMode ?? 'opaque'}`,
+    `depthWrite:${material.depthWrite !== false}`,
+    `depthTest:${material.depthTest !== false}`,
+    `cull:${material.cullMode ?? 'back'}`
+  ].join('|');
 }
 
 export async function loadMaterialTextureImageSource(

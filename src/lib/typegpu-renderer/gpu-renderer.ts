@@ -24,6 +24,7 @@ import {
   SamplerResourceCache,
   TextureResourceCache,
   loadMaterialTextureImageSource,
+  materialResourceKeyFor,
   pipelineResourceKeyFor,
   type LoadedTextureImage,
   type TypeGpuInstanceBufferResource,
@@ -270,7 +271,13 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     }
 
     this.#geometryResources.prune(scene.liveResourceKeys.geometries);
-    this.#materialResources.prune(scene.liveResourceKeys.materials);
+    this.#materialResources.prune(
+      new Set(
+        scene.drawBatches
+          .filter((batch) => scene.liveResourceKeys.materials.has(batch.materialKey))
+          .map((batch) => materialResourceKeyFor(batch.material))
+      )
+    );
     this.#textureResources.prune(scene.liveResourceKeys.textures);
     this.#samplerResources.prune(scene.liveResourceKeys.samplers);
     this.#pipelines.prune(

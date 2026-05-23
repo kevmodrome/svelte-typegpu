@@ -65,9 +65,40 @@ describe('TypeGPU GPU renderer', () => {
     expect(pipelineSource).toContain('depth?: boolean');
     expect(pipelineSource).toContain('if (options.depth !== false)');
     expect(cacheSource).toContain('pipelineResourceKeyFor(batch, depth)');
-    expect(cacheSource).toContain('createMeshPipeline(this.root, this.format, { depth })');
+    expect(cacheSource).toContain('meshPipelineOptionsFor(batch, depth)');
     expect(rendererSource).toContain('pipelineResourceKeyFor(batch, scene.renderSettings.depth)');
     expect(rendererSource).toContain('this.#pipelineForBatch(batch, this.#renderSettings.depth)');
+  });
+
+  it('keeps pipeline descriptors aligned with material pipeline state', () => {
+    expect(pipelineSource).toContain("blendMode?: TypeGpuMaterialDescriptor['blendMode'];");
+    expect(pipelineSource).toContain('cullMode?: GPUCullMode;');
+    expect(pipelineSource).toContain('depthWrite?: boolean;');
+    expect(pipelineSource).toContain('depthTest?: boolean;');
+    expect(pipelineSource).toContain("cullMode: options.cullMode ?? 'back'");
+    expect(pipelineSource).toContain('blend: blendStateFor(options.blendMode)');
+    expect(pipelineSource).toContain('depthWriteEnabled: options.depthWrite !== false');
+    expect(pipelineSource).toContain("depthCompare: options.depthTest === false ? 'always' : 'less'");
+    expect(cacheSource).toContain("blend:${material.blendMode ?? 'opaque'}");
+    expect(cacheSource).toContain('depthWrite:${material.depthWrite !== false}');
+    expect(cacheSource).toContain('depthTest:${material.depthTest !== false}');
+    expect(cacheSource).toContain("cull:${material.cullMode ?? 'back'}");
+  });
+
+  it('uses bind-group identity for material resource caching and pruning', () => {
+    expect(cacheSource).toContain('materialResourceKeyFor(material)');
+    expect(cacheSource).toContain('material.bindGroupKey ?? [');
+    expect(rendererSource).toContain('materialResourceKeyFor(batch.material)');
+    expect(rendererSource).not.toContain('this.#materialResources.prune(scene.liveResourceKeys.materials)');
+  });
+
+  it('guards async texture settlement after prune or dispose', () => {
+    expect(cacheSource).toContain('#disposed = false');
+    expect(cacheSource).toContain('#generations = new Map<string, number>()');
+    expect(cacheSource).toContain('const generation = this.#nextGeneration(key)');
+    expect(cacheSource).toContain('if (!this.#isLiveGeneration(key, generation)) return;');
+    expect(cacheSource).toContain('if (!this.#isLiveGeneration(key, generation)) {');
+    expect(cacheSource).toContain('this.#disposed = true');
   });
 
   it('recreates depth textures when depth is toggled back on without a resize', () => {
