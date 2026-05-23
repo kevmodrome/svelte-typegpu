@@ -24,6 +24,7 @@ import {
   SamplerResourceCache,
   TextureResourceCache,
   loadMaterialTextureImageSource,
+  pipelineResourceKeyFor,
   type LoadedTextureImage,
   type TypeGpuInstanceBufferResource,
   type TypeGpuMaterialResource,
@@ -251,7 +252,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
         addressModeW: 'repeat'
       });
       this.#materialResources.getOrCreate(batch.material);
-      this.#pipelines.getOrCreate(batch);
+      this.#pipelines.getOrCreate(batch, scene.renderSettings.depth);
 
       const instanceResource = this.#instanceBuffers.getOrCreate(batch);
 
@@ -272,7 +273,13 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#materialResources.prune(scene.liveResourceKeys.materials);
     this.#textureResources.prune(scene.liveResourceKeys.textures);
     this.#samplerResources.prune(scene.liveResourceKeys.samplers);
-    this.#pipelines.prune(scene.liveResourceKeys.pipelines);
+    this.#pipelines.prune(
+      new Set(
+        scene.drawBatches
+          .filter((batch) => scene.liveResourceKeys.pipelines.has(batch.pipelineKey))
+          .map((batch) => pipelineResourceKeyFor(batch, scene.renderSettings.depth))
+      )
+    );
     this.#instanceBuffers.prune(new Set(scene.drawBatches.map((batch) => batch.key)));
     this.invalidate();
   }
@@ -311,7 +318,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
           const geometryResource = this.#geometryResources.getOrCreate(batch);
           const instanceResource = this.#instanceBuffers.getOrCreate(batch);
           const materialResource = this.#materialResources.getOrCreate(batch.material);
-          const pipeline = this.#pipelineForBatch(batch);
+          const pipeline = this.#pipelineForBatch(batch, this.#renderSettings.depth);
 
           if (!instanceResource.buffer || instanceResource.instanceCount === 0) continue;
 
@@ -399,14 +406,14 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     }
   }
 
-  #pipelineForBatch(batch: TypeGpuDrawBatch): TypeGpuMeshPipeline {
+  #pipelineForBatch(batch: TypeGpuDrawBatch, depth: boolean): TypeGpuMeshPipeline {
     const pipelineKey = batch.pipelineKey;
 
     if (!pipelineKey) {
-      return this.#pipelines.getOrCreate(batch);
+      return this.#pipelines.getOrCreate(batch, depth);
     }
 
-    return this.#pipelines.getOrCreate(batch);
+    return this.#pipelines.getOrCreate(batch, depth);
   }
 
   #setAnimationSpeed(nextSpeed: number): void {

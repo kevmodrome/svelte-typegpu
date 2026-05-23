@@ -395,13 +395,14 @@ export class PipelineResourceCache {
     private readonly format: GPUTextureFormat
   ) {}
 
-  getOrCreate(batch: TypeGpuDrawBatch): TypeGpuMeshPipeline {
-    const existing = this.#resources.get(batch.pipelineKey);
+  getOrCreate(batch: TypeGpuDrawBatch, depth = true): TypeGpuMeshPipeline {
+    const key = pipelineResourceKeyFor(batch, depth);
+    const existing = this.#resources.get(key);
 
     if (existing) return existing;
 
-    const pipeline = createMeshPipeline(this.root, this.format);
-    this.#resources.set(batch.pipelineKey, pipeline);
+    const pipeline = createMeshPipeline(this.root, this.format, { depth });
+    this.#resources.set(key, pipeline);
     return pipeline;
   }
 
@@ -410,6 +411,10 @@ export class PipelineResourceCache {
       if (!liveKeys.has(key)) this.#resources.delete(key);
     }
   }
+}
+
+export function pipelineResourceKeyFor(batch: TypeGpuDrawBatch, depth: boolean): string {
+  return `${batch.pipelineKey}|depth:${depth ? 'enabled' : 'disabled'}`;
 }
 
 export async function loadMaterialTextureImageSource(

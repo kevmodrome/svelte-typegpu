@@ -266,33 +266,49 @@ export const meshFragmentMain = tgpu
   })
   .$name('meshFragmentMain');
 
-export function createMeshPipeline(root: TgpuRoot, format: GPUTextureFormat) {
-  return root
-    .createRenderPipeline({
-      attribs: {
-        position: meshVertexLayout.attrib.position,
-        normal: meshVertexLayout.attrib.normal,
-        uv: meshVertexLayout.attrib.uv,
-        instance_position: meshInstanceLayout.attrib.position,
-        phase: meshInstanceLayout.attrib.phase,
-        color: meshInstanceLayout.attrib.color,
-        shape: meshInstanceLayout.attrib.shape,
-        spin_offset: meshInstanceLayout.attrib.spinOffset,
-        world_rotation: meshInstanceLayout.attrib.worldRotation,
-        material: meshInstanceLayout.attrib.material
-      },
-      vertex: meshVertexMain,
-      fragment: meshFragmentMain,
-      targets: { format },
-      primitive: {
-        topology: 'triangle-list',
-        cullMode: 'back'
-      },
-      depthStencil: {
-        format: DEPTH_FORMAT,
-        depthWriteEnabled: true,
-        depthCompare: 'less'
-      }
-    })
-    .$name('TypeGPU mesh pipeline');
+export interface TypeGpuMeshPipelineOptions {
+  depth?: boolean;
+}
+
+export function createMeshPipeline(
+  root: TgpuRoot,
+  format: GPUTextureFormat,
+  options: TypeGpuMeshPipelineOptions = {}
+) {
+  const descriptor = {
+    attribs: {
+      position: meshVertexLayout.attrib.position,
+      normal: meshVertexLayout.attrib.normal,
+      uv: meshVertexLayout.attrib.uv,
+      instance_position: meshInstanceLayout.attrib.position,
+      phase: meshInstanceLayout.attrib.phase,
+      color: meshInstanceLayout.attrib.color,
+      shape: meshInstanceLayout.attrib.shape,
+      spin_offset: meshInstanceLayout.attrib.spinOffset,
+      world_rotation: meshInstanceLayout.attrib.worldRotation,
+      material: meshInstanceLayout.attrib.material
+    },
+    vertex: meshVertexMain,
+    fragment: meshFragmentMain,
+    targets: { format },
+    primitive: {
+      topology: 'triangle-list',
+      cullMode: 'back'
+    }
+  } as const;
+
+  if (options.depth !== false) {
+    return root
+      .createRenderPipeline({
+        ...descriptor,
+        depthStencil: {
+          format: DEPTH_FORMAT,
+          depthWriteEnabled: true,
+          depthCompare: 'less'
+        }
+      })
+      .$name('TypeGPU mesh pipeline');
+  }
+
+  return root.createRenderPipeline(descriptor).$name('TypeGPU mesh pipeline');
 }

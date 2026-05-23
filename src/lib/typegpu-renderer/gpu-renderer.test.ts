@@ -61,6 +61,15 @@ describe('TypeGPU GPU renderer', () => {
     expect(pipelineSource).toContain('createMeshPipeline');
   });
 
+  it('keeps pipeline cache selection depth-aware when render passes omit depth', () => {
+    expect(pipelineSource).toContain('depth?: boolean');
+    expect(pipelineSource).toContain('if (options.depth !== false)');
+    expect(cacheSource).toContain('pipelineResourceKeyFor(batch, depth)');
+    expect(cacheSource).toContain('createMeshPipeline(this.root, this.format, { depth })');
+    expect(rendererSource).toContain('pipelineResourceKeyFor(batch, scene.renderSettings.depth)');
+    expect(rendererSource).toContain('this.#pipelineForBatch(batch, this.#renderSettings.depth)');
+  });
+
   it('implements always, demand, and manual frame loops truthfully', () => {
     expect(rendererSource).toContain("frameloop: 'always'");
     expect(rendererSource).toContain("frameloop: 'demand'");
