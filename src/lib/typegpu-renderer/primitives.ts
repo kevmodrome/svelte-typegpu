@@ -146,6 +146,15 @@ export function dirtyForAttribute(
     return Dirty.Lights;
   }
 
+  if (name === 'group') {
+    if (transformAttributes.has(attribute)) {
+      return mergeDirty(Dirty.Transform, Dirty.InstanceData, Dirty.Interaction, Dirty.Lights);
+    }
+    if (attribute === 'visible' || attribute === 'renderOrder') {
+      return mergeDirty(Dirty.DrawBatches, Dirty.Interaction, Dirty.Lights);
+    }
+  }
+
   if (transformAttributes.has(attribute)) {
     return mergeDirty(Dirty.Transform, Dirty.InstanceData, Dirty.Interaction);
   }
@@ -236,7 +245,8 @@ function dirtyForTreeChange(nodeName: string | undefined): Dirty {
   if (materialNames.has(name)) return mergeDirty(Dirty.Tree, Dirty.Material, Dirty.DrawBatches);
   if (name === 'texture') return mergeDirty(Dirty.Tree, Dirty.Texture, Dirty.BindGroup, Dirty.DrawBatches);
   if (name === 'sampler') return mergeDirty(Dirty.Tree, Dirty.Sampler, Dirty.BindGroup, Dirty.DrawBatches);
-  if (name === 'mesh' || name === 'instancedMesh' || name === 'model' || name === 'group') {
+  if (name === 'group') return mergeDirty(Dirty.Tree, Dirty.DrawBatches, Dirty.Interaction, Dirty.Lights);
+  if (name === 'mesh' || name === 'instancedMesh' || name === 'model') {
     return mergeDirty(Dirty.Tree, Dirty.DrawBatches, Dirty.Interaction);
   }
 

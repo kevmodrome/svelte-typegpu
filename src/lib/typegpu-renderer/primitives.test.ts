@@ -45,6 +45,28 @@ describe('TypeGPU primitive descriptors', () => {
     expect(hasDirty(dirty, Dirty.Interaction)).toBe(true);
   });
 
+  it('marks group transform and visibility changes as light-affecting', () => {
+    expectExactDirty(
+      dirtyForAttribute('group', 'position', [0, 0, 0], [1, 2, 3]),
+      Dirty.Transform,
+      Dirty.InstanceData,
+      Dirty.Interaction,
+      Dirty.Lights
+    );
+    expectExactDirty(
+      dirtyForAttribute('group', 'visible', true, false),
+      Dirty.DrawBatches,
+      Dirty.Interaction,
+      Dirty.Lights
+    );
+    expectExactDirty(
+      dirtyForAttribute('group', 'renderOrder', 0, 1),
+      Dirty.DrawBatches,
+      Dirty.Interaction,
+      Dirty.Lights
+    );
+  });
+
   it('marks camera transform attributes as camera dirty only', () => {
     const dirty = dirtyForAttribute('perspectiveCamera', 'position', [0, 0, 0], [1, 2, 3]);
 
@@ -236,9 +258,10 @@ describe('TypeGPU primitive descriptors', () => {
   });
 
   it('marks insert, remove, and interaction listeners', () => {
-    expect(hasDirty(dirtyForInsert('mesh'), Dirty.DrawBatches)).toBe(true);
-    expect(hasDirty(dirtyForInsert('mesh'), Dirty.Interaction)).toBe(true);
-    expect(hasDirty(dirtyForRemove('pointLight'), Dirty.Lights)).toBe(true);
+    expectExactDirty(dirtyForInsert('mesh'), Dirty.Tree, Dirty.DrawBatches, Dirty.Interaction);
+    expectExactDirty(dirtyForRemove('pointLight'), Dirty.Tree, Dirty.Lights);
+    expectExactDirty(dirtyForInsert('group'), Dirty.Tree, Dirty.DrawBatches, Dirty.Interaction, Dirty.Lights);
+    expectExactDirty(dirtyForRemove('group'), Dirty.Tree, Dirty.DrawBatches, Dirty.Interaction, Dirty.Lights);
     expectExactDirty(
       dirtyForInsert('sampler'),
       Dirty.Tree,
@@ -251,8 +274,8 @@ describe('TypeGPU primitive descriptors', () => {
     expectExactDirty(dirtyForInsert('controls'), Dirty.Tree, Dirty.Camera);
     expectExactDirty(dirtyForRemove('pointerControls'), Dirty.Tree, Dirty.Camera);
     expectExactDirty(dirtyForInsert('keyboardControls'), Dirty.Tree, Dirty.Camera);
-    expect(hasDirty(dirtyForEventListener('mesh', 'click'), Dirty.Interaction)).toBe(true);
-    expect(hasDirty(dirtyForEventListener('mesh', 'keydown'), Dirty.Interaction)).toBe(false);
+    expectExactDirty(dirtyForEventListener('mesh', 'click'), Dirty.Interaction);
+    expectExactDirty(dirtyForEventListener('mesh', 'keydown'), Dirty.None);
   });
 
   it('treats Dirty.All as every known dirty bit', () => {
