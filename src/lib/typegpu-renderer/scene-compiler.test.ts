@@ -134,6 +134,44 @@ describe('TypeGPU scene compiler', () => {
     expect(second.interactionChanged).toBe(false);
   });
 
+  it('packs transform scale without multiplying authored geometry dimensions again', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const boxMesh = createElement('mesh');
+    const boxGeometry = createElement('boxGeometry');
+    const bufferMesh = createElement('mesh');
+    const bufferGeometry = createElement('bufferGeometry');
+
+    setAttribute(boxMesh, 'scale', [3, 5, 7]);
+    setAttribute(boxGeometry, 'width', 2);
+    setAttribute(boxGeometry, 'height', 4);
+    setAttribute(boxGeometry, 'depth', 6);
+    setAttribute(bufferMesh, 'scale', [2, 3, 4]);
+    setAttribute(
+      bufferGeometry,
+      'vertices',
+      new Float32Array([
+        0, 0, 0, 0, 1, 0, 0, 0,
+        4, 0, 0, 0, 1, 0, 1, 0,
+        0, 5, 6, 0, 1, 0, 0, 1
+      ])
+    );
+    setAttribute(bufferGeometry, 'bounds', { min: [0, 0, 0], max: [4, 5, 6] });
+
+    insert(boxMesh, boxGeometry, null);
+    insert(bufferMesh, bufferGeometry, null);
+    insert(scene, boxMesh, null);
+    insert(scene, bufferMesh, null);
+    insert(root, scene, null);
+
+    const state = createSceneState(root, createTypeGpuSceneCache(), { dirty: Dirty.All });
+    const boxBatch = state.drawBatches.find((batch) => batch.geometryKey === 'box:2:4:6');
+    const bufferBatch = state.drawBatches.find((batch) => batch.geometry.kind === 'buffer');
+
+    expect(Array.from(boxBatch?.instances.slice(8, 11) ?? [])).toEqual([3, 5, 7]);
+    expect(Array.from(bufferBatch?.instances.slice(8, 11) ?? [])).toEqual([2, 3, 4]);
+  });
+
   it('re-packs instances when a referenced material uniform changes', () => {
     const root = createFragment();
     const scene = createElement('scene');

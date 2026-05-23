@@ -108,7 +108,7 @@ describe('TypeGPU renderer core', () => {
     expect(largeBoxBatch.instances[5]).toBeCloseTo(0.2);
     expect(largeBoxBatch.instances[6]).toBeCloseTo(0.3);
     expect(largeBoxBatch.instances[7]).toBe(1);
-    expect(Array.from(largeBoxBatch.instances.slice(8, 11))).toEqual([20, 5, 10]);
+    expect(Array.from(largeBoxBatch.instances.slice(8, 11))).toEqual([1, 1, 1]);
     expect(largeBoxBatch.instances[11]).toBeCloseTo(1.4);
     expect(largeBoxBatch.instances[12]).toBe(0);
     expect(Array.from(largeBoxBatch.instances.slice(13, 16))).toEqual([0, 0, 0]);

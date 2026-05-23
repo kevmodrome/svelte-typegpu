@@ -244,13 +244,11 @@ function readMeshGeometry(
 ): MeshResourceResult<TypeGpuGeometryData> | null {
   for (let child = mesh.firstChild; child; child = child.nextSibling) {
     const geometry = readInlineGeometry(child);
-    if (geometry) return { node: child, value: withGeometryShape(geometry) };
+    if (geometry) return { node: child, value: geometry };
   }
 
   const referenced = resolveGeometryResourceReference(mesh.attributes.geometry, resources);
-  return referenced
-    ? { node: referenced.node, value: withGeometryShape(referenced.value) }
-    : null;
+  return referenced ? { node: referenced.node, value: referenced.value } : null;
 }
 
 function readMeshMaterial(
@@ -291,7 +289,7 @@ function readModelDrawItems(
   entry.model.meshes.forEach((mesh, index) => {
     const material = readModelMaterial(modelNode, mesh, resources);
     const transform = composeTransforms(modelTransform, mesh.transform);
-    const geometry = withGeometryShape(mesh.geometry);
+    const geometry = mesh.geometry;
     const localBounds = geometry.bounds ?? defaultBounds();
 
     items.push({
@@ -446,24 +444,6 @@ function shouldRecomputeInteraction(dirty: Dirty): boolean {
     hasDirty(dirty, Dirty.Geometry) ||
     hasDirty(dirty, Dirty.Tree)
   );
-}
-
-function withGeometryShape(geometry: TypeGpuGeometryData): TypeGpuGeometryData {
-  if (geometry.shape || !geometry.bounds) return geometry;
-
-  return {
-    ...geometry,
-    shape: boundsShape(geometry.bounds)
-  };
-}
-
-function boundsShape(bounds: TypeGpuGeometryData['bounds']): Vector3Tuple {
-  if (!bounds) return [1, 1, 1];
-  return [
-    bounds.max[0] - bounds.min[0],
-    bounds.max[1] - bounds.min[1],
-    bounds.max[2] - bounds.min[2]
-  ];
 }
 
 function defaultMaterial(): TypeGpuMaterialDescriptor {
