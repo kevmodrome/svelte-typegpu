@@ -1,29 +1,37 @@
 import tgpu, {
-  d,
+  type RenderFlag,
   type TgpuBindGroup,
   type TgpuBuffer,
-  type TgpuFixedSampler,
   type TgpuRoot,
   type TgpuTexture,
-  type TgpuVertexLayout,
-  type RenderFlag,
-  type SampledFlag,
   type UniformFlag
 } from 'typegpu';
 import { createFpsMeter } from '../fps-meter';
+import { createViewProjectionMatrix } from './camera-math';
+import { createContinuityTracker } from './continuity';
+import { Dirty } from './dirty';
 import {
   MESH_SPIN_OFFSET_OFFSET,
   MESH_SPIN_SPEED_OFFSET
 } from './instance-data';
-import { createViewProjectionMatrix } from './camera-math';
-import { createContinuityTracker } from './continuity';
-import { Dirty } from './dirty';
 import { packLightingState } from './lighting-data';
 import { DEPTH_FORMAT } from './render-constants';
+import {
+  GeometryResourceCache,
+  InstanceBufferCache,
+  MaterialResourceCache,
+  PipelineResourceCache,
+  SamplerResourceCache,
+  TextureResourceCache,
+  loadMaterialTextureImageSource,
+  type LoadedTextureImage,
+  type TypeGpuInstanceBufferResource,
+  type TypeGpuMaterialResource,
+  type TypeGpuVertexBufferResource
+} from './resource-caches';
 import { createMeshPipeline } from './typegpu-pipeline';
 import {
   lightingBindGroupLayout,
-  materialBindGroupLayout,
   meshInstanceLayout,
   meshVertexLayout,
   sceneBindGroupLayout,
@@ -32,15 +40,19 @@ import {
   typegpuSceneUniformSchema
 } from './typegpu-layouts';
 import type {
+  RgbaTuple,
   TypeGpuCameraSettings,
   TypeGpuDrawBatch,
   TypeGpuInstanceDirtyRange,
-  TypeGpuSceneState,
-  TypeGpuTextureSource
+  TypeGpuRenderSettings,
+  TypeGpuSceneState
 } from './types';
+
+export { loadMaterialTextureImageSource, type LoadedTextureImage };
 
 // Keep the TypeGPU scene uniform buffer at 96 bytes, matching the explicit padding schema.
 export const SCENE_UNIFORM_FLOATS = TYPEGPU_SCENE_UNIFORM_FLOATS;
+
 const DEGREES_TO_RADIANS = Math.PI / 180;
 const MAX_DEVICE_PIXEL_RATIO = 1.5;
 const DEFAULT_TYPEGPU_CAMERA: TypeGpuCameraSettings = {
@@ -52,144 +64,143 @@ const DEFAULT_TYPEGPU_CAMERA: TypeGpuCameraSettings = {
   far: 100
 };
 
-interface TypeGpuBatchBuffers {
-  geometryKey: string;
-  instanceBuffer: TypeGpuVertexBuffer | null;
-  instanceBufferByteLength: number;
-  instanceCount: number;
-  vertexBuffer: TypeGpuVertexBuffer;
-}
+const FRAMELOOP_OPTIONS = {
+  always: { frameloop: 'always' },
+  demand: { frameloop: 'demand' },
+  manual: { frameloop: 'manual' }
+} as const;
 
-interface TypeGpuVertexBuffer {
-  buffer: GPUBuffer;
-  write(data: ArrayBuffer, options?: { startOffset?: number; endOffset?: number }): void;
-  destroy(): void;
-}
-
+type TypeGpuFrameLoop = keyof typeof FRAMELOOP_OPTIONS;
 type TypeGpuSceneUniformBuffer = TgpuBuffer<typeof typegpuSceneUniformSchema> & UniformFlag;
 type TypeGpuLightingUniformBuffer = TgpuBuffer<typeof typegpuLightingSchema> & UniformFlag;
-type TypeGpuMaterialTexture = TgpuTexture & SampledFlag;
 type TypeGpuDepthTexture = TgpuTexture & RenderFlag;
 type TypeGpuMeshPipeline = ReturnType<typeof createMeshPipeline>;
-type TypeGpuExternalImageSource =
-  | HTMLCanvasElement
-  | HTMLImageElement
-  | HTMLVideoElement
-  | ImageBitmap
-  | ImageData
-  | OffscreenCanvas
-  | VideoFrame;
-
-export interface LoadedTextureImage {
-  source: TypeGpuExternalImageSource | Uint8ClampedArray;
-  width: number;
-  height: number;
-  close(): void;
-}
-
-interface TypeGpuMaterialResource {
-  key: string;
-  texture: TypeGpuMaterialTexture;
-  bindGroup: TgpuBindGroup<typeof materialBindGroupLayout.entries>;
-  status: 'ready' | 'loading' | 'failed' | 'fallback';
-}
 
 export interface TypeGpuRenderer {
   setScene(scene: TypeGpuSceneState): void;
   setCamera(camera: TypeGpuCameraSettings): void;
+  invalidate(): void;
+  renderFrame(timestamp?: number): void;
+  getRenderSize(): { width: number; height: number };
   dispose(): void;
 }
 
 export interface TypeGpuRendererOptions {
   canvas: HTMLCanvasElement;
   onFps?: (fps: number) => void;
+  frameloop?: 'always' | 'demand' | 'manual';
+  maxDevicePixelRatio?: number;
+  clearColor?: RgbaTuple;
+  depth?: boolean;
+  alphaMode?: GPUCanvasAlphaMode;
 }
 
 export async function createTypeGpuRenderer({
   canvas,
-  onFps = () => {}
+  onFps = () => {},
+  frameloop = FRAMELOOP_OPTIONS.always.frameloop,
+  maxDevicePixelRatio = MAX_DEVICE_PIXEL_RATIO,
+  clearColor = [0, 0, 0, 1],
+  depth = true,
+  alphaMode = 'premultiplied'
 }: TypeGpuRendererOptions): Promise<TypeGpuRenderer> {
   if (!navigator.gpu) {
     throw new Error('WebGPU is not available in this browser.');
   }
 
   const root = await tgpu.init({ unstable_names: 'strict' });
-  const renderer = new TypeGpuSceneRenderer(root, canvas, onFps);
-  renderer.start();
 
-  return renderer;
+  return new TypeGpuSceneRenderer(root, {
+    canvas,
+    onFps,
+    frameloop,
+    maxDevicePixelRatio,
+    clearColor,
+    depth,
+    alphaMode
+  });
 }
 
 class TypeGpuSceneRenderer implements TypeGpuRenderer {
+  #animationOffset = 0;
+  #animationSpeed = 1;
   #camera = { ...DEFAULT_TYPEGPU_CAMERA };
+  #colorShift = 0;
   #context: GPUCanvasContext;
   #continuity = createContinuityTracker();
   #depthTexture: TypeGpuDepthTexture | null = null;
   #disposed = false;
   #drawBatches: TypeGpuDrawBatch[] = [];
-  #frame = 0;
-  #batchBuffers = new Map<string, TypeGpuBatchBuffers>();
-  #lastTimestamp = 0;
-  #fallbackMaterial: TypeGpuMaterialResource;
   #fpsMeter;
+  #frame: number | null = null;
+  #geometryResources: GeometryResourceCache;
+  #instanceBuffers: InstanceBufferCache;
+  #lastTimestamp = 0;
   #lightingBindGroup: TgpuBindGroup<typeof lightingBindGroupLayout.entries>;
   #lightingBuffer: TypeGpuLightingUniformBuffer;
-  #materialResources = new Map<string, TypeGpuMaterialResource>();
-  #materialSampler: TgpuFixedSampler;
-  #pipeline: TypeGpuMeshPipeline;
+  #materialResources: MaterialResourceCache;
+  #pipelines: PipelineResourceCache;
   #projectionDirty = true;
+  #renderSettings: TypeGpuRenderSettings;
   #renderSize = { width: 0, height: 0 };
-  #sceneBindGroup: TgpuBindGroup<typeof sceneBindGroupLayout.entries>;
+  #resizeObserver: ResizeObserver | null = null;
+  #samplerResources: SamplerResourceCache;
   #scale = 1;
-  #animationSpeed = 1;
-  #animationOffset = 0;
-  #colorShift = 0;
+  #sceneBindGroup: TgpuBindGroup<typeof sceneBindGroupLayout.entries>;
+  #textureResources: TextureResourceCache;
   #time = 0;
-  #uniformData = new Float32Array(SCENE_UNIFORM_FLOATS);
   #uniformBuffer: TypeGpuSceneUniformBuffer;
+  #uniformData = new Float32Array(SCENE_UNIFORM_FLOATS);
+
+  readonly #format: GPUTextureFormat;
+  readonly #frameloop: TypeGpuFrameLoop;
+  readonly #maxDevicePixelRatio: number;
+  readonly #onFps: (fps: number) => void;
 
   constructor(
     private readonly root: TgpuRoot,
-    private readonly canvas: HTMLCanvasElement,
-    private readonly onFps: (fps: number) => void
+    private readonly options: Required<TypeGpuRendererOptions>
   ) {
-    const format = navigator.gpu.getPreferredCanvasFormat();
-
-    this.#fpsMeter = createFpsMeter((fps) => onFps(fps));
-    this.#context = root.configureContext({
-      canvas,
-      format,
-      alphaMode: 'premultiplied'
-    });
+    this.#format = navigator.gpu.getPreferredCanvasFormat();
+    this.#frameloop = normalizeFrameloop(options.frameloop);
+    this.#maxDevicePixelRatio = options.maxDevicePixelRatio;
+    this.#onFps = options.onFps;
+    this.#renderSettings = {
+      clearColor: options.clearColor,
+      depth: options.depth,
+      alphaMode: options.alphaMode
+    };
+    this.#context = this.#configureContext();
+    this.#fpsMeter = createFpsMeter((fps) => this.#onFps(fps));
     this.#uniformBuffer = root
       .createBuffer(typegpuSceneUniformSchema)
       .$usage('uniform')
       .$name('TypeGPU scene uniforms');
-    this.#lightingBuffer = root.createBuffer(typegpuLightingSchema).$usage('uniform').$name('TypeGPU lighting uniforms');
+    this.#lightingBuffer = root.createBuffer(typegpuLightingSchema)
+      .$usage('uniform')
+      .$name('TypeGPU lighting uniforms');
     this.#lightingBindGroup = root.createBindGroup(lightingBindGroupLayout, {
       lighting: this.#lightingBuffer
     });
-    this.#materialSampler = root.createSampler({
-      magFilter: 'linear',
-      minFilter: 'linear',
-      mipmapFilter: 'linear',
-      addressModeU: 'repeat',
-      addressModeV: 'repeat'
-    });
     this.#sceneBindGroup = root.createBindGroup(sceneBindGroupLayout, { scene: this.#uniformBuffer });
-    this.#pipeline = createMeshPipeline(root, format);
-    this.#fallbackMaterial = this.#createFallbackMaterial();
+    this.#geometryResources = new GeometryResourceCache(root);
+    this.#instanceBuffers = new InstanceBufferCache(root);
+    this.#textureResources = new TextureResourceCache(root, () => this.invalidate());
+    this.#samplerResources = new SamplerResourceCache(root);
+    this.#materialResources = new MaterialResourceCache(
+      root,
+      this.#textureResources,
+      this.#samplerResources
+    );
+    this.#pipelines = new PipelineResourceCache(root, this.#format);
+    this.#resizeObserver = this.#createResizeObserver();
     this.setScene({
       dirty: Dirty.None,
       camera: DEFAULT_TYPEGPU_CAMERA,
       cameraNode: null,
       cameraControllerNode: null,
       cameraController: null,
-      renderSettings: {
-        clearColor: [0, 0, 0, 1],
-        depth: true,
-        alphaMode: 'premultiplied'
-      },
+      renderSettings: this.#renderSettings,
       scale: 1,
       animationSpeed: 1,
       colorShift: 0,
@@ -216,31 +227,54 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     if (this.#disposed) return;
 
     this.setCamera(scene.camera);
+    this.#updateRenderSettings(scene.renderSettings);
     this.#scale = scene.scale;
     this.#setAnimationSpeed(scene.animationSpeed);
     this.#colorShift = scene.colorShift;
     this.#drawBatches = scene.drawBatches;
-    this.#pruneBatchBuffers(scene.drawBatches);
+    this.#continuity.prune(this.#drawBatches.flatMap((batch) => batch.instanceIds));
 
     if (scene.lightsChanged) {
       this.#lightingBuffer.write(packLightingState(scene.lights));
     }
 
     for (const batch of scene.drawBatches) {
-      const buffers = this.#ensureBatchBuffers(batch);
+      this.#geometryResources.getOrCreate(batch);
+      this.#textureResources.getOrLoad(batch.material.map ?? batch.material.texture ?? null);
+      this.#samplerResources.getOrCreate(batch.material.sampler ?? {
+        key: batch.material.samplerKey ?? 'sampler:default',
+        magFilter: 'linear',
+        minFilter: 'linear',
+        mipmapFilter: 'linear',
+        addressModeU: 'repeat',
+        addressModeV: 'repeat',
+        addressModeW: 'repeat'
+      });
+      this.#materialResources.getOrCreate(batch.material);
+      this.#pipelines.getOrCreate(batch);
 
-      if (batch.instancesChanged || !buffers.instanceBuffer) {
+      const instanceResource = this.#instanceBuffers.getOrCreate(batch);
+
+      if (batch.instancesChanged || !instanceResource.buffer) {
         const dirtyRanges = batch.dirtyRanges.length
           ? batch.dirtyRanges
           : batch.instanceCount > 0
             ? [{ start: 0, count: batch.instanceCount }]
             : [];
 
-        this.#uploadInstances(buffers, this.#applyContinuity(batch, dirtyRanges), batch, dirtyRanges);
+        this.#instanceBuffers.upload(batch, this.#applyContinuity(batch, dirtyRanges));
+      } else {
+        instanceResource.instanceCount = batch.instanceCount;
       }
-
-      buffers.instanceCount = batch.instanceCount;
     }
+
+    this.#geometryResources.prune(scene.liveResourceKeys.geometries);
+    this.#materialResources.prune(scene.liveResourceKeys.materials);
+    this.#textureResources.prune(scene.liveResourceKeys.textures);
+    this.#samplerResources.prune(scene.liveResourceKeys.samplers);
+    this.#pipelines.prune(scene.liveResourceKeys.pipelines);
+    this.#instanceBuffers.prune(new Set(scene.drawBatches.map((batch) => batch.key)));
+    this.invalidate();
   }
 
   setCamera(camera: TypeGpuCameraSettings): void {
@@ -248,179 +282,131 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
     this.#camera = camera;
     this.#projectionDirty = true;
+    this.invalidate();
   }
 
-  start(): void {
-    this.#frame = requestAnimationFrame((timestamp) => this.#render(timestamp));
+  invalidate(): void {
+    if (this.#disposed || this.#frameloop === 'manual' || this.#frame !== null) return;
+
+    this.#frame = requestAnimationFrame((timestamp) => this.#onAnimationFrame(timestamp));
+  }
+
+  renderFrame(timestamp = typeof performance === 'undefined' ? 0 : performance.now()): void {
+    if (this.#disposed) return;
+
+    const delta = this.#lastTimestamp ? Math.min(48, timestamp - this.#lastTimestamp) : 0;
+    this.#lastTimestamp = timestamp;
+    this.#time += (delta / 16.67) * 0.018;
+
+    this.#resize();
+    this.#writeUniforms();
+
+    beginTypeGpuRenderPass({
+      root: this.root,
+      context: this.#context,
+      clearColor: this.#renderSettings.clearColor,
+      depthTexture: this.#renderSettings.depth ? this.#depthTexture : null,
+      draw: (pass) => {
+        for (const batch of this.#drawBatches) {
+          const geometryResource = this.#geometryResources.getOrCreate(batch);
+          const instanceResource = this.#instanceBuffers.getOrCreate(batch);
+          const materialResource = this.#materialResources.getOrCreate(batch.material);
+          const pipeline = this.#pipelineForBatch(batch);
+
+          if (!instanceResource.buffer || instanceResource.instanceCount === 0) continue;
+
+          drawTypeGpuMaterialBatch({
+            pipeline,
+            pass,
+            sceneBindGroup: this.#sceneBindGroup,
+            lightingBindGroup: this.#lightingBindGroup,
+            geometryResource,
+            instanceResource,
+            materialResource,
+            batch
+          });
+        }
+      }
+    });
+
+    this.#fpsMeter.record(timestamp);
+  }
+
+  getRenderSize(): { width: number; height: number } {
+    return { ...this.#renderSize };
   }
 
   dispose(): void {
     if (this.#disposed) return;
 
     this.#disposed = true;
-    cancelAnimationFrame(this.#frame);
+
+    if (this.#frame !== null) {
+      cancelAnimationFrame(this.#frame);
+      this.#frame = null;
+    }
+
+    this.#resizeObserver?.disconnect();
     this.#depthTexture?.destroy();
-    for (const buffers of this.#batchBuffers.values()) {
-      buffers.instanceBuffer?.destroy();
-      buffers.vertexBuffer.destroy();
-    }
+    this.#geometryResources.dispose();
+    this.#instanceBuffers.dispose();
+    this.#materialResources.dispose();
+    this.#textureResources.dispose();
     this.#lightingBuffer.destroy();
-    this.#fallbackMaterial.texture.destroy();
-    for (const material of this.#materialResources.values()) {
-      if (material.texture !== this.#fallbackMaterial.texture) {
-        material.texture.destroy();
-      }
-    }
     this.#uniformBuffer.destroy();
     this.root.destroy();
   }
 
-  #createFallbackMaterial(): TypeGpuMaterialResource {
-    const root = this.root;
-    const texture = root.createTexture({
-      size: [1, 1],
-      format: 'rgba8unorm',
-      dimension: '2d'
-    })
-      .$usage('sampled')
-      .$name('TypeGPU fallback white texture');
+  #onAnimationFrame(timestamp: number): void {
+    this.#frame = null;
+    this.renderFrame(timestamp);
 
-    texture.write(new Uint8Array([255, 255, 255, 255]));
-
-    return {
-      key: 'solid:white',
-      texture,
-      bindGroup: root.createBindGroup(materialBindGroupLayout, {
-        baseColorTexture: texture,
-        baseColorSampler: this.#materialSampler
-      }),
-      status: 'fallback'
-    };
-  }
-
-  #materialForBatch(batch: TypeGpuDrawBatch): TypeGpuMaterialResource {
-    const key = batch.material.textureKey ?? 'solid:white';
-
-    if (key === this.#fallbackMaterial.key) {
-      return this.#fallbackMaterial;
-    }
-
-    const existing = this.#materialResources.get(key);
-
-    if (existing?.status === 'ready') {
-      return existing;
-    }
-
-    if (!existing) {
-      this.#materialResources.set(key, {
-        ...this.#fallbackMaterial,
-        key,
-        status: 'loading'
-      });
-      void this.#loadMaterialTexture(key, batch.material.map);
-    }
-
-    return this.#fallbackMaterial;
-  }
-
-  async #loadMaterialTexture(key: string, source: TypeGpuTextureSource | null): Promise<void> {
-    if (!source) return;
-
-    let image: LoadedTextureImage | null = null;
-    let texture: TypeGpuMaterialTexture | null = null;
-
-    try {
-      image = await loadMaterialTextureImageSource(source);
-
-      if (this.#disposed) {
-        return;
-      }
-
-      const root = this.root;
-      texture = root.createTexture({
-        size: [image.width, image.height],
-        format: 'rgba8unorm',
-        dimension: '2d'
-      })
-        .$usage('sampled')
-        .$name(`TypeGPU material texture ${textureSourceLabel(source)}`);
-
-      writeLoadedTexture(texture, image);
-
-      if (this.#disposed) {
-        texture.destroy();
-        texture = null;
-        return;
-      }
-
-      const bindGroup = root.createBindGroup(materialBindGroupLayout, {
-        baseColorTexture: texture,
-        baseColorSampler: this.#materialSampler
-      });
-      const previous = this.#materialResources.get(key);
-      if (previous && previous.texture !== this.#fallbackMaterial.texture) {
-        previous.texture.destroy();
-      }
-
-      this.#materialResources.set(key, {
-        key,
-        texture,
-        bindGroup,
-        status: 'ready'
-      });
-      texture = null;
-    } catch {
-      texture?.destroy();
-
-      if (this.#disposed) return;
-
-      this.#materialResources.set(key, {
-        ...this.#fallbackMaterial,
-        key,
-        status: 'failed'
-      });
-    } finally {
-      image?.close();
+    if (!this.#disposed && this.#frameloop === 'always') {
+      this.invalidate();
     }
   }
 
-  #ensureBatchBuffers(batch: TypeGpuDrawBatch): TypeGpuBatchBuffers {
-    const existing = this.#batchBuffers.get(batch.key);
-
-    if (existing && existing.geometryKey === batch.geometry.key) {
-      return existing;
-    }
-
-    existing?.instanceBuffer?.destroy();
-    existing?.vertexBuffer.destroy();
-
-    const buffers = {
-      geometryKey: batch.geometry.key,
-      instanceBuffer: null,
-      instanceBufferByteLength: 0,
-      instanceCount: 0,
-      vertexBuffer: createAndUploadBuffer(
-        this.root,
-        meshVertexLayout,
-        `TypeGPU ${batch.geometry.key} vertices`,
-        batch.geometry.vertexData
-      )
-    };
-
-    this.#batchBuffers.set(batch.key, buffers);
-    return buffers;
+  #configureContext(): GPUCanvasContext {
+    return this.root.configureContext({
+      canvas: this.options.canvas,
+      format: this.#format,
+      alphaMode: this.#renderSettings.alphaMode
+    });
   }
 
-  #pruneBatchBuffers(drawBatches: TypeGpuDrawBatch[]): void {
-    const liveKeys = new Set(drawBatches.map((batch) => batch.key));
+  #createResizeObserver(): ResizeObserver | null {
+    if (this.#frameloop !== 'demand' || typeof ResizeObserver === 'undefined') return null;
 
-    for (const [key, buffers] of this.#batchBuffers) {
-      if (liveKeys.has(key)) continue;
+    const observer = new ResizeObserver(() => this.invalidate());
+    observer.observe(this.options.canvas);
+    return observer;
+  }
 
-      buffers.instanceBuffer?.destroy();
-      buffers.vertexBuffer.destroy();
-      this.#batchBuffers.delete(key);
+  #updateRenderSettings(settings: TypeGpuRenderSettings): void {
+    const alphaModeChanged = this.#renderSettings.alphaMode !== settings.alphaMode;
+    const depthChanged = this.#renderSettings.depth !== settings.depth;
+
+    this.#renderSettings = settings;
+
+    if (alphaModeChanged) {
+      this.#context = this.#configureContext();
     }
+
+    if (depthChanged) {
+      this.#depthTexture?.destroy();
+      this.#depthTexture = null;
+      this.#projectionDirty = true;
+    }
+  }
+
+  #pipelineForBatch(batch: TypeGpuDrawBatch): TypeGpuMeshPipeline {
+    const pipelineKey = batch.pipelineKey;
+
+    if (!pipelineKey) {
+      return this.#pipelines.getOrCreate(batch);
+    }
+
+    return this.#pipelines.getOrCreate(batch);
   }
 
   #setAnimationSpeed(nextSpeed: number): void {
@@ -430,47 +416,15 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#animationSpeed = nextSpeed;
   }
 
-  #uploadInstances(
-    buffers: TypeGpuBatchBuffers,
-    instanceData: Float32Array,
-    batch: TypeGpuDrawBatch,
-    dirtyRanges: TypeGpuInstanceDirtyRange[]
-  ): void {
-    const byteLength = Math.max(meshInstanceLayout.stride, instanceData.byteLength);
-
-    if (!buffers.instanceBuffer || buffers.instanceBufferByteLength !== byteLength) {
-      buffers.instanceBuffer?.destroy();
-      buffers.instanceBuffer = createAndUploadBuffer(
-        this.root,
-        meshInstanceLayout,
-        `TypeGPU ${batch.key} instances`,
-        instanceData
-      );
-      buffers.instanceBufferByteLength = byteLength;
-    } else {
-      for (const range of dirtyRanges) {
-        writeFloat32BufferRange(
-          buffers.instanceBuffer,
-          instanceData,
-          range.start * batch.floatsPerInstance,
-          range.count * batch.floatsPerInstance
-        );
-      }
-    }
-  }
-
   #applyContinuity(
     batch: TypeGpuDrawBatch,
     dirtyRanges: TypeGpuInstanceDirtyRange[]
-  ): Float32Array {
-    this.#continuity.prune(this.#drawBatches.flatMap((drawBatch) => drawBatch.instanceIds));
-
+  ): TypeGpuInstanceDirtyRange[] {
     for (const range of dirtyRanges) {
       const end = Math.min(batch.instanceIds.length, range.start + range.count);
 
       for (let index = range.start; index < end; index += 1) {
         const offset = index * batch.floatsPerInstance;
-
         const animationTime = this.#time * this.#animationSpeed + this.#animationOffset;
 
         batch.instances[offset + MESH_SPIN_OFFSET_OFFSET] = this.#continuity.offsetFor({
@@ -481,62 +435,35 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       }
     }
 
-    return batch.instances;
-  }
-
-  #render(timestamp: number): void {
-    if (this.#disposed) return;
-
-    const delta = this.#lastTimestamp ? Math.min(48, timestamp - this.#lastTimestamp) : 0;
-    this.#lastTimestamp = timestamp;
-
-    this.#time += (delta / 16.67) * 0.018;
-
-    this.#resize();
-    this.#writeUniforms();
-
-    if (this.#depthTexture) {
-      beginTypeGpuRenderPass({
-        root: this.root,
-        context: this.#context,
-        depthTexture: this.#depthTexture,
-        pipeline: this.#pipeline,
-        sceneBindGroup: this.#sceneBindGroup,
-        lightingBindGroup: this.#lightingBindGroup,
-        draw: (passPipeline) => {
-          for (const batch of this.#drawBatches) {
-            const buffers = this.#batchBuffers.get(batch.key);
-            if (!buffers?.instanceBuffer || buffers.instanceCount === 0) continue;
-
-            drawTypeGpuMaterialBatch(passPipeline, buffers, this.#materialForBatch(batch), batch);
-          }
-        }
-      });
-    }
-
-    this.#fpsMeter.record(timestamp);
-    this.#frame = requestAnimationFrame((nextTimestamp) => this.#render(nextTimestamp));
+    return dirtyRanges;
   }
 
   #resize(): void {
-    const dpr = Math.min(MAX_DEVICE_PIXEL_RATIO, window.devicePixelRatio || 1);
-    const width = Math.max(1, Math.floor(this.canvas.clientWidth * dpr));
-    const height = Math.max(1, Math.floor(this.canvas.clientHeight * dpr));
+    const canvas = this.options.canvas;
+    const dpr = Math.min(this.#maxDevicePixelRatio, window.devicePixelRatio || 1);
+    const width = Math.max(1, Math.floor((canvas.clientWidth || canvas.width || 1) * dpr));
+    const height = Math.max(1, Math.floor((canvas.clientHeight || canvas.height || 1) * dpr));
 
     if (this.#renderSize.width === width && this.#renderSize.height === height) return;
 
-    this.canvas.width = width;
-    this.canvas.height = height;
+    canvas.width = width;
+    canvas.height = height;
     this.#renderSize = { width, height };
     this.#depthTexture?.destroy();
-    const root = this.root;
-    this.#depthTexture = root.createTexture({
-      size: [width, height],
-      format: DEPTH_FORMAT,
-      dimension: '2d'
-    })
-      .$usage('render')
-      .$name('TypeGPU depth texture');
+    this.#depthTexture = null;
+
+    if (this.#renderSettings.depth) {
+      const root = this.root;
+      this.#depthTexture = root
+        .createTexture({
+          size: [width, height],
+          format: DEPTH_FORMAT,
+          dimension: '2d'
+        })
+        .$usage('render')
+        .$name('TypeGPU depth texture');
+    }
+
     this.#projectionDirty = true;
   }
 
@@ -556,151 +483,53 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   }
 }
 
-export async function loadMaterialTextureImageSource(
-  source: TypeGpuTextureSource
-): Promise<LoadedTextureImage> {
-  if (source.kind === 'embedded') {
-    const bytes = new Uint8Array(source.data.byteLength);
-    bytes.set(source.data);
-    return loadTextureBlob(new Blob([bytes], { type: source.mimeType }));
-  }
-
-  return loadUrlTextureImageSource(source.src);
-}
-
-async function loadUrlTextureImageSource(src: string): Promise<LoadedTextureImage> {
-  const response = await fetch(src);
-
-  if (!response.ok) {
-    throw new Error(`Failed to load material texture ${src}: ${response.status}`);
-  }
-
-  const blob = await response.blob();
-
-  return loadTextureBlob(blob);
-}
-
-async function loadTextureBlob(blob: Blob): Promise<LoadedTextureImage> {
-  if (typeof createImageBitmap === 'function') {
-    try {
-      const bitmap = await createImageBitmap(blob);
-
-      return {
-        source: bitmap,
-        width: bitmap.width,
-        height: bitmap.height,
-        close: () => bitmap.close()
-      };
-    } catch {
-      // Some browsers cannot decode SVG blobs through createImageBitmap, but they can
-      // decode them as HTML images that we rasterize before uploading with TypeGPU.
-    }
-  }
-
-  return loadHtmlTextureImage(blob);
-}
-
-function textureSourceLabel(source: TypeGpuTextureSource): string {
-  return source.kind === 'embedded' ? source.key : source.src;
-}
-
-function loadHtmlTextureImage(blob: Blob): Promise<LoadedTextureImage> {
-  const objectUrl = URL.createObjectURL(blob);
-  const image = new Image();
-  image.decoding = 'async';
-  image.src = objectUrl;
-
-  return image
-    .decode()
-    .then(() => ({
-      width: image.naturalWidth || image.width,
-      height: image.naturalHeight || image.height,
-      source: rasterizeImage(image, image.naturalWidth || image.width, image.naturalHeight || image.height),
-      close: () => {
-        URL.revokeObjectURL(objectUrl);
-        image.removeAttribute('src');
-      }
-    }))
-    .catch((error: unknown) => {
-      URL.revokeObjectURL(objectUrl);
-      image.removeAttribute('src');
-      throw error;
-    });
-}
-
-function writeLoadedTexture(texture: TypeGpuMaterialTexture, image: LoadedTextureImage): void {
-  if (image.source instanceof Uint8ClampedArray) {
-    texture.write(
-      new Uint8Array(image.source.buffer, image.source.byteOffset, image.source.byteLength)
-    );
-    return;
-  }
-
-  texture.write(image.source);
-}
-
-function rasterizeImage(image: CanvasImageSource, width: number, height: number): Uint8ClampedArray {
-  const canvas =
-    typeof OffscreenCanvas === 'function'
-      ? new OffscreenCanvas(width, height)
-      : document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext('2d') as
-    | CanvasRenderingContext2D
-    | OffscreenCanvasRenderingContext2D
-    | null;
-
-  if (!context) {
-    throw new Error('Unable to rasterize material texture.');
-  }
-
-  context.drawImage(image, 0, 0, width, height);
-  return context.getImageData(0, 0, width, height).data;
-}
-
 function beginTypeGpuRenderPass({
   root,
   context,
+  clearColor,
   depthTexture,
-  pipeline,
-  sceneBindGroup,
-  lightingBindGroup,
   draw
 }: {
   root: TgpuRoot;
   context: GPUCanvasContext;
-  depthTexture: TypeGpuDepthTexture;
-  pipeline: TypeGpuMeshPipeline;
-  sceneBindGroup: TgpuBindGroup<typeof sceneBindGroupLayout.entries>;
-  lightingBindGroup: TgpuBindGroup<typeof lightingBindGroupLayout.entries>;
-  draw(passPipeline: TypeGpuMeshPipeline): void;
+  clearColor: RgbaTuple;
+  depthTexture: TypeGpuDepthTexture | null;
+  draw(pass: GPURenderPassEncoder): void;
 }): void {
   const commandEncoder = root.device.createCommandEncoder();
-  const pass = commandEncoder.beginRenderPass({
+  const descriptor: GPURenderPassDescriptor = {
     colorAttachments: [
       {
         view: context.getCurrentTexture().createView(),
         loadOp: 'clear',
         storeOp: 'store',
-        clearValue: { r: 0.067, g: 0.078, b: 0.102, a: 1 }
+        clearValue: {
+          r: clearColor[0],
+          g: clearColor[1],
+          b: clearColor[2],
+          a: clearColor[3]
+        }
       }
-    ],
-    depthStencilAttachment: {
+    ]
+  };
+
+  if (depthTexture) {
+    descriptor.depthStencilAttachment = {
       view: root.unwrap(depthTexture).createView(),
       depthClearValue: 1,
       depthLoadOp: 'clear',
       depthStoreOp: 'store'
-    }
-  });
+    };
+  }
+
+  const pass = commandEncoder.beginRenderPass(descriptor);
   let shouldSubmit = false;
 
   // Bare TypeGPU draw() creates and submits a render pass per call. This helper owns
   // the raw pass lifetime so a frame gets one color clear, one depth clear, and many
   // pass-bound TypeGPU draws without using raw WebGPU for material resources.
   try {
-    const passPipeline = pipeline.with(pass).with(sceneBindGroup).with(lightingBindGroup);
-    draw(passPipeline);
+    draw(pass);
     shouldSubmit = true;
   } finally {
     pass.end();
@@ -711,55 +540,38 @@ function beginTypeGpuRenderPass({
   }
 }
 
-function drawTypeGpuMaterialBatch(
-  passPipeline: TypeGpuMeshPipeline,
-  buffers: TypeGpuBatchBuffers,
-  material: TypeGpuMaterialResource,
-  batch: TypeGpuDrawBatch
-): void {
-  if (!buffers.instanceBuffer) return;
+function drawTypeGpuMaterialBatch({
+  pipeline,
+  pass,
+  sceneBindGroup,
+  lightingBindGroup,
+  geometryResource,
+  instanceResource,
+  materialResource,
+  batch
+}: {
+  pipeline: TypeGpuMeshPipeline;
+  pass: GPURenderPassEncoder;
+  sceneBindGroup: TgpuBindGroup<typeof sceneBindGroupLayout.entries>;
+  lightingBindGroup: TgpuBindGroup<typeof lightingBindGroupLayout.entries>;
+  geometryResource: TypeGpuVertexBufferResource;
+  instanceResource: TypeGpuInstanceBufferResource;
+  materialResource: TypeGpuMaterialResource;
+  batch: TypeGpuDrawBatch;
+}): void {
+  if (!instanceResource.buffer) return;
+
+  const passPipeline = pipeline.with(pass).with(sceneBindGroup).with(lightingBindGroup);
 
   passPipeline
-    .with(material.bindGroup)
-    .with(meshVertexLayout, buffers.vertexBuffer.buffer)
-    .with(meshInstanceLayout, buffers.instanceBuffer.buffer)
-    .draw(batch.geometry.vertexCount, buffers.instanceCount);
+    .with(materialResource.bindGroup)
+    .with(meshVertexLayout, geometryResource.vertexBuffer.buffer)
+    .with(meshInstanceLayout, instanceResource.buffer.buffer)
+    .draw(batch.geometry.vertexCount, instanceResource.instanceCount);
 }
 
-function createAndUploadBuffer(
-  root: TgpuRoot,
-  layout: TgpuVertexLayout,
-  label: string,
-  data: Float32Array
-): TypeGpuVertexBuffer {
-  const byteLength = Math.max(layout.stride, data.byteLength);
-  const buffer = root
-    .createBuffer(d.arrayOf(d.f32, byteLength / Float32Array.BYTES_PER_ELEMENT))
-    .$usage('vertex')
-    .$name(label);
-
-  if (data.length > 0) {
-    buffer.write(arrayBufferFor(data));
-  }
-
-  return buffer;
-}
-
-function writeFloat32BufferRange(
-  buffer: TypeGpuVertexBuffer,
-  data: Float32Array,
-  startFloat: number,
-  floatCount: number
-): void {
-  if (floatCount === 0) return;
-
-  const startByte = startFloat * Float32Array.BYTES_PER_ELEMENT;
-  const endByte = startByte + floatCount * Float32Array.BYTES_PER_ELEMENT;
-
-  buffer.write(arrayBufferFor(data.subarray(startFloat, startFloat + floatCount)), {
-    startOffset: startByte,
-    endOffset: endByte
-  });
+function normalizeFrameloop(frameloop: TypeGpuRendererOptions['frameloop']): TypeGpuFrameLoop {
+  return frameloop && frameloop in FRAMELOOP_OPTIONS ? frameloop : FRAMELOOP_OPTIONS.always.frameloop;
 }
 
 function arrayBufferFor(data: Float32Array): ArrayBuffer {

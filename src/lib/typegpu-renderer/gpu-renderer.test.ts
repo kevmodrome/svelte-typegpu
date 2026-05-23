@@ -4,11 +4,20 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadMaterialTextureImageSource, SCENE_UNIFORM_FLOATS } from './gpu-renderer';
 import { MESH_INSTANCE_FLOATS, MESH_ROTATION_OFFSET } from './instance-data';
 
+function readSource(path: string): string {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
 describe('TypeGPU GPU renderer', () => {
-  const rendererSource = readFileSync('src/lib/typegpu-renderer/gpu-renderer.ts', 'utf8');
+  const rendererSource = readSource('src/lib/typegpu-renderer/gpu-renderer.ts');
+  const cacheSource = readSource('src/lib/typegpu-renderer/resource-caches.ts');
   const pipelineSource = readFileSync('src/lib/typegpu-renderer/typegpu-pipeline.ts', 'utf8');
   const layoutsSource = readFileSync('src/lib/typegpu-renderer/typegpu-layouts.ts', 'utf8');
-  const source = [rendererSource, pipelineSource, layoutsSource].join('\n');
+  const source = [rendererSource, cacheSource, pipelineSource, layoutsSource].join('\n');
 
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -24,10 +33,46 @@ describe('TypeGPU GPU renderer', () => {
     expect(MESH_ROTATION_OFFSET).toBe(13);
   });
 
+  it('owns explicit GPU resource caches', () => {
+    expect(cacheSource).toContain('GeometryResourceCache');
+    expect(cacheSource).toContain('InstanceBufferCache');
+    expect(cacheSource).toContain('MaterialResourceCache');
+    expect(cacheSource).toContain('TextureResourceCache');
+    expect(cacheSource).toContain('SamplerResourceCache');
+    expect(cacheSource).toContain('PipelineResourceCache');
+    expect(rendererSource).toContain('#geometryResources');
+    expect(rendererSource).toContain('#instanceBuffers');
+    expect(rendererSource).toContain('#materialResources');
+    expect(rendererSource).toContain('#textureResources');
+    expect(rendererSource).toContain('#samplerResources');
+    expect(rendererSource).toContain('#pipelines');
+  });
+
+  it('prunes GPU resources from scene live keys', () => {
+    expect(rendererSource).toContain('scene.liveResourceKeys.geometries');
+    expect(rendererSource).toContain('scene.liveResourceKeys.materials');
+    expect(rendererSource).toContain('scene.liveResourceKeys.textures');
+    expect(rendererSource).toContain('scene.liveResourceKeys.samplers');
+    expect(rendererSource).toContain('scene.liveResourceKeys.pipelines');
+  });
+
+  it('looks up pipelines by draw batch pipeline key', () => {
+    expect(rendererSource).toContain('batch.pipelineKey');
+    expect(pipelineSource).toContain('createMeshPipeline');
+  });
+
+  it('implements always, demand, and manual frame loops truthfully', () => {
+    expect(rendererSource).toContain("frameloop: 'always'");
+    expect(rendererSource).toContain("frameloop: 'demand'");
+    expect(rendererSource).toContain("frameloop: 'manual'");
+    expect(rendererSource).toContain('invalidate(): void');
+    expect(rendererSource).toContain('renderFrame(timestamp?: number): void');
+  });
+
   it('uses TypeGPU vertex layouts and vertex buffers for mesh data', () => {
     expect(layoutsSource).toContain('tgpu.vertexLayout');
-    expect(rendererSource).toContain('.createBuffer(d.arrayOf(d.f32');
-    expect(rendererSource).toMatch(/\.\$usage\('vertex'(?: as never)?\)/);
+    expect(cacheSource).toContain('.createBuffer(d.arrayOf(d.f32');
+    expect(cacheSource).toMatch(/\.\$usage\('vertex'(?: as never)?\)/);
     expect(pipelineSource).toContain('meshVertexLayout.attrib.position');
     expect(pipelineSource).toContain('meshInstanceLayout.attrib.position');
     expect(source).not.toContain('arrayStride: MESH_VERTEX_FLOATS');
@@ -35,21 +80,21 @@ describe('TypeGPU GPU renderer', () => {
   });
 
   it('creates material resources through TypeGPU APIs', () => {
-    expect(rendererSource).toContain('root.createTexture');
-    expect(rendererSource).toContain('root.createSampler');
-    expect(rendererSource).toContain('root.createBindGroup(materialBindGroupLayout');
-    expect(rendererSource).toContain('.write(');
-    expect(rendererSource).not.toContain('device.createTexture');
-    expect(rendererSource).not.toContain('this.root.device.createTexture');
-    expect(rendererSource).not.toContain('device.createSampler');
-    expect(rendererSource).not.toContain('device.createBindGroup');
+    expect(cacheSource).toContain('root.createTexture');
+    expect(cacheSource).toContain('root.createSampler');
+    expect(cacheSource).toContain('root.createBindGroup(materialBindGroupLayout');
+    expect(cacheSource).toContain('.write(');
+    expect(source).not.toContain('device.createTexture');
+    expect(source).not.toContain('this.root.device.createTexture');
+    expect(source).not.toContain('device.createSampler');
+    expect(source).not.toContain('device.createBindGroup');
   });
 
   it('cleans up decoded texture assets if material loading fails mid-upload', () => {
-    expect(rendererSource).toContain('let image: LoadedTextureImage | null = null;');
-    expect(rendererSource).toContain('let texture: TypeGpuMaterialTexture | null = null;');
-    expect(rendererSource).toMatch(/catch\s*{\s*texture\?\.destroy\(\);/s);
-    expect(rendererSource).toMatch(/finally\s*{\s*image\?\.close\(\);\s*}/s);
+    expect(cacheSource).toContain('let image: LoadedTextureImage | null = null;');
+    expect(cacheSource).toContain('let texture: TypeGpuMaterialTexture | null = null;');
+    expect(cacheSource).toMatch(/catch\s*{\s*texture\?\.destroy\(\);/s);
+    expect(cacheSource).toMatch(/finally\s*{\s*image\?\.close\(\);\s*}/s);
   });
 
   it('falls back to an HTML image source when createImageBitmap cannot decode a texture blob', async () => {
@@ -142,7 +187,7 @@ describe('TypeGPU GPU renderer', () => {
     expect(rendererSource).toContain('root.createBindGroup(sceneBindGroupLayout');
     expect(pipelineSource).toMatch(/root\s*\.\s*createRenderPipeline/);
     expect(rendererSource).toContain('.with(sceneBindGroup)');
-    expect(rendererSource).toContain('.with(material.bindGroup)');
+    expect(rendererSource).toContain('.with(materialResource.bindGroup)');
     expect(rendererSource).toContain('.with(meshVertexLayout');
     expect(rendererSource).toContain('.with(meshInstanceLayout');
     expect(rendererSource).toContain('commandEncoder.beginRenderPass');
@@ -178,7 +223,7 @@ describe('TypeGPU GPU renderer', () => {
 
   it('treats lighting changes as buffer writes separate from mesh uploads', () => {
     expect(rendererSource).toMatch(
-      /if\s*\(scene\.lightsChanged\)\s*{\s*this\.#lightingBuffer\.write\(packLightingState\(scene\.lights\)\);?\s*}/s
+      /if\s*\(scene\.lightsChanged\)\s*{\s*this\.\#lightingBuffer\.write\(packLightingState\(scene\.lights\)\);?\s*}/s
     );
     expect(rendererSource).not.toMatch(
       /scene\.lights[\s\S]{0,120}packMeshInstance|packMeshInstance[\s\S]{0,120}scene\.lights/

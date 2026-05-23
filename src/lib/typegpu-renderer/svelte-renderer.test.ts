@@ -46,6 +46,9 @@ function fakeRenderer(): TypeGpuRenderer {
   return {
     setScene: vi.fn(),
     setCamera: vi.fn(),
+    invalidate: vi.fn(),
+    renderFrame: vi.fn(),
+    getRenderSize: vi.fn(() => ({ width: 0, height: 0 })),
     dispose: vi.fn()
   };
 }
