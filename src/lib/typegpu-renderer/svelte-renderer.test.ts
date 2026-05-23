@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createElement, createFragment, addEventListener, insert } from './core';
+import { createElement, createFragment, addEventListener, insert, setAttribute } from './core';
 import { createTypeGpuRuntimeForTest } from './svelte-renderer';
 import type { TypeGpuRenderer } from './gpu-renderer';
+import type { TypeGpuLoadedModel } from './glb-loader';
 
 class FakeCanvas {
   clientHeight = 600;
@@ -46,6 +47,10 @@ function fakeRenderer(): TypeGpuRenderer {
     setCamera: vi.fn(),
     dispose: vi.fn()
   };
+}
+
+function loadedModel(key: string): TypeGpuLoadedModel {
+  return { key, meshes: [] };
 }
 
 describe('TypeGPU Svelte renderer runtime', () => {
@@ -124,5 +129,39 @@ describe('TypeGPU Svelte renderer runtime', () => {
     canvas.dispatch<MouseEvent>('click', {} as Partial<MouseEvent>);
 
     expect(onMeshClick).toHaveBeenCalledOnce();
+  });
+
+  it('schedules a second sync after an async model cache entry settles', async () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const model = createElement('model');
+    const canvas = new FakeCanvas();
+    const renderer = fakeRenderer();
+    let resolveLoad: (model: TypeGpuLoadedModel) => void = () => {};
+    const loadUrl = vi.fn(
+      () => new Promise<TypeGpuLoadedModel>((resolve) => (resolveLoad = resolve))
+    );
+    const runtime = createTypeGpuRuntimeForTest(
+      root,
+      canvas as unknown as HTMLCanvasElement,
+      renderer,
+      { loadUrl, loadData: vi.fn() }
+    );
+
+    setAttribute(model, 'src', '/models/empty.glb');
+    insert(scene, model, null);
+    insert(root, scene, null);
+
+    runtime.scheduleSync(root);
+    await Promise.resolve();
+
+    expect(renderer.setScene).toHaveBeenCalledTimes(1);
+    expect(loadUrl).toHaveBeenCalledWith('/models/empty.glb');
+
+    resolveLoad(loadedModel('url:/models/empty.glb'));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(renderer.setScene).toHaveBeenCalledTimes(2);
   });
 });

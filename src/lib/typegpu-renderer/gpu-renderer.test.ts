@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadTextureImageSource, SCENE_UNIFORM_FLOATS } from './gpu-renderer';
+import { loadMaterialTextureImageSource, SCENE_UNIFORM_FLOATS } from './gpu-renderer';
 import { MESH_INSTANCE_FLOATS, MESH_ROTATION_OFFSET } from './instance-data';
 
 describe('TypeGPU GPU renderer', () => {
@@ -97,7 +97,10 @@ describe('TypeGPU GPU renderer', () => {
     vi.stubGlobal('Image', FakeImage);
     vi.stubGlobal('document', { createElement: vi.fn(() => canvas) });
 
-    const image = await loadTextureImageSource('/textures/checker.svg');
+    const image = await loadMaterialTextureImageSource({
+      kind: 'url',
+      src: '/textures/checker.svg'
+    });
 
     expect(createImageBitmap).toHaveBeenCalledOnce();
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
@@ -113,6 +116,30 @@ describe('TypeGPU GPU renderer', () => {
 
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:checker');
     expect((createdImage as FakeImage | null)?.src).toBe('');
+  });
+
+  it('decodes embedded material texture bytes without fetching', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('', { status: 200 }))
+    );
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn(async () => {
+        throw new DOMException('The source image could not be decoded.', 'InvalidStateError');
+      })
+    );
+
+    await expect(
+      loadMaterialTextureImageSource({
+        kind: 'embedded',
+        key: 'embedded:invalid',
+        mimeType: 'image/png',
+        data: new Uint8Array([0, 1, 2, 3])
+      })
+    ).rejects.toBeInstanceOf(Error);
+
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('uses TypeGPU pipeline binding for material draws', () => {

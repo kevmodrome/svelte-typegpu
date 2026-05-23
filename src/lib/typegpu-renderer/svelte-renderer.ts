@@ -26,6 +26,7 @@ import {
 } from './core';
 import { invalidatesDrawBatches, invalidatesLights } from './scene-dirtiness';
 import { createSceneState, createTypeGpuSceneCache } from './scene-state';
+import { createModelCache, type TypeGpuModelCacheOptions } from './model-cache';
 
 export interface TypeGpuRootOptions {
   target: HTMLElement;
@@ -45,6 +46,8 @@ interface RuntimeState extends TypeGpuRuntime {
 
 interface RuntimeOptions {
   windowTarget?: Pick<Window, 'addEventListener' | 'removeEventListener'>;
+  loadUrl?: TypeGpuModelCacheOptions['loadUrl'];
+  loadData?: TypeGpuModelCacheOptions['loadData'];
 }
 
 const renderer = createRenderer({
@@ -106,7 +109,18 @@ function createRuntime(
   let drawBatchesDirty = true;
   let lightsDirty = true;
   let syncedTreeRevision = -1;
-  const sceneCache = createTypeGpuSceneCache();
+  const onModelSettled = () => scheduleSync(root);
+  const hasInjectedModelLoader = Boolean(options.loadUrl || options.loadData);
+  const sceneCache = createTypeGpuSceneCache({
+    onModelSettled,
+    modelCache: hasInjectedModelLoader
+      ? createModelCache({
+          loadUrl: options.loadUrl,
+          loadData: options.loadData,
+          onSettled: onModelSettled
+        })
+      : undefined
+  });
   const cameraInteraction = createCameraInteractionController({
     canvas,
     renderer: gpu,
@@ -162,7 +176,11 @@ export function createTypeGpuRuntimeForTest(
   root: TypeGpuNode,
   canvas: HTMLCanvasElement,
   gpu: TypeGpuRenderer,
-  windowTarget?: Pick<Window, 'addEventListener' | 'removeEventListener'>
+  options: RuntimeOptions | Pick<Window, 'addEventListener' | 'removeEventListener'> = {}
 ): RuntimeState {
-  return createRuntime(root, canvas, gpu, { windowTarget });
+  if ('addEventListener' in options && 'removeEventListener' in options) {
+    return createRuntime(root, canvas, gpu, { windowTarget: options });
+  }
+
+  return createRuntime(root, canvas, gpu, options);
 }

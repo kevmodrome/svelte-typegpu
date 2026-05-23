@@ -35,7 +35,8 @@ import type {
   TypeGpuCameraSettings,
   TypeGpuDrawBatch,
   TypeGpuInstanceDirtyRange,
-  TypeGpuSceneState
+  TypeGpuSceneState,
+  TypeGpuTextureSource
 } from './types';
 
 // Keep the TypeGPU scene uniform buffer at 96 bytes, matching the explicit padding schema.
@@ -296,23 +297,20 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
         key,
         status: 'loading'
       });
-      void this.#loadMaterialTexture(
-        key,
-        batch.material.map?.kind === 'url' ? batch.material.map.src : null
-      );
+      void this.#loadMaterialTexture(key, batch.material.map);
     }
 
     return this.#fallbackMaterial;
   }
 
-  async #loadMaterialTexture(key: string, src: string | null): Promise<void> {
-    if (!src) return;
+  async #loadMaterialTexture(key: string, source: TypeGpuTextureSource | null): Promise<void> {
+    if (!source) return;
 
     let image: LoadedTextureImage | null = null;
     let texture: TypeGpuMaterialTexture | null = null;
 
     try {
-      image = await loadTextureImageSource(src);
+      image = await loadMaterialTextureImageSource(source);
 
       if (this.#disposed) {
         return;
@@ -325,7 +323,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
         dimension: '2d'
       })
         .$usage('sampled')
-        .$name(`TypeGPU material texture ${src}`);
+        .$name(`TypeGPU material texture ${textureSourceLabel(source)}`);
 
       writeLoadedTexture(texture, image);
 
@@ -538,7 +536,19 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   }
 }
 
-export async function loadTextureImageSource(src: string): Promise<LoadedTextureImage> {
+export async function loadMaterialTextureImageSource(
+  source: TypeGpuTextureSource
+): Promise<LoadedTextureImage> {
+  if (source.kind === 'embedded') {
+    const bytes = new Uint8Array(source.data.byteLength);
+    bytes.set(source.data);
+    return loadTextureBlob(new Blob([bytes], { type: source.mimeType }));
+  }
+
+  return loadUrlTextureImageSource(source.src);
+}
+
+async function loadUrlTextureImageSource(src: string): Promise<LoadedTextureImage> {
   const response = await fetch(src);
 
   if (!response.ok) {
@@ -547,6 +557,10 @@ export async function loadTextureImageSource(src: string): Promise<LoadedTexture
 
   const blob = await response.blob();
 
+  return loadTextureBlob(blob);
+}
+
+async function loadTextureBlob(blob: Blob): Promise<LoadedTextureImage> {
   if (typeof createImageBitmap === 'function') {
     try {
       const bitmap = await createImageBitmap(blob);
@@ -564,6 +578,10 @@ export async function loadTextureImageSource(src: string): Promise<LoadedTexture
   }
 
   return loadHtmlTextureImage(blob);
+}
+
+function textureSourceLabel(source: TypeGpuTextureSource): string {
+  return source.kind === 'embedded' ? source.key : source.src;
 }
 
 function loadHtmlTextureImage(blob: Blob): Promise<LoadedTextureImage> {
