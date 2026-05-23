@@ -191,6 +191,64 @@ describe('GLB loader', () => {
     expect(model.meshes).toHaveLength(0);
   });
 
+  it('skips primitives with malformed declared normals', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const normals = float32Bytes([0, 0, 1, 0, 0, 1]);
+    const binary = concatBytes([positions, normals]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0 }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0, NORMAL: 1 } }] }],
+          buffers: [{ byteLength: binary.byteLength }],
+          bufferViews: [
+            { buffer: 0, byteOffset: 0, byteLength: positions.byteLength },
+            { buffer: 0, byteOffset: positions.byteLength, byteLength: normals.byteLength }
+          ],
+          accessors: [
+            { bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' },
+            { bufferView: 1, componentType: 5126, count: 3, type: 'VEC3' }
+          ]
+        },
+        binary
+      ),
+      'model:malformed-normals'
+    );
+
+    expect(model.meshes).toHaveLength(0);
+  });
+
+  it('skips primitives with short declared UVs', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const uvs = float32Bytes([0, 0, 1, 0]);
+    const binary = concatBytes([positions, uvs]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0 }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0, TEXCOORD_0: 1 } }] }],
+          buffers: [{ byteLength: binary.byteLength }],
+          bufferViews: [
+            { buffer: 0, byteOffset: 0, byteLength: positions.byteLength },
+            { buffer: 0, byteOffset: positions.byteLength, byteLength: uvs.byteLength }
+          ],
+          accessors: [
+            { bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' },
+            { bufferView: 1, componentType: 5126, count: 2, type: 'VEC2' }
+          ]
+        },
+        binary
+      ),
+      'model:short-uvs'
+    );
+
+    expect(model.meshes).toHaveLength(0);
+  });
+
   it('skips primitives with invalid declared indices', () => {
     const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
     const indices = uint16Bytes([0, 1, 5]);
@@ -215,6 +273,27 @@ describe('GLB loader', () => {
         binary
       ),
       'model:bad-indices'
+    );
+
+    expect(model.meshes).toHaveLength(0);
+  });
+
+  it('skips primitives with non-number declared indices', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0 }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 }, indices: 'bad' }] }],
+          buffers: [{ byteLength: positions.byteLength }],
+          bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: positions.byteLength }],
+          accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' }]
+        },
+        positions
+      ),
+      'model:non-number-indices'
     );
 
     expect(model.meshes).toHaveLength(0);

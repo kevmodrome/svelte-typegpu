@@ -210,17 +210,26 @@ function readPrimitive(
   const positions = readAccessor(container, primitive.attributes.POSITION, 'VEC3', COMPONENT_FLOAT);
   if (!positions) return null;
 
-  const normals =
-    typeof primitive.attributes.NORMAL === 'number'
-      ? readAccessor(container, primitive.attributes.NORMAL, 'VEC3', COMPONENT_FLOAT)
-      : null;
-  const uvs =
-    typeof primitive.attributes.TEXCOORD_0 === 'number'
-      ? readAccessor(container, primitive.attributes.TEXCOORD_0, 'VEC2', COMPONENT_FLOAT)
-      : null;
-  const indices =
-    typeof primitive.indices === 'number' ? readIndexAccessor(container, primitive.indices) : null;
-  if (typeof primitive.indices === 'number' && !indices) return null;
+  const normals = readOptionalAccessor(
+    container,
+    primitive.attributes,
+    'NORMAL',
+    'VEC3',
+    COMPONENT_FLOAT
+  );
+  if (normals === undefined) return null;
+
+  const uvs = readOptionalAccessor(
+    container,
+    primitive.attributes,
+    'TEXCOORD_0',
+    'VEC2',
+    COMPONENT_FLOAT
+  );
+  if (uvs === undefined) return null;
+
+  const indices = readOptionalIndexAccessor(container, primitive);
+  if (indices === undefined) return null;
 
   const vertexData = buildVertexData(positions, normals, uvs, indices);
   if (!vertexData) return null;
@@ -235,6 +244,31 @@ function readPrimitive(
     material: DEFAULT_STANDARD_MATERIAL,
     transform: IDENTITY_TRANSFORM
   };
+}
+
+function readOptionalAccessor(
+  container: ParsedGlbContainer,
+  attributes: Record<string, number>,
+  name: string,
+  expectedType: string,
+  expectedComponentType: number
+): number[][] | null | undefined {
+  if (!hasOwn(attributes, name)) return null;
+
+  const accessorIndex = attributes[name];
+  if (!isNonNegativeInteger(accessorIndex)) return undefined;
+
+  return readAccessor(container, accessorIndex, expectedType, expectedComponentType) ?? undefined;
+}
+
+function readOptionalIndexAccessor(
+  container: ParsedGlbContainer,
+  primitive: GltfPrimitive
+): number[] | null | undefined {
+  if (!hasOwn(primitive, 'indices')) return null;
+  if (!isNonNegativeInteger(primitive.indices)) return undefined;
+
+  return readIndexAccessor(container, primitive.indices) ?? undefined;
 }
 
 function readAccessor(
@@ -346,6 +380,8 @@ function buildVertexData(
 
   for (const vertexIndex of vertexIndices) {
     if (!isNonNegativeInteger(vertexIndex) || vertexIndex >= positions.length) return null;
+    if (normals && vertexIndex >= normals.length) return null;
+    if (uvs && vertexIndex >= uvs.length) return null;
   }
 
   const vertexData: number[] = [];
@@ -416,6 +452,10 @@ function accessorFitsBufferView(
 
 function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+function hasOwn(object: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(object, key);
 }
 
 function accessorComponentCount(type: string): number | null {
