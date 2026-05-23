@@ -185,8 +185,13 @@ export function loadGlbModel(input: ArrayBuffer, key: string): TypeGpuLoadedMode
 }
 
 function rootNodeIndices(json: GltfJson): number[] {
-  const sceneIndex = json.scene ?? 0;
-  return json.scenes?.[sceneIndex]?.nodes ?? [];
+  const sceneIndex = json.scene === undefined
+    ? 0
+    : isNonNegativeInteger(json.scene)
+      ? json.scene
+      : -1;
+  const nodes = json.scenes?.[sceneIndex]?.nodes;
+  return Array.isArray(nodes) ? nodes.filter(isNonNegativeInteger) : [];
 }
 
 function collectNodePrimitives(
@@ -195,25 +200,37 @@ function collectNodePrimitives(
   nodeIndex: number,
   parentMatrix: Matrix4,
   meshes: TypeGpuLoadedModelMesh[],
-  nextPrimitiveIndex: () => number
+  nextPrimitiveIndex: () => number,
+  path: Set<number> = new Set()
 ): void {
+  if (!isNonNegativeInteger(nodeIndex) || path.has(nodeIndex)) return;
+
   const node = container.json.nodes?.[nodeIndex];
-  if (!node) return;
+  if (!isRecord(node)) return;
+
+  path.add(nodeIndex);
 
   const worldMatrix = multiplyMatrix4(parentMatrix, matrixFromNode(node));
 
   if (typeof node.mesh === 'number') {
     const mesh = container.json.meshes?.[node.mesh];
+    const primitives = isRecord(mesh) && Array.isArray(mesh.primitives)
+      ? mesh.primitives
+      : [];
 
-    for (const primitive of mesh?.primitives ?? []) {
+    for (const primitive of primitives) {
+      if (!isRecord(primitive)) continue;
       const loaded = readPrimitive(container, modelKey, primitive, nextPrimitiveIndex(), worldMatrix);
       if (loaded) meshes.push(loaded);
     }
   }
 
-  for (const childIndex of node.children ?? []) {
-    collectNodePrimitives(container, modelKey, childIndex, worldMatrix, meshes, nextPrimitiveIndex);
+  const children = Array.isArray(node.children) ? node.children : [];
+  for (const childIndex of children) {
+    collectNodePrimitives(container, modelKey, childIndex, worldMatrix, meshes, nextPrimitiveIndex, path);
   }
+
+  path.delete(nodeIndex);
 }
 
 function readPrimitive(
@@ -691,12 +708,16 @@ function accessorFitsBufferView(
   return finalByte <= bufferViewByteLength;
 }
 
-function isNonNegativeInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
-}
-
 function hasOwn(object: object, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(object, key);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 function accessorComponentCount(type: string): number | null {

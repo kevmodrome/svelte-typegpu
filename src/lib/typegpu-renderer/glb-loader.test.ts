@@ -705,6 +705,108 @@ describe('GLB loader', () => {
 
     expect(model.meshes).toEqual([]);
   });
+
+  it('skips null primitive entries and still loads later valid primitives', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0 }],
+          meshes: [{ primitives: [null, { attributes: { POSITION: 0 } }] }],
+          buffers: [{ byteLength: positions.byteLength }],
+          bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: positions.byteLength }],
+          accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' }]
+        },
+        positions
+      ),
+      'model:null-primitive'
+    );
+
+    expect(model.meshes).toHaveLength(1);
+    expect(model.meshes[0].geometry.key).toBe('model:null-primitive:primitive:0');
+  });
+
+  it('skips meshes with non-array primitives without throwing', () => {
+    const model = loadGlbModel(
+      createGlbFixture({
+        asset: { version: '2.0' },
+        scenes: [{ nodes: [0] }],
+        nodes: [{ mesh: 0 }],
+        meshes: [{ primitives: { attributes: { POSITION: 0 } } }]
+      }),
+      'model:non-array-primitives'
+    );
+
+    expect(model.meshes).toEqual([]);
+  });
+
+  it("skips non-array children without throwing while loading the node's own mesh", () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0, children: 1 }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+          buffers: [{ byteLength: positions.byteLength }],
+          bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: positions.byteLength }],
+          accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' }]
+        },
+        positions
+      ),
+      'model:non-array-children'
+    );
+
+    expect(model.meshes).toHaveLength(1);
+    expect(model.meshes[0].geometry.key).toBe('model:non-array-children:primitive:0');
+  });
+
+  it('does not recurse forever on self-referential children', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: [0] }],
+          nodes: [{ mesh: 0, children: [0] }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+          buffers: [{ byteLength: positions.byteLength }],
+          bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: positions.byteLength }],
+          accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' }]
+        },
+        positions
+      ),
+      'model:self-child'
+    );
+
+    expect(model.meshes).toHaveLength(1);
+    expect(model.meshes[0].geometry.key).toBe('model:self-child:primitive:0');
+  });
+
+  it('only loads valid non-negative integer scene node indices', () => {
+    const positions = float32Bytes([0, 0, 0, 1, 0, 0, 0, 1, 0]);
+    const model = loadGlbModel(
+      createGlbFixture(
+        {
+          asset: { version: '2.0' },
+          scenes: [{ nodes: ['0', -1, 1.5, 0] }],
+          nodes: [{ mesh: 0 }],
+          meshes: [{ primitives: [{ attributes: { POSITION: 0 } }] }],
+          buffers: [{ byteLength: positions.byteLength }],
+          bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: positions.byteLength }],
+          accessors: [{ bufferView: 0, componentType: 5126, count: 3, type: 'VEC3' }]
+        },
+        positions
+      ),
+      'model:scene-node-indices'
+    );
+
+    expect(model.meshes).toHaveLength(1);
+    expect(model.meshes[0].geometry.key).toBe('model:scene-node-indices:primitive:0');
+  });
 });
 
 function withTrailingBytes(input: ArrayBuffer, trailingByteLength: number): ArrayBuffer {
