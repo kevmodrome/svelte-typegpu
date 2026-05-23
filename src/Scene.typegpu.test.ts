@@ -58,6 +58,7 @@ describe('TypeGPU demo scene authoring API', () => {
       cubeScale: 1.35,
       cubeCount: 10,
       hue: 120,
+      mouseSensitivity: 1.75,
       camera: {
         ...DEFAULT_SCENE_CONTROLS.camera,
         position: [9, 7, 13],
@@ -107,7 +108,9 @@ describe('TypeGPU demo scene authoring API', () => {
       minDistance: 1,
       maxDistance: 100
     });
-    expect(pointer.name).toBe('pointerControls');
+    expect(pointer.attributes).toMatchObject({
+      rotateSpeed: 1.75
+    });
     expect(keyboard.attributes).toMatchObject({
       rotateLeft: 'ArrowLeft',
       rotateRight: 'ArrowRight',

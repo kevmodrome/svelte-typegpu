@@ -18,6 +18,7 @@ describe('scene controls', () => {
         cubeScale: -1,
         cubeCount: 20_000,
         hue: 725,
+        mouseSensitivity: 8,
         camera: {
           position: [-2000, 2.125, 2000],
           target: [1500, -2.125, -1500],
@@ -32,6 +33,7 @@ describe('scene controls', () => {
       cubeScale: 0.45,
       cubeCount: 10_000,
       hue: 5,
+      mouseSensitivity: 4,
       camera: {
         position: [-1000, 2.13, 1000],
         target: [1000, -2.12, -1000],
@@ -143,6 +145,7 @@ describe('scene controls', () => {
       ...target,
       spinSpeed: 4,
       hue: 725,
+      mouseSensitivity: 0,
       camera: {
         ...target.camera,
         position: [3.333, 4.444, 5.555],
@@ -152,6 +155,7 @@ describe('scene controls', () => {
 
     expect(target.spinSpeed).toBe(2);
     expect(target.hue).toBe(5);
+    expect(target.mouseSensitivity).toBe(0.1);
     expect(target.camera).toBe(camera);
     expect(target.camera.position).toEqual([3.33, 4.44, 5.56]);
     expect(target.camera.target).toEqual([-1.11, -2.22, -3.33]);

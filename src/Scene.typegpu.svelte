@@ -82,7 +82,7 @@
 			maxDistance={100}
 			oncamerachange={handleCameraChange}
 		>
-			<pointerControls></pointerControls>
+			<pointerControls rotateSpeed={controls.mouseSensitivity}></pointerControls>
 			<keyboardControls
 				rotateLeft="ArrowLeft"
 				rotateRight="ArrowRight"

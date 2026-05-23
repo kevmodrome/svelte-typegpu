@@ -4,6 +4,8 @@ export type Vector3Tuple = [number, number, number];
 
 const MIN_CAMERA_DISTANCE = 1;
 const RENDERER_CAMERA_PRECISION = 1_000_000;
+const MIN_MOUSE_SENSITIVITY = 0.1;
+const MAX_MOUSE_SENSITIVITY = 4;
 
 export interface CameraControls {
   position: Vector3Tuple;
@@ -28,6 +30,7 @@ export interface SceneControls {
   cubeScale: number;
   cubeCount: number;
   hue: number;
+  mouseSensitivity: number;
   camera: CameraControls;
 }
 
@@ -37,6 +40,7 @@ export const DEFAULT_SCENE_CONTROLS: SceneControls = {
   cubeScale: 1,
   cubeCount: 1,
   hue: 330,
+  mouseSensitivity: 1,
   camera: cameraControlsForCount(1)
 };
 
@@ -47,6 +51,9 @@ export function clampSceneControls(controls: SceneControls): SceneControls {
     cubeScale: clamp(controls.cubeScale, 0.45, 2.2),
     cubeCount: clampCubeCount(controls.cubeCount),
     hue: normalizeHue(controls.hue),
+    mouseSensitivity: round(
+      clamp(controls.mouseSensitivity, MIN_MOUSE_SENSITIVITY, MAX_MOUSE_SENSITIVITY)
+    ),
     camera: clampCameraControls(controls.camera)
   };
 }
@@ -59,6 +66,7 @@ export function copySceneControls(target: SceneControls, source: SceneControls):
   target.cubeScale = next.cubeScale;
   target.cubeCount = next.cubeCount;
   target.hue = next.hue;
+  target.mouseSensitivity = next.mouseSensitivity;
   target.camera.position = next.camera.position;
   target.camera.target = next.camera.target;
   target.camera.fov = next.camera.fov;

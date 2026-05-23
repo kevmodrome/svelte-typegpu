@@ -978,6 +978,54 @@ describe('TypeGPU camera interaction controller', () => {
     expect(nextCamera.target[0]).toBeGreaterThan(nextCamera.position[0]);
   });
 
+  it('does not replay a stale pointer camera snapshot during smooth keyboard movement', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const frames = fakeFrameScheduler();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: frames.requestFrame,
+      cancelFrame: frames.cancelFrame
+    });
+
+    controller.reconcile(
+      sceneState({
+        controller: 'fly',
+        pointer: true,
+        keyboard: { ...keyboardControls, smooth: true }
+      })
+    );
+    canvas.dispatch<KeyboardEvent>('keydown', {
+      key: 'w',
+      code: 'KeyW',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+    canvas.dispatch<MouseEvent>('mousedown', {
+      button: 0,
+      clientX: 10,
+      clientY: 20
+    } as Partial<MouseEvent>);
+    windowTarget.dispatch<MouseEvent>('mousemove', {
+      buttons: 1,
+      clientX: 110,
+      clientY: 20
+    } as Partial<MouseEvent>);
+
+    frames.runFrame();
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+    const movedCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+    expect(movedCamera.position).not.toEqual(camera.position);
+
+    frames.runFrame();
+
+    expect(renderer.setCamera).toHaveBeenCalledTimes(2);
+    const queuedPointerCamera = renderer.setCamera.mock.calls[1][0] as TypeGpuCameraSettings;
+    expect(queuedPointerCamera.position).toEqual(movedCamera.position);
+  });
+
   it('stops smooth keyboard animation when held keys are released', () => {
     const canvas = fakeCanvas();
     const windowTarget = new FakeEventTarget();

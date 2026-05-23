@@ -61,6 +61,10 @@
   function formatCameraValue(value: number) {
     return value.toFixed(1);
   }
+
+  function formatSensitivity(value: number) {
+    return `${value.toFixed(2)}x`;
+  }
 </script>
 
 <main class="shell">
@@ -125,6 +129,21 @@
           onchange={clampControls}
         />
         <output>{controls.camera.fov.toFixed(0)}°</output>
+      </label>
+
+      <label class="control-row">
+        <span>Mouse</span>
+        <input
+          type="range"
+          min="0.1"
+          max="4"
+          step="0.05"
+          bind:value={controls.mouseSensitivity}
+          oninput={clampControls}
+          onchange={clampControls}
+          aria-label="Mouse sensitivity"
+        />
+        <output>{formatSensitivity(controls.mouseSensitivity)}</output>
       </label>
 
       <div class="slider-stack">

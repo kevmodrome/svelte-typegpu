@@ -77,7 +77,6 @@ export function createCameraInteractionController({
   let activePointerControls: TypeGpuPointerControls | null = null;
   let activeKeyboardControls: TypeGpuKeyboardControls | null = null;
   let orbit: TypeGpuOrbitState | null = null;
-  let nextCamera: TypeGpuCameraSettings | null = null;
   let lastEvent: Event | undefined;
   let lastKeyboardEvent: KeyboardEvent | undefined;
   const pressedKeyboardCommands = new Set<KeyboardCameraCommand>();
@@ -111,7 +110,6 @@ export function createCameraInteractionController({
   const queueCameraUpdate = (event: Event) => {
     if (!activeScene || !orbit) return;
 
-    nextCamera = cameraFromOrbit(orbit, activeScene.camera);
     lastEvent = event;
 
     if (framePending) return;
@@ -124,13 +122,12 @@ export function createCameraInteractionController({
         disposed ||
         !hasAttachedInput() ||
         !activeScene?.cameraControllerNode ||
-        !orbit ||
-        !nextCamera
+        !orbit
       ) {
         return;
       }
 
-      const camera = nextCamera;
+      const camera = cameraFromOrbit(orbit, activeScene.camera);
       const eventOrbit = {
         radius: orbit.radius,
         yaw: orbit.yaw,
@@ -138,7 +135,6 @@ export function createCameraInteractionController({
       };
       const originalEvent = lastEvent;
 
-      nextCamera = null;
       commitCameraUpdate(camera, eventOrbit, originalEvent);
     });
 
@@ -154,7 +150,6 @@ export function createCameraInteractionController({
 
     frame = null;
     framePending = false;
-    nextCamera = null;
     lastEvent = undefined;
   };
 
