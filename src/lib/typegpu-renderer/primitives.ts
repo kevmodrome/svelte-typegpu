@@ -37,6 +37,7 @@ const controlAttributes = new Set([
 ]);
 const geometryNames = new Set(['boxGeometry', 'planeGeometry', 'sphereGeometry', 'bufferGeometry']);
 const materialNames = new Set(['basicMaterial', 'phongMaterial', 'standardMaterial']);
+const meshNames = new Set(['mesh', 'instancedMesh', 'model']);
 const materialUniformAttributes = new Set(['color', 'opacity', 'roughness', 'metalness']);
 const materialBindAttributes = new Set(['map', 'sampler']);
 const materialPipelineAttributes = new Set([
@@ -62,6 +63,42 @@ const lightNames = new Set([
   'directionalLight',
   'pointLight',
   'spotLight'
+]);
+const cameraBridgeAttributes = new Map<string, Set<string>>([
+  ['cameraPose', new Set(['position', 'target'])],
+  ['cameraLens', new Set(['fov', 'near', 'far'])],
+  ['controls', new Set(['mode', 'minDistance', 'maxDistance', 'invert'])],
+  ['pointerControls', new Set(['dragButton', 'rotateSpeed', 'wheel', 'zoomSpeed', 'touch'])],
+  [
+    'keyboardControls',
+    new Set([
+      'rotateLeft',
+      'rotateRight',
+      'rotateUp',
+      'rotateDown',
+      'zoomIn',
+      'zoomOut',
+      'moveForward',
+      'moveBackward',
+      'moveLeft',
+      'moveRight',
+      'moveUp',
+      'moveDown',
+      'step',
+      'moveStep',
+      'smooth'
+    ])
+  ]
+]);
+const modelGeometryAttributes = new Set(['src', 'data']);
+const instanceBatchAttributes = new Set(['instances', 'getKey']);
+const instanceDataAttributes = new Set([
+  'phase',
+  'spinSpeed',
+  'color',
+  'getTransform',
+  'getColor',
+  'getSpinSpeed'
 ]);
 const pointerEvents = new Set([
   'click',
@@ -100,6 +137,11 @@ export function dirtyForAttribute(
     return controlAttributes.has(attribute) ? Dirty.Camera : Dirty.None;
   }
 
+  const cameraBridgeAttributeSet = cameraBridgeAttributes.get(name);
+  if (cameraBridgeAttributeSet) {
+    return cameraBridgeAttributeSet.has(attribute) ? Dirty.Camera : Dirty.None;
+  }
+
   if (lightNames.has(name)) {
     return Dirty.Lights;
   }
@@ -117,6 +159,16 @@ export function dirtyForAttribute(
   }
 
   if (materialNames.has(name)) {
+    if (attribute === 'material') {
+      return mergeDirty(
+        Dirty.Material,
+        Dirty.MaterialUniform,
+        Dirty.Texture,
+        Dirty.BindGroup,
+        Dirty.Pipeline,
+        Dirty.DrawBatches
+      );
+    }
     if (materialUniformAttributes.has(attribute)) return Dirty.MaterialUniform;
     if (materialBindAttributes.has(attribute)) {
       return mergeDirty(Dirty.Material, Dirty.Texture, Dirty.BindGroup, Dirty.DrawBatches);
@@ -139,10 +191,14 @@ export function dirtyForAttribute(
       : Dirty.None;
   }
 
-  if (name === 'mesh' || name === 'instancedMesh' || name === 'model') {
-    if (attribute === 'geometry' || attribute === 'material' || attribute === 'instances') {
+  if (meshNames.has(name)) {
+    if (name === 'model' && modelGeometryAttributes.has(attribute)) {
+      return mergeDirty(Dirty.Geometry, Dirty.DrawBatches, Dirty.Interaction);
+    }
+    if (attribute === 'geometry' || attribute === 'material' || instanceBatchAttributes.has(attribute)) {
       return mergeDirty(Dirty.DrawBatches, Dirty.Interaction);
     }
+    if (instanceDataAttributes.has(attribute)) return mergeDirty(Dirty.InstanceData, Dirty.Interaction);
     if (attribute === 'pointerEvents' || attribute === 'hitTest') return Dirty.Interaction;
   }
 
@@ -178,7 +234,7 @@ function dirtyForTreeChange(nodeName: string | undefined): Dirty {
   }
   if (materialNames.has(name)) return mergeDirty(Dirty.Tree, Dirty.Material, Dirty.DrawBatches);
   if (name === 'texture') return mergeDirty(Dirty.Tree, Dirty.Texture, Dirty.BindGroup, Dirty.DrawBatches);
-  if (name === 'sampler') return mergeDirty(Dirty.Tree, Dirty.BindGroup, Dirty.DrawBatches);
+  if (name === 'sampler') return mergeDirty(Dirty.Tree, Dirty.Sampler, Dirty.BindGroup, Dirty.DrawBatches);
   if (name === 'mesh' || name === 'instancedMesh' || name === 'model' || name === 'group') {
     return mergeDirty(Dirty.Tree, Dirty.DrawBatches, Dirty.Interaction);
   }

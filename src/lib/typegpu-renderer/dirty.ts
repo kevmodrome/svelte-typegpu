@@ -15,7 +15,7 @@ export const enum Dirty {
   Interaction = 1 << 12,
   RenderSettings = 1 << 13,
   Sampler = 1 << 14,
-  All = 0xffff_ffff
+  All = -1
 }
 
 export function hasDirty(mask: Dirty, flag: Dirty): boolean {

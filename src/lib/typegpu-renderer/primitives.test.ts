@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Dirty, hasDirty } from './dirty';
+import { Dirty, hasDirty, mergeDirty } from './dirty';
 import {
   dirtyForAttribute,
   dirtyForEventListener,
@@ -7,6 +7,10 @@ import {
   dirtyForRemove,
   normalizePrimitiveName
 } from './primitives';
+
+function expectExactDirty(mask: Dirty, ...flags: Dirty[]): void {
+  expect(mask).toBe(mergeDirty(...flags));
+}
 
 describe('TypeGPU primitive descriptors', () => {
   it('normalizes public primitive aliases', () => {
@@ -27,6 +31,7 @@ describe('TypeGPU primitive descriptors', () => {
   it('marks scene render settings without forcing mesh rebuilds', () => {
     const dirty = dirtyForAttribute('scene', 'clearColor', undefined, [0, 0, 0, 1]);
 
+    expectExactDirty(dirty, Dirty.RenderSettings);
     expect(hasDirty(dirty, Dirty.RenderSettings)).toBe(true);
     expect(hasDirty(dirty, Dirty.DrawBatches)).toBe(false);
   });
@@ -34,6 +39,7 @@ describe('TypeGPU primitive descriptors', () => {
   it('marks transform attributes as transform, instance, and interaction dirty', () => {
     const dirty = dirtyForAttribute('mesh', 'position', [0, 0, 0], [1, 2, 3]);
 
+    expectExactDirty(dirty, Dirty.Transform, Dirty.InstanceData, Dirty.Interaction);
     expect(hasDirty(dirty, Dirty.Transform)).toBe(true);
     expect(hasDirty(dirty, Dirty.InstanceData)).toBe(true);
     expect(hasDirty(dirty, Dirty.Interaction)).toBe(true);
@@ -42,6 +48,7 @@ describe('TypeGPU primitive descriptors', () => {
   it('marks camera transform attributes as camera dirty only', () => {
     const dirty = dirtyForAttribute('perspectiveCamera', 'position', [0, 0, 0], [1, 2, 3]);
 
+    expectExactDirty(dirty, Dirty.Camera);
     expect(hasDirty(dirty, Dirty.Camera)).toBe(true);
     expect(hasDirty(dirty, Dirty.Transform)).toBe(false);
     expect(hasDirty(dirty, Dirty.InstanceData)).toBe(false);
@@ -51,10 +58,106 @@ describe('TypeGPU primitive descriptors', () => {
   it('marks light transform attributes as lights dirty only', () => {
     const dirty = dirtyForAttribute('pointLight', 'position', [0, 0, 0], [1, 2, 3]);
 
+    expectExactDirty(dirty, Dirty.Lights);
     expect(hasDirty(dirty, Dirty.Lights)).toBe(true);
     expect(hasDirty(dirty, Dirty.Transform)).toBe(false);
     expect(hasDirty(dirty, Dirty.InstanceData)).toBe(false);
     expect(hasDirty(dirty, Dirty.Interaction)).toBe(false);
+  });
+
+  it('marks model source and instance fields with exact masks', () => {
+    expectExactDirty(
+      dirtyForAttribute('model', 'src', '/models/a.glb', '/models/b.glb'),
+      Dirty.Geometry,
+      Dirty.DrawBatches,
+      Dirty.Interaction
+    );
+    expectExactDirty(
+      dirtyForAttribute('model', 'data', new ArrayBuffer(1), new ArrayBuffer(2)),
+      Dirty.Geometry,
+      Dirty.DrawBatches,
+      Dirty.Interaction
+    );
+    expectExactDirty(
+      dirtyForAttribute('mesh', 'phase', 0, 1),
+      Dirty.InstanceData,
+      Dirty.Interaction
+    );
+    expectExactDirty(
+      dirtyForAttribute('mesh', 'spinSpeed', 0, 1),
+      Dirty.InstanceData,
+      Dirty.Interaction
+    );
+    expectExactDirty(
+      dirtyForAttribute('mesh', 'color', [1, 1, 1, 1], [1, 0, 0, 1]),
+      Dirty.InstanceData,
+      Dirty.Interaction
+    );
+  });
+
+  it('marks instanced mesh accessors conservatively', () => {
+    expectExactDirty(
+      dirtyForAttribute('instancedMesh', 'instances', [], [{}]),
+      Dirty.DrawBatches,
+      Dirty.Interaction
+    );
+    expectExactDirty(
+      dirtyForAttribute('instancedMesh', 'getKey', undefined, () => 'key'),
+      Dirty.DrawBatches,
+      Dirty.Interaction
+    );
+    expectExactDirty(
+      dirtyForAttribute('instancedMesh', 'getTransform', undefined, () => null),
+      Dirty.InstanceData,
+      Dirty.Interaction
+    );
+    expectExactDirty(
+      dirtyForAttribute('instancedMesh', 'getColor', undefined, () => null),
+      Dirty.InstanceData,
+      Dirty.Interaction
+    );
+    expectExactDirty(
+      dirtyForAttribute('instancedMesh', 'getSpinSpeed', undefined, () => 1),
+      Dirty.InstanceData,
+      Dirty.Interaction
+    );
+  });
+
+  it('marks material replacement as a conservative material rebuild', () => {
+    expectExactDirty(
+      dirtyForAttribute('standardMaterial', 'material', {}, { color: [1, 0, 0, 1] }),
+      Dirty.Material,
+      Dirty.MaterialUniform,
+      Dirty.Texture,
+      Dirty.BindGroup,
+      Dirty.Pipeline,
+      Dirty.DrawBatches
+    );
+  });
+
+  it('flows aliases through attribute dirtiness', () => {
+    expectExactDirty(
+      dirtyForAttribute('box-geometry', 'width', 1, 2),
+      Dirty.Geometry,
+      Dirty.DrawBatches,
+      Dirty.Interaction
+    );
+    expectExactDirty(dirtyForAttribute('point-light', 'position', [0, 0, 0], [1, 2, 3]), Dirty.Lights);
+  });
+
+  it('returns no dirtiness when values are Object.is-equal', () => {
+    const material = { color: [1, 1, 1, 1] };
+
+    expectExactDirty(dirtyForAttribute('standardMaterial', 'material', material, material), Dirty.None);
+    expectExactDirty(dirtyForAttribute('mesh', 'phase', Number.NaN, Number.NaN), Dirty.None);
+  });
+
+  it('bridges transitional camera control nodes to camera dirtiness', () => {
+    expectExactDirty(dirtyForAttribute('cameraPose', 'position', [0, 0, 0], [1, 2, 3]), Dirty.Camera);
+    expectExactDirty(dirtyForAttribute('cameraLens', 'fov', 45, 60), Dirty.Camera);
+    expectExactDirty(dirtyForAttribute('controls', 'mode', 'orbit', 'fly'), Dirty.Camera);
+    expectExactDirty(dirtyForAttribute('pointerControls', 'rotateSpeed', 1, 2), Dirty.Camera);
+    expectExactDirty(dirtyForAttribute('keyboardControls', 'moveStep', 0.25, 0.5), Dirty.Camera);
   });
 
   it('marks geometry, material, texture, and pipeline-affecting attributes distinctly', () => {
@@ -81,7 +184,21 @@ describe('TypeGPU primitive descriptors', () => {
     expect(hasDirty(dirtyForInsert('mesh'), Dirty.DrawBatches)).toBe(true);
     expect(hasDirty(dirtyForInsert('mesh'), Dirty.Interaction)).toBe(true);
     expect(hasDirty(dirtyForRemove('pointLight'), Dirty.Lights)).toBe(true);
+    expectExactDirty(
+      dirtyForInsert('sampler'),
+      Dirty.Tree,
+      Dirty.Sampler,
+      Dirty.BindGroup,
+      Dirty.DrawBatches
+    );
     expect(hasDirty(dirtyForEventListener('mesh', 'click'), Dirty.Interaction)).toBe(true);
     expect(hasDirty(dirtyForEventListener('mesh', 'keydown'), Dirty.Interaction)).toBe(false);
+  });
+
+  it('treats Dirty.All as every known dirty bit', () => {
+    expect(Dirty.All).toBe(-1);
+    expect(hasDirty(Dirty.All, Dirty.Tree)).toBe(true);
+    expect(hasDirty(Dirty.All, Dirty.Sampler)).toBe(true);
+    expect(hasDirty(Dirty.All, Dirty.RenderSettings)).toBe(true);
   });
 });
