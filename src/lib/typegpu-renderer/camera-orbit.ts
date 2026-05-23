@@ -18,7 +18,7 @@ export interface TypeGpuOrbitConstraints {
 }
 
 export interface TypeGpuOrbitState {
-  lookAt: Vector3Tuple;
+  target: Vector3Tuple;
   radius: number;
   yaw: number;
   pitch: number;
@@ -38,14 +38,14 @@ export function deriveOrbitState(
   constraints: TypeGpuOrbitConstraints
 ): TypeGpuOrbitState {
   const validConstraints = normalizeConstraints(constraints);
-  const dx = camera.position[0] - camera.lookAt[0];
-  const dy = camera.position[1] - camera.lookAt[1];
-  const dz = camera.position[2] - camera.lookAt[2];
+  const dx = camera.position[0] - camera.target[0];
+  const dy = camera.position[1] - camera.target[1];
+  const dz = camera.position[2] - camera.target[2];
   const rawRadius = Math.hypot(dx, dy, dz);
 
   if (!Number.isFinite(rawRadius) || rawRadius <= ZERO_RADIUS_EPSILON) {
     return {
-      lookAt: [...camera.lookAt],
+      target: [...camera.target],
       radius: validConstraints.minDistance,
       yaw: 0,
       pitch: 0
@@ -53,7 +53,7 @@ export function deriveOrbitState(
   }
 
   return {
-    lookAt: [...camera.lookAt],
+    target: [...camera.target],
     radius: clamp(rawRadius, validConstraints.minDistance, validConstraints.maxDistance),
     yaw: Math.atan2(dx, dz),
     pitch: clamp(Math.asin(dy / rawRadius), MIN_PITCH, MAX_PITCH)
@@ -66,15 +66,15 @@ export function cameraFromOrbit(
 ): TypeGpuCameraSettings {
   const cosPitch = Math.cos(orbit.pitch);
   const position: Vector3Tuple = [
-    roundToSix(orbit.lookAt[0] + orbit.radius * Math.sin(orbit.yaw) * cosPitch),
-    roundToSix(orbit.lookAt[1] + orbit.radius * Math.sin(orbit.pitch)),
-    roundToSix(orbit.lookAt[2] + orbit.radius * Math.cos(orbit.yaw) * cosPitch)
+    roundToSix(orbit.target[0] + orbit.radius * Math.sin(orbit.yaw) * cosPitch),
+    roundToSix(orbit.target[1] + orbit.radius * Math.sin(orbit.pitch)),
+    roundToSix(orbit.target[2] + orbit.radius * Math.cos(orbit.yaw) * cosPitch)
   ];
 
   return {
     ...baseCamera,
     position,
-    lookAt: [...orbit.lookAt]
+    target: [...orbit.target]
   };
 }
 
@@ -161,5 +161,6 @@ function finiteOrZero(value: number): number {
 }
 
 function roundToSix(value: number): number {
-  return Math.round(value * 1_000_000) / 1_000_000;
+  const rounded = Math.round(value * 1_000_000) / 1_000_000;
+  return Object.is(rounded, -0) ? 0 : rounded;
 }

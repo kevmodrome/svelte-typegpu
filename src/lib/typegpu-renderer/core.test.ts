@@ -37,9 +37,12 @@ describe('TypeGPU renderer core', () => {
     const sphereGeometry = createElement('sphereGeometry');
     const sphereMaterial = createElement('standardMaterial');
 
-    setAttribute(camera, 'position', [0, 2, 8]);
-    setAttribute(camera, 'lookAt', [0, 0, 0]);
-    setAttribute(camera, 'fov', 50);
+    const pose = createElement('cameraPose');
+    const lens = createElement('cameraLens');
+
+    setAttribute(pose, 'position', [0, 2, 8]);
+    setAttribute(pose, 'target', [0, 0, 0]);
+    setAttribute(lens, 'fov', 50);
     setAttribute(first, 'position', [1, 2, 3]);
     setAttribute(first, 'phase', 0.25);
     setAttribute(first, 'spinSpeed', 1.4);
@@ -56,6 +59,8 @@ describe('TypeGPU renderer core', () => {
     setAttribute(sphere, 'phase', 0.75);
     setAttribute(sphereMaterial, 'color', [0.7, 0.8, 0.9, 1]);
 
+    insert(camera, pose, null);
+    insert(camera, lens, null);
     insert(scene, camera, null);
     insert(first, firstGeometry, null);
     insert(first, firstMaterial, null);
@@ -75,7 +80,7 @@ describe('TypeGPU renderer core', () => {
     expect(state).toMatchObject({
       camera: {
         position: [0, 2, 8],
-        lookAt: [0, 0, 0],
+        target: [0, 0, 0],
         fov: 50,
         near: 0.1,
         far: 100
@@ -115,41 +120,51 @@ describe('TypeGPU renderer core', () => {
     expect(sphereBatch.instances[7]).toBe(1);
   });
 
-  it('reads camera settings from a perspectiveCamera node', () => {
+  it('reads camera settings from declarative camera children', () => {
     const root = createFragment();
     const scene = createElement('scene');
     const camera = createElement('perspectiveCamera');
+    const pose = createElement('cameraPose');
+    const lens = createElement('cameraLens');
 
-    setAttribute(camera, 'position', [2, 3, 4]);
-    setAttribute(camera, 'lookAt', [1, 1, 1]);
-    setAttribute(camera, 'fov', 35);
-    setAttribute(camera, 'near', 0.5);
-    setAttribute(camera, 'far', 250);
+    setAttribute(pose, 'position', [2, 3, 4]);
+    setAttribute(pose, 'target', [1, 1, 1]);
+    setAttribute(lens, 'fov', 35);
+    setAttribute(lens, 'near', 0.5);
+    setAttribute(lens, 'far', 250);
+    insert(camera, pose, null);
+    insert(camera, lens, null);
     insert(scene, camera, null);
     insert(root, scene, null);
 
     expect(readPerspectiveCamera(root)).toEqual({
       position: [2, 3, 4],
-      lookAt: [1, 1, 1],
+      target: [1, 1, 1],
       fov: 35,
       near: 0.5,
       far: 250
     });
   });
 
-  it('reads orbit, pointer, and keyboard controls from a perspectiveCamera node', () => {
+  it('reads camera pose, lens, pointer, and keyboard controls from declarative camera children', () => {
     const root = createFragment();
     const scene = createElement('scene');
     const camera = createElement('perspectiveCamera');
-    const orbit = createElement('orbitControls');
+    const pose = createElement('cameraPose');
+    const lens = createElement('cameraLens');
+    const controls = createElement('controls');
     const pointer = createElement('pointerControls');
     const keyboard = createElement('keyboardControls');
 
-    setAttribute(camera, 'position', [0, 1.4, 5]);
-    setAttribute(camera, 'lookAt', [0, 0, 0]);
-    setAttribute(orbit, 'minDistance', 2);
-    setAttribute(orbit, 'maxDistance', 40);
-    setAttribute(orbit, 'invert', true);
+    setAttribute(pose, 'position', [0, 1.4, 5]);
+    setAttribute(pose, 'target', [0, 0, 0]);
+    setAttribute(lens, 'fov', 42);
+    setAttribute(lens, 'near', 0.25);
+    setAttribute(lens, 'far', 400);
+    setAttribute(controls, 'mode', 'fly');
+    setAttribute(controls, 'minDistance', 2);
+    setAttribute(controls, 'maxDistance', 40);
+    setAttribute(controls, 'invert', true);
     setAttribute(pointer, 'dragButton', 'primary');
     setAttribute(pointer, 'rotateSpeed', 1.5);
     setAttribute(pointer, 'wheel', 'zoom');
@@ -161,11 +176,21 @@ describe('TypeGPU renderer core', () => {
     setAttribute(keyboard, 'rotateDown', 'KeyS');
     setAttribute(keyboard, 'zoomIn', 'Equal');
     setAttribute(keyboard, 'zoomOut', 'Minus');
+    setAttribute(keyboard, 'moveForward', 'KeyI');
+    setAttribute(keyboard, 'moveBackward', 'KeyK');
+    setAttribute(keyboard, 'moveLeft', 'KeyJ');
+    setAttribute(keyboard, 'moveRight', 'KeyL');
+    setAttribute(keyboard, 'moveUp', 'Space');
+    setAttribute(keyboard, 'moveDown', 'KeyM');
     setAttribute(keyboard, 'step', 0.12);
+    setAttribute(keyboard, 'moveStep', 0.6);
+    setAttribute(keyboard, 'smooth', true);
 
-    insert(orbit, pointer, null);
-    insert(orbit, keyboard, null);
-    insert(camera, orbit, null);
+    insert(controls, pointer, null);
+    insert(controls, keyboard, null);
+    insert(camera, pose, null);
+    insert(camera, lens, null);
+    insert(camera, controls, null);
     insert(scene, camera, null);
     insert(root, scene, null);
 
@@ -175,10 +200,14 @@ describe('TypeGPU renderer core', () => {
     expect(state.node).toBe(camera);
     expect(state.settings).toMatchObject({
       position: [0, 1.4, 5],
-      lookAt: [0, 0, 0]
+      target: [0, 0, 0],
+      fov: 42,
+      near: 0.25,
+      far: 400
     });
     expect(state.controller).toEqual({
-      kind: 'orbit',
+      kind: 'controls',
+      mode: 'fly',
       minDistance: 2,
       maxDistance: 40,
       invert: true,
@@ -196,10 +225,20 @@ describe('TypeGPU renderer core', () => {
         rotateDown: 'KeyS',
         zoomIn: 'Equal',
         zoomOut: 'Minus',
-        step: 0.12
+        moveForward: 'KeyI',
+        moveBackward: 'KeyK',
+        moveLeft: 'KeyJ',
+        moveRight: 'KeyL',
+        moveUp: 'Space',
+        moveDown: 'KeyM',
+        step: 0.12,
+        moveStep: 0.6,
+        smooth: true
       }
     });
     expect(sceneState.cameraNode).toBe(camera);
+    expect(state.controllerNode).toBe(controls);
+    expect(sceneState.cameraControllerNode).toBe(controls);
     expect(sceneState.cameraController).toEqual(state.controller);
   });
 
@@ -207,12 +246,13 @@ describe('TypeGPU renderer core', () => {
     const root = createFragment();
     const scene = createElement('scene');
     const camera = createElement('perspectiveCamera');
-    const orbit = createElement('orbitControls');
+    const controls = createElement('controls');
     const pointer = createElement('pointerControls');
     const keyboard = createElement('keyboardControls');
 
-    setAttribute(orbit, 'minDistance', 50);
-    setAttribute(orbit, 'maxDistance', 10);
+    setAttribute(controls, 'mode', 'walk');
+    setAttribute(controls, 'minDistance', 50);
+    setAttribute(controls, 'maxDistance', 10);
     setAttribute(pointer, 'dragButton', 'auxiliary');
     setAttribute(pointer, 'rotateSpeed', -1);
     setAttribute(pointer, 'wheel', 'pan');
@@ -224,16 +264,24 @@ describe('TypeGPU renderer core', () => {
     setAttribute(keyboard, 'rotateDown', '');
     setAttribute(keyboard, 'zoomIn', '');
     setAttribute(keyboard, 'zoomOut', '');
+    setAttribute(keyboard, 'moveForward', '');
+    setAttribute(keyboard, 'moveBackward', '');
+    setAttribute(keyboard, 'moveLeft', '');
+    setAttribute(keyboard, 'moveRight', '');
+    setAttribute(keyboard, 'moveUp', '');
+    setAttribute(keyboard, 'moveDown', '');
     setAttribute(keyboard, 'step', -0.5);
+    setAttribute(keyboard, 'moveStep', -1);
 
-    insert(orbit, pointer, null);
-    insert(orbit, keyboard, null);
-    insert(camera, orbit, null);
+    insert(controls, pointer, null);
+    insert(controls, keyboard, null);
+    insert(camera, controls, null);
     insert(scene, camera, null);
     insert(root, scene, null);
 
     expect(readPerspectiveCameraState(root).controller).toEqual({
-      kind: 'orbit',
+      kind: 'controls',
+      mode: 'orbit',
       minDistance: 1,
       maxDistance: 100,
       invert: false,
@@ -251,18 +299,26 @@ describe('TypeGPU renderer core', () => {
         rotateDown: 'ArrowDown',
         zoomIn: '+',
         zoomOut: '-',
-        step: 0
+        moveForward: 'KeyW',
+        moveBackward: 'KeyS',
+        moveLeft: 'KeyA',
+        moveRight: 'KeyD',
+        moveUp: 'Space',
+        moveDown: 'KeyC',
+        step: 0,
+        moveStep: 0,
+        smooth: false
       }
     });
   });
 
-  it('keeps orbitControls inert until it has supported input children', () => {
+  it('keeps controls inert until it has supported input children', () => {
     const root = createFragment();
     const scene = createElement('scene');
     const camera = createElement('perspectiveCamera');
-    const orbit = createElement('orbitControls');
+    const controls = createElement('controls');
 
-    insert(camera, orbit, null);
+    insert(camera, controls, null);
     insert(scene, camera, null);
     insert(root, scene, null);
 
@@ -273,12 +329,12 @@ describe('TypeGPU renderer core', () => {
     const root = createFragment();
     const scene = createElement('scene');
     const camera = createElement('perspectiveCamera');
-    const orbit = createElement('orbitControls');
+    const controls = createElement('controls');
     const pointer = createElement('pointerControls');
 
-    insert(orbit, pointer, null);
+    insert(controls, pointer, null);
     insert(scene, camera, null);
-    insert(scene, orbit, null);
+    insert(scene, controls, null);
     insert(root, scene, null);
 
     expect(readPerspectiveCameraState(root).controller).toBeNull();
@@ -636,19 +692,27 @@ describe('TypeGPU renderer core', () => {
     const root = createFragment();
     const scene = createElement('scene');
     const camera = createElement('perspectiveCamera');
-    const orbit = createElement('orbitControls');
+    const controls = createElement('controls');
+    const pose = createElement('cameraPose');
+    const lens = createElement('cameraLens');
     const pointer = createElement('pointerControls');
 
-    insert(orbit, pointer, null);
-    insert(camera, orbit, null);
+    insert(controls, pointer, null);
+    insert(camera, pose, null);
+    insert(camera, lens, null);
+    insert(camera, controls, null);
     insert(scene, camera, null);
     insert(root, scene, null);
 
     expect(invalidatesDrawBatches(root, camera, root.treeRevision)).toBe(false);
-    expect(invalidatesDrawBatches(root, orbit, root.treeRevision)).toBe(false);
+    expect(invalidatesDrawBatches(root, pose, root.treeRevision)).toBe(false);
+    expect(invalidatesDrawBatches(root, lens, root.treeRevision)).toBe(false);
+    expect(invalidatesDrawBatches(root, controls, root.treeRevision)).toBe(false);
     expect(invalidatesDrawBatches(root, pointer, root.treeRevision)).toBe(false);
     expect(invalidatesLights(root, camera, root.treeRevision)).toBe(false);
-    expect(invalidatesLights(root, orbit, root.treeRevision)).toBe(false);
+    expect(invalidatesLights(root, pose, root.treeRevision)).toBe(false);
+    expect(invalidatesLights(root, lens, root.treeRevision)).toBe(false);
+    expect(invalidatesLights(root, controls, root.treeRevision)).toBe(false);
     expect(invalidatesLights(root, pointer, root.treeRevision)).toBe(false);
   });
 
@@ -656,7 +720,7 @@ describe('TypeGPU renderer core', () => {
     const root = createFragment();
     const scene = createElement('scene');
     const camera = createElement('perspectiveCamera');
-    const orbit = createElement('orbitControls');
+    const controls = createElement('controls');
     const pointer = createElement('pointerControls');
     const scheduleSync = vi.fn();
 
@@ -665,34 +729,34 @@ describe('TypeGPU renderer core', () => {
     root.runtime = { scheduleSync };
     const syncedTreeRevision = root.treeRevision;
 
-    insert(orbit, pointer, null);
-    insert(camera, orbit, null);
+    insert(controls, pointer, null);
+    insert(camera, controls, null);
 
-    expect(scheduleSync).toHaveBeenLastCalledWith(root, orbit);
-    expect(invalidatesDrawBatches(root, orbit, syncedTreeRevision)).toBe(false);
-    expect(invalidatesLights(root, orbit, syncedTreeRevision)).toBe(false);
+    expect(scheduleSync).toHaveBeenLastCalledWith(root, controls);
+    expect(invalidatesDrawBatches(root, controls, syncedTreeRevision)).toBe(false);
+    expect(invalidatesLights(root, controls, syncedTreeRevision)).toBe(false);
   });
 
   it('keeps structural camera-control removals out of draw-batch and light dirtiness', () => {
     const root = createFragment();
     const scene = createElement('scene');
     const camera = createElement('perspectiveCamera');
-    const orbit = createElement('orbitControls');
+    const controls = createElement('controls');
     const pointer = createElement('pointerControls');
     const scheduleSync = vi.fn();
 
-    insert(orbit, pointer, null);
-    insert(camera, orbit, null);
+    insert(controls, pointer, null);
+    insert(camera, controls, null);
     insert(scene, camera, null);
     insert(root, scene, null);
     root.runtime = { scheduleSync };
     const syncedTreeRevision = root.treeRevision;
 
-    remove(orbit);
+    remove(controls);
 
-    expect(scheduleSync).toHaveBeenLastCalledWith(root, orbit);
-    expect(invalidatesDrawBatches(root, orbit, syncedTreeRevision)).toBe(false);
-    expect(invalidatesLights(root, orbit, syncedTreeRevision)).toBe(false);
+    expect(scheduleSync).toHaveBeenLastCalledWith(root, controls);
+    expect(invalidatesDrawBatches(root, controls, syncedTreeRevision)).toBe(false);
+    expect(invalidatesLights(root, controls, syncedTreeRevision)).toBe(false);
   });
 
   it('marks draw batches dirty for structural mesh insertions', () => {
@@ -755,21 +819,21 @@ describe('TypeGPU renderer core', () => {
     const root = createFragment();
     const scene = createElement('scene');
     const camera = createElement('perspectiveCamera');
-    const orbit = createElement('orbitControls');
+    const controls = createElement('controls');
     const mesh = createElement('mesh');
     const scheduleSync = vi.fn();
 
     insert(scene, camera, null);
     insert(root, scene, null);
-    insert(orbit, mesh, null);
+    insert(controls, mesh, null);
     root.runtime = { scheduleSync };
     const syncedTreeRevision = root.treeRevision;
 
-    insert(camera, orbit, null);
+    insert(camera, controls, null);
 
-    expect(scheduleSync).toHaveBeenLastCalledWith(root, orbit);
-    expect(invalidatesDrawBatches(root, orbit, syncedTreeRevision)).toBe(true);
-    expect(invalidatesLights(root, orbit, syncedTreeRevision)).toBe(false);
+    expect(scheduleSync).toHaveBeenLastCalledWith(root, controls);
+    expect(invalidatesDrawBatches(root, controls, syncedTreeRevision)).toBe(true);
+    expect(invalidatesLights(root, controls, syncedTreeRevision)).toBe(false);
   });
 
   it('passes the invalidated node to runtime sync scheduling', () => {

@@ -20,7 +20,7 @@ describe('scene controls', () => {
         hue: 725,
         camera: {
           position: [-2000, 2.125, 2000],
-          lookAt: [1500, -2.125, -1500],
+          target: [1500, -2.125, -1500],
           fov: 150,
           near: -1,
           far: 0.2
@@ -34,7 +34,7 @@ describe('scene controls', () => {
       hue: 5,
       camera: {
         position: [-1000, 2.13, 1000],
-        lookAt: [1000, -2.12, -1000],
+        target: [1000, -2.12, -1000],
         fov: 100,
         near: 0.01,
         far: 1.01
@@ -45,7 +45,7 @@ describe('scene controls', () => {
   it('creates camera defaults that frame each cube count preset', () => {
     expect(cameraControlsForCount(1)).toEqual({
       position: [0, 1.4, 5],
-      lookAt: [0, 0, 0],
+      target: [0, 0, 0],
       fov: 45,
       near: 0.1,
       far: 500
@@ -53,17 +53,17 @@ describe('scene controls', () => {
 
     expect(cameraControlsForCount(10_000)).toEqual({
       position: [9, 7, 13],
-      lookAt: [0, 0, 0],
+      target: [0, 0, 0],
       fov: 45,
       near: 0.1,
       far: 500
     });
   });
 
-  it('stores lookAt directly in camera controls', () => {
+  it('stores target directly in camera controls', () => {
     expect(DEFAULT_SCENE_CONTROLS.camera).toMatchObject({
       position: [0, 1.4, 5],
-      lookAt: [0, 0, 0],
+      target: [0, 0, 0],
       fov: 45,
       near: 0.1,
       far: 500
@@ -76,7 +76,7 @@ describe('scene controls', () => {
     applyCameraChange(controls, {
       camera: {
         position: [1.25, 2.5, 7.75],
-        lookAt: [0.5, 0.25, -0.5],
+        target: [0.5, 0.25, -0.5],
         fov: 55,
         near: 0.2,
         far: 300
@@ -90,7 +90,7 @@ describe('scene controls', () => {
 
     expect(controls.camera).toEqual({
       position: [1.25, 2.5, 7.75],
-      lookAt: [0.5, 0.25, -0.5],
+      target: [0.5, 0.25, -0.5],
       fov: 55,
       near: 0.2,
       far: 300
@@ -103,7 +103,7 @@ describe('scene controls', () => {
     applyCameraChange(controls, {
       camera: {
         position: [-2.397128, 1.412345, 4.387913],
-        lookAt: [0.123456, -0.654321, 0.222222],
+        target: [0.123456, -0.654321, 0.222222],
         fov: 45,
         near: 0.1,
         far: 500
@@ -116,22 +116,22 @@ describe('scene controls', () => {
     });
 
     expect(controls.camera.position).toEqual([-2.397128, 1.412345, 4.387913]);
-    expect(controls.camera.lookAt).toEqual([0.123456, -0.654321, 0.222222]);
+    expect(controls.camera.target).toEqual([0.123456, -0.654321, 0.222222]);
   });
 
-  it('keeps clamped camera position away from lookAt', () => {
+  it('keeps clamped camera position away from target', () => {
     expect(
       clampSceneControls({
         ...DEFAULT_SCENE_CONTROLS,
         camera: {
           ...DEFAULT_SCENE_CONTROLS.camera,
           position: [0, 0, 0],
-          lookAt: [0, 0, 0]
+          target: [0, 0, 0]
         }
       }).camera
     ).toMatchObject({
       position: [0, 0, 1],
-      lookAt: [0, 0, 0]
+      target: [0, 0, 0]
     });
   });
 
@@ -146,7 +146,7 @@ describe('scene controls', () => {
       camera: {
         ...target.camera,
         position: [3.333, 4.444, 5.555],
-        lookAt: [-1.111, -2.222, -3.333]
+        target: [-1.111, -2.222, -3.333]
       }
     });
 
@@ -154,7 +154,7 @@ describe('scene controls', () => {
     expect(target.hue).toBe(5);
     expect(target.camera).toBe(camera);
     expect(target.camera.position).toEqual([3.33, 4.44, 5.56]);
-    expect(target.camera.lookAt).toEqual([-1.11, -2.22, -3.33]);
+    expect(target.camera.target).toEqual([-1.11, -2.22, -3.33]);
   });
 
   it('wraps hue changes and formats the material color', () => {

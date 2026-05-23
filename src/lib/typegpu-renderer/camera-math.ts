@@ -6,14 +6,14 @@ export function createViewProjectionMatrix(
 ): Float32Array {
   return multiplyMatrices(
     perspectiveMatrix((camera.fov * Math.PI) / 180, aspect, camera.near, camera.far),
-    lookAtMatrix(camera.position, camera.lookAt, [0, 1, 0])
+    targetMatrix(camera.position, camera.target, [0, 1, 0])
   );
 }
 
 function defaultCameraSettings(): TypeGpuCameraSettings {
   return {
     position: [9, 7, 13],
-    lookAt: [0, 0, 0],
+    target: [0, 0, 0],
     fov: 45,
     near: 0.1,
     far: 100
@@ -33,7 +33,7 @@ function perspectiveMatrix(fovy: number, aspect: number, near: number, far: numb
   return matrix;
 }
 
-function lookAtMatrix(
+function targetMatrix(
   eye: [number, number, number],
   center: [number, number, number],
   up: [number, number, number]

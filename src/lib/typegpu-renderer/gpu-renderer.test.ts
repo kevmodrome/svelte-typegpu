@@ -142,7 +142,9 @@ describe('TypeGPU GPU renderer', () => {
   });
 
   it('seeds initial scene state with empty camera metadata', () => {
-    expect(rendererSource).toMatch(/this\.setScene\(\{[\s\S]*cameraNode:\s*null[\s\S]*cameraController:\s*null/s);
+    expect(rendererSource).toMatch(
+      /this\.setScene\(\{[\s\S]*cameraNode:\s*null[\s\S]*cameraControllerNode:\s*null[\s\S]*cameraController:\s*null/s
+    );
   });
 
   it('exposes a narrow camera update method for runtime controls', () => {

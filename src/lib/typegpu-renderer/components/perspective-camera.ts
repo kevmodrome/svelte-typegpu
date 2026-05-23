@@ -10,7 +10,7 @@ import type {
 
 export const DEFAULT_CAMERA: TypeGpuCameraSettings = {
   position: [9, 7, 13],
-  lookAt: [0, 0, 0],
+  target: [0, 0, 0],
   fov: 45,
   near: 0.1,
   far: 100
@@ -32,7 +32,15 @@ const DEFAULT_KEYBOARD_CONTROLS: TypeGpuKeyboardControls = {
   rotateDown: 'ArrowDown',
   zoomIn: '+',
   zoomOut: '-',
-  step: 0.08
+  moveForward: 'KeyW',
+  moveBackward: 'KeyS',
+  moveLeft: 'KeyA',
+  moveRight: 'KeyD',
+  moveUp: 'Space',
+  moveDown: 'KeyC',
+  step: 0.08,
+  moveStep: 0.35,
+  smooth: false
 };
 
 export function readPerspectiveCamera(root: TypeGpuNode): TypeGpuCameraSettings {
@@ -41,57 +49,62 @@ export function readPerspectiveCamera(root: TypeGpuNode): TypeGpuCameraSettings 
 
 export function readPerspectiveCameraState(root: TypeGpuNode): TypeGpuCameraState {
   const camera = findFirst(root, (node) => node.name === 'perspectiveCamera');
-  const attributes = camera?.attributes ?? {};
+  const pose = camera ? firstChildNamed(camera, 'cameraPose') : null;
+  const lens = camera ? firstChildNamed(camera, 'cameraLens') : null;
+  const controls = camera ? firstChildNamed(camera, 'controls') : null;
+  const poseAttributes = pose?.attributes ?? {};
+  const lensAttributes = lens?.attributes ?? {};
 
   return {
     node: camera,
     settings: {
-      position: vectorTuple(attributes.position, DEFAULT_CAMERA.position),
-      lookAt: vectorTuple(attributes.lookAt, DEFAULT_CAMERA.lookAt),
-      fov: numberArg(attributes.fov, DEFAULT_CAMERA.fov),
-      near: numberArg(attributes.near, DEFAULT_CAMERA.near),
-      far: numberArg(attributes.far, DEFAULT_CAMERA.far)
+      position: vectorTuple(poseAttributes.position, DEFAULT_CAMERA.position),
+      target: vectorTuple(poseAttributes.target, DEFAULT_CAMERA.target),
+      fov: numberArg(lensAttributes.fov, DEFAULT_CAMERA.fov),
+      near: numberArg(lensAttributes.near, DEFAULT_CAMERA.near),
+      far: numberArg(lensAttributes.far, DEFAULT_CAMERA.far)
     },
-    controller: camera ? readCameraController(camera) : null
+    controllerNode: controls,
+    controller: controls ? readCameraController(controls) : null
   };
 }
 
 export function isCameraControlNode(node: TypeGpuNode | undefined): boolean {
   return (
     node?.name === 'perspectiveCamera' ||
-    node?.name === 'orbitControls' ||
+    node?.name === 'cameraPose' ||
+    node?.name === 'cameraLens' ||
+    node?.name === 'controls' ||
     node?.name === 'pointerControls' ||
     node?.name === 'keyboardControls'
   );
 }
 
-function readCameraController(camera: TypeGpuNode): TypeGpuCameraController | null {
-  const orbit = firstChildNamed(camera, 'orbitControls');
-  if (!orbit) return null;
-
-  const pointer = firstChildNamed(orbit, 'pointerControls');
-  const keyboard = firstChildNamed(orbit, 'keyboardControls');
+function readCameraController(controls: TypeGpuNode): TypeGpuCameraController | null {
+  const pointer = firstChildNamed(controls, 'pointerControls');
+  const keyboard = firstChildNamed(controls, 'keyboardControls');
 
   if (!pointer && !keyboard) return null;
 
   const minDistance = clampedNumberArg(
-    orbit.attributes.minDistance,
+    controls.attributes.minDistance,
     DEFAULT_MIN_DISTANCE,
     0.0001,
     Number.MAX_SAFE_INTEGER
   );
   const maxDistance = clampedNumberArg(
-    orbit.attributes.maxDistance,
+    controls.attributes.maxDistance,
     DEFAULT_MAX_DISTANCE,
     0.0001,
     Number.MAX_SAFE_INTEGER
   );
 
   return {
-    kind: 'orbit',
+    kind: 'controls',
+    mode: stringOption(controls.attributes.mode, ['orbit', 'fly'], 'orbit'),
     minDistance: minDistance <= maxDistance ? minDistance : DEFAULT_MIN_DISTANCE,
     maxDistance: minDistance <= maxDistance ? maxDistance : DEFAULT_MAX_DISTANCE,
-    invert: orbit.attributes.invert === true,
+    invert: controls.attributes.invert === true,
     pointer: pointer ? readPointerControls(pointer) : null,
     keyboard: keyboard ? readKeyboardControls(keyboard) : null
   };
@@ -133,7 +146,15 @@ function readKeyboardControls(node: TypeGpuNode): TypeGpuKeyboardControls {
     rotateDown: stringArg(node.attributes.rotateDown, DEFAULT_KEYBOARD_CONTROLS.rotateDown),
     zoomIn: stringArg(node.attributes.zoomIn, DEFAULT_KEYBOARD_CONTROLS.zoomIn),
     zoomOut: stringArg(node.attributes.zoomOut, DEFAULT_KEYBOARD_CONTROLS.zoomOut),
-    step: clampedNumberArg(node.attributes.step, DEFAULT_KEYBOARD_CONTROLS.step, 0, 10)
+    moveForward: stringArg(node.attributes.moveForward, DEFAULT_KEYBOARD_CONTROLS.moveForward),
+    moveBackward: stringArg(node.attributes.moveBackward, DEFAULT_KEYBOARD_CONTROLS.moveBackward),
+    moveLeft: stringArg(node.attributes.moveLeft, DEFAULT_KEYBOARD_CONTROLS.moveLeft),
+    moveRight: stringArg(node.attributes.moveRight, DEFAULT_KEYBOARD_CONTROLS.moveRight),
+    moveUp: stringArg(node.attributes.moveUp, DEFAULT_KEYBOARD_CONTROLS.moveUp),
+    moveDown: stringArg(node.attributes.moveDown, DEFAULT_KEYBOARD_CONTROLS.moveDown),
+    step: clampedNumberArg(node.attributes.step, DEFAULT_KEYBOARD_CONTROLS.step, 0, 10),
+    moveStep: clampedNumberArg(node.attributes.moveStep, DEFAULT_KEYBOARD_CONTROLS.moveStep, 0, 100),
+    smooth: node.attributes.smooth === true
   };
 }
 

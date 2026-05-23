@@ -47,6 +47,7 @@ export function createSceneState(
   return {
     camera: camera.settings,
     cameraNode: camera.node,
+    cameraControllerNode: camera.controllerNode,
     cameraController: camera.controller,
     scale: scene.scale,
     animationSpeed: scene.animationSpeed,

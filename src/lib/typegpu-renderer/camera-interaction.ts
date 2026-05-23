@@ -10,6 +10,7 @@ import {
 import type { TypeGpuRenderer } from './gpu-renderer';
 import type {
   TypeGpuCameraSettings,
+  TypeGpuKeyboardControls,
   TypeGpuPointerControls,
   TypeGpuPointerDragButton,
   TypeGpuSceneState
@@ -20,6 +21,9 @@ type CancelFrame = (handle: number) => void;
 type ListenerTarget = Pick<Window, 'addEventListener' | 'removeEventListener'>;
 type ListenerRegistration = [string, EventListener, AddEventListenerOptions?];
 type TypeGpuCameraRenderer = Pick<TypeGpuRenderer, 'setCamera'>;
+
+const KEYBOARD_ROTATE_SENSITIVITY = 0.005;
+const KEYBOARD_ZOOM_SENSITIVITY = 0.05;
 
 const defaultRequestFrame: RequestFrame = (callback) => {
   if (typeof globalThis.requestAnimationFrame === 'function') {
@@ -62,21 +66,47 @@ export function createCameraInteractionController({
   requestFrame = defaultRequestFrame,
   cancelFrame = defaultCancelFrame
 }: TypeGpuCameraInteractionOptions): TypeGpuCameraInteractionController {
-  let attached = false;
+  let pointerAttached = false;
+  let keyboardAttached = false;
   let disposed = false;
   let frame: number | null = null;
   let framePending = false;
+  let keyboardFrame: number | null = null;
+  let keyboardFramePending = false;
   let activeScene: TypeGpuSceneState | null = null;
   let activePointerControls: TypeGpuPointerControls | null = null;
+  let activeKeyboardControls: TypeGpuKeyboardControls | null = null;
   let orbit: TypeGpuOrbitState | null = null;
   let nextCamera: TypeGpuCameraSettings | null = null;
   let lastEvent: Event | undefined;
+  let lastKeyboardEvent: KeyboardEvent | undefined;
+  const pressedKeyboardCommands = new Set<KeyboardCameraCommand>();
   let dragging = false;
   let suppressNextClick = false;
   let dragStartPosition: { x: number; y: number } | null = null;
   let previousPointerPosition: { x: number; y: number } | null = null;
   let lastPinchDistance: number | null = null;
   let activeTouchGesture: 'orbit' | 'pinch' | null = null;
+
+  const commitCameraUpdate = (
+    camera: TypeGpuCameraSettings,
+    eventOrbit: Pick<TypeGpuOrbitState, 'radius' | 'yaw' | 'pitch'>,
+    event: Event | undefined
+  ) => {
+    if (!activeScene?.cameraControllerNode) return;
+
+    const controlsNode = activeScene.cameraControllerNode;
+
+    renderer.setCamera(camera);
+    dispatchNodeEvent(controlsNode, 'camerachange', {
+      detail: {
+        camera,
+        orbit: eventOrbit
+      },
+      originalEvent: event
+    });
+    activeScene.camera = camera;
+  };
 
   const queueCameraUpdate = (event: Event) => {
     if (!activeScene || !orbit) return;
@@ -90,10 +120,17 @@ export function createCameraInteractionController({
     const nextFrame = requestFrame(() => {
       framePending = false;
       frame = null;
-      if (disposed || !attached || !activeScene?.cameraNode || !orbit || !nextCamera) return;
+      if (
+        disposed ||
+        !hasAttachedInput() ||
+        !activeScene?.cameraControllerNode ||
+        !orbit ||
+        !nextCamera
+      ) {
+        return;
+      }
 
       const camera = nextCamera;
-      const cameraNode = activeScene.cameraNode;
       const eventOrbit = {
         radius: orbit.radius,
         yaw: orbit.yaw,
@@ -102,15 +139,7 @@ export function createCameraInteractionController({
       const originalEvent = lastEvent;
 
       nextCamera = null;
-      renderer.setCamera(camera);
-      dispatchNodeEvent(cameraNode, 'camerachange', {
-        detail: {
-          camera,
-          orbit: eventOrbit
-        },
-        originalEvent
-      });
-      activeScene.camera = camera;
+      commitCameraUpdate(camera, eventOrbit, originalEvent);
     });
 
     if (framePending) {
@@ -127,6 +156,65 @@ export function createCameraInteractionController({
     framePending = false;
     nextCamera = null;
     lastEvent = undefined;
+  };
+
+  const commitCurrentCameraUpdate = (event: Event | undefined) => {
+    if (disposed || !hasAttachedInput() || !activeScene?.cameraControllerNode || !orbit) return;
+
+    commitCameraUpdate(
+      cameraFromOrbit(orbit, activeScene.camera),
+      {
+        radius: orbit.radius,
+        yaw: orbit.yaw,
+        pitch: orbit.pitch
+      },
+      event
+    );
+  };
+
+  const cancelKeyboardFrame = () => {
+    if (keyboardFramePending && keyboardFrame !== null) {
+      cancelFrame(keyboardFrame);
+    }
+
+    keyboardFrame = null;
+    keyboardFramePending = false;
+  };
+
+  const resetKeyboardState = () => {
+    pressedKeyboardCommands.clear();
+    lastKeyboardEvent = undefined;
+    cancelKeyboardFrame();
+  };
+
+  const scheduleKeyboardFrame = () => {
+    if (keyboardFramePending || pressedKeyboardCommands.size === 0) return;
+
+    keyboardFramePending = true;
+    const nextFrame = requestFrame(() => {
+      keyboardFramePending = false;
+      keyboardFrame = null;
+
+      if (
+        disposed ||
+        !activeScene ||
+        !activeKeyboardControls?.smooth ||
+        !orbit ||
+        pressedKeyboardCommands.size === 0
+      ) {
+        return;
+      }
+
+      if (applyKeyboardCommands(pressedKeyboardCommands)) {
+        commitCurrentCameraUpdate(lastKeyboardEvent);
+      }
+
+      scheduleKeyboardFrame();
+    });
+
+    if (keyboardFramePending) {
+      keyboardFrame = nextFrame;
+    }
   };
 
   const resetGestureState = () => {
@@ -200,12 +288,7 @@ export function createCameraInteractionController({
     const dx = mouseEvent.clientX - previousPointerPosition.x;
     const dy = mouseEvent.clientY - previousPointerPosition.y;
     previousPointerPosition = { x: mouseEvent.clientX, y: mouseEvent.clientY };
-    orbit = rotateOrbit(orbit, dx, dy, {
-      minDistance: activeScene.cameraController!.minDistance,
-      maxDistance: activeScene.cameraController!.maxDistance,
-      invert: activeScene.cameraController!.invert,
-      rotateSpeed: activePointerControls.rotateSpeed
-    });
+    orbit = rotateCamera(orbit, activeScene, dx, dy, activePointerControls.rotateSpeed);
     queueCameraUpdate(mouseEvent);
   };
 
@@ -276,12 +359,7 @@ export function createCameraInteractionController({
       const dy = position.y - previousPointerPosition.y;
       previousPointerPosition = position;
       lastPinchDistance = null;
-      orbit = rotateOrbit(orbit, dx, dy, {
-        minDistance: activeScene.cameraController!.minDistance,
-        maxDistance: activeScene.cameraController!.maxDistance,
-        invert: activeScene.cameraController!.invert,
-        rotateSpeed: activePointerControls.rotateSpeed
-      });
+      orbit = rotateCamera(orbit, activeScene, dx, dy, activePointerControls.rotateSpeed);
       queueCameraUpdate(touchEvent);
       return;
     }
@@ -311,54 +389,183 @@ export function createCameraInteractionController({
     resetGestureState();
   };
 
-  const canvasListeners: ListenerRegistration[] = [
+  const applyKeyboardCommands = (commands: ReadonlySet<KeyboardCameraCommand>): boolean => {
+    if (!activeScene || !activeKeyboardControls || !orbit) return false;
+
+    let nextOrbit = orbit;
+    const step = keyboardStep(activeKeyboardControls);
+    const yawDelta = commandDirection(commands, 'rotateRight', 'rotateLeft') * step;
+    const pitchDelta = commandDirection(commands, 'rotateUp', 'rotateDown') * step;
+
+    if (yawDelta !== 0 || pitchDelta !== 0) {
+      nextOrbit = rotateCameraByKeyboardStep(nextOrbit, activeScene, yawDelta, pitchDelta);
+    }
+
+    const zoomDelta = commandDirection(commands, 'zoomOut', 'zoomIn') * step;
+    if (zoomDelta !== 0) {
+      const controller = activeScene.cameraController!;
+      nextOrbit = zoomOrbit(nextOrbit, keyboardZoomDelta(nextOrbit, zoomDelta), {
+        minDistance: controller.minDistance,
+        maxDistance: controller.maxDistance,
+        zoomSpeed: 1
+      });
+    }
+
+    const movement = keyboardMovementVector(nextOrbit, commands, activeKeyboardControls);
+    if (!vectorEqual(movement, [0, 0, 0])) {
+      nextOrbit = translateOrbit(nextOrbit, movement);
+    }
+
+    if (orbitStateEqual(orbit, nextOrbit)) {
+      return false;
+    }
+
+    orbit = nextOrbit;
+    return true;
+  };
+
+  const onKeyDown = (event: Event) => {
+    const keyboardEvent = event as KeyboardEvent;
+    if (!activeScene || !activeKeyboardControls || !orbit) return;
+
+    const command = keyboardCommandForEvent(keyboardEvent, activeKeyboardControls);
+    if (!command) return;
+
+    keyboardEvent.preventDefault();
+    pressedKeyboardCommands.add(command);
+    lastKeyboardEvent = keyboardEvent;
+
+    if (activeKeyboardControls.smooth) {
+      scheduleKeyboardFrame();
+      return;
+    }
+
+    if (applyKeyboardCommands(pressedKeyboardCommands)) {
+      queueCameraUpdate(keyboardEvent);
+    }
+  };
+
+  const onKeyUp = (event: Event) => {
+    const keyboardEvent = event as KeyboardEvent;
+    if (!activeKeyboardControls) return;
+
+    const command = keyboardCommandForEvent(keyboardEvent, activeKeyboardControls);
+    if (!command) return;
+
+    keyboardEvent.preventDefault();
+    pressedKeyboardCommands.delete(command);
+    lastKeyboardEvent = keyboardEvent;
+
+    if (pressedKeyboardCommands.size === 0) {
+      cancelKeyboardFrame();
+    }
+  };
+
+  const onKeyboardBlur = () => {
+    resetKeyboardState();
+  };
+
+  const onKeyboardPointerDown = () => {
+    if (!activeKeyboardControls || typeof canvas.focus !== 'function') return;
+
+    canvas.focus();
+  };
+
+  const pointerCanvasListeners: ListenerRegistration[] = [
     ['wheel', onWheel, { passive: false }],
     ['mousedown', onMouseDown, { passive: false }],
     ['contextmenu', onContextMenu, { passive: false }],
     ['touchstart', onTouchStart, { passive: false }],
     ['touchmove', onTouchMove, { passive: false }]
   ];
-  const windowListeners: ListenerRegistration[] = [
+  const pointerWindowListeners: ListenerRegistration[] = [
     ['mousemove', onMouseMove, { passive: false }],
     ['mouseup', onMouseUp],
     ['touchmove', onTouchMove, { passive: false }],
     ['touchend', onTouchEnd],
     ['touchcancel', onTouchEnd]
   ];
+  const keyboardCanvasListeners: ListenerRegistration[] = [
+    ['keydown', onKeyDown],
+    ['keyup', onKeyUp],
+    ['blur', onKeyboardBlur],
+    ['pointerdown', onKeyboardPointerDown]
+  ];
 
-  function attach(): void {
-    if (attached) return;
+  function attachPointer(): void {
+    if (pointerAttached) return;
 
-    for (const [type, listener, options] of canvasListeners) {
+    for (const [type, listener, options] of pointerCanvasListeners) {
       canvas.addEventListener(type, listener, options);
     }
 
-    for (const [type, listener, options] of windowListeners) {
+    for (const [type, listener, options] of pointerWindowListeners) {
       windowTarget.addEventListener(type, listener, options);
     }
 
-    attached = true;
+    pointerAttached = true;
   }
 
-  function detach(): void {
-    cancelPendingCameraUpdate();
-    activeScene = null;
-    activePointerControls = null;
-    orbit = null;
-    resetGestureState();
-    suppressNextClick = false;
+  function detachPointer(): void {
+    if (!pointerAttached) return;
 
-    if (!attached) return;
-
-    for (const [type, listener] of canvasListeners) {
+    for (const [type, listener] of pointerCanvasListeners) {
       canvas.removeEventListener(type, listener);
     }
 
-    for (const [type, listener] of windowListeners) {
+    for (const [type, listener] of pointerWindowListeners) {
       windowTarget.removeEventListener(type, listener);
     }
 
-    attached = false;
+    pointerAttached = false;
+    resetGestureState();
+  }
+
+  function attachKeyboard(): void {
+    if (keyboardAttached) return;
+
+    ensureCanvasFocusable();
+    for (const [type, listener, options] of keyboardCanvasListeners) {
+      canvas.addEventListener(type, listener, options);
+    }
+
+    keyboardAttached = true;
+  }
+
+  function detachKeyboard(): void {
+    if (!keyboardAttached) return;
+
+    for (const [type, listener] of keyboardCanvasListeners) {
+      canvas.removeEventListener(type, listener);
+    }
+
+    keyboardAttached = false;
+    resetKeyboardState();
+  }
+
+  function deactivate(): void {
+    cancelPendingCameraUpdate();
+    resetKeyboardState();
+    activeScene = null;
+    activePointerControls = null;
+    activeKeyboardControls = null;
+    orbit = null;
+    suppressNextClick = false;
+    detachPointer();
+    detachKeyboard();
+    resetGestureState();
+  }
+
+  function hasAttachedInput(): boolean {
+    return pointerAttached || keyboardAttached;
+  }
+
+  function ensureCanvasFocusable(): void {
+    if (typeof canvas.hasAttribute === 'function' && canvas.hasAttribute('tabindex')) {
+      return;
+    }
+
+    canvas.tabIndex = 0;
   }
 
   return {
@@ -373,8 +580,9 @@ export function createCameraInteractionController({
       const cameraController = nextScene.cameraController;
       if (
         nextScene.cameraNode !== null &&
-        cameraController?.kind === 'orbit' &&
-        cameraController.pointer !== null
+        nextScene.cameraControllerNode !== null &&
+        cameraController?.kind === 'controls' &&
+        (cameraController.pointer !== null || cameraController.keyboard !== null)
       ) {
         const sameCameraState =
           activeScene !== null && hasSameInteractiveCameraState(activeScene, nextScene);
@@ -382,26 +590,38 @@ export function createCameraInteractionController({
         if (activeScene !== null && !sameCameraState) {
           cancelPendingCameraUpdate();
           resetGestureState();
+          resetKeyboardState();
         }
 
         activeScene = nextScene;
         activePointerControls = cameraController.pointer;
+        activeKeyboardControls = cameraController.keyboard;
         if (!sameCameraState || !framePending) {
           orbit = deriveOrbitState(nextScene.camera, {
             minDistance: cameraController.minDistance,
             maxDistance: cameraController.maxDistance
           });
         }
-        attach();
+        if (cameraController.pointer) {
+          attachPointer();
+        } else {
+          detachPointer();
+        }
+
+        if (cameraController.keyboard) {
+          attachKeyboard();
+        } else {
+          detachKeyboard();
+        }
       } else {
-        detach();
+        deactivate();
       }
     },
     dispose() {
       if (disposed) return;
 
       disposed = true;
-      detach();
+      deactivate();
     }
   };
 }
@@ -436,13 +656,16 @@ function hasSameInteractiveCameraState(
 ): boolean {
   return (
     previous.cameraNode === next.cameraNode &&
+    previous.cameraControllerNode === next.cameraControllerNode &&
     cameraSettingsEqual(previous.camera, next.camera) &&
-    previous.cameraController?.kind === 'orbit' &&
-    next.cameraController?.kind === 'orbit' &&
+    previous.cameraController?.kind === 'controls' &&
+    next.cameraController?.kind === 'controls' &&
+    previous.cameraController.mode === next.cameraController.mode &&
     previous.cameraController.minDistance === next.cameraController.minDistance &&
     previous.cameraController.maxDistance === next.cameraController.maxDistance &&
     previous.cameraController.invert === next.cameraController.invert &&
-    pointerControlsEqual(previous.cameraController.pointer, next.cameraController.pointer)
+    pointerControlsEqual(previous.cameraController.pointer, next.cameraController.pointer) &&
+    keyboardControlsEqual(previous.cameraController.keyboard, next.cameraController.keyboard)
   );
 }
 
@@ -452,7 +675,7 @@ function cameraSettingsEqual(
 ): boolean {
   return (
     vectorEqual(previous.position, next.position) &&
-    vectorEqual(previous.lookAt, next.lookAt) &&
+    vectorEqual(previous.target, next.target) &&
     previous.fov === next.fov &&
     previous.near === next.near &&
     previous.far === next.far
@@ -472,6 +695,32 @@ function pointerControlsEqual(
     previous.wheel === next.wheel &&
     previous.zoomSpeed === next.zoomSpeed &&
     previous.touch === next.touch
+  );
+}
+
+function keyboardControlsEqual(
+  previous: TypeGpuKeyboardControls | null,
+  next: TypeGpuKeyboardControls | null
+): boolean {
+  if (previous === next) return true;
+  if (!previous || !next) return false;
+
+  return (
+    previous.rotateLeft === next.rotateLeft &&
+    previous.rotateRight === next.rotateRight &&
+    previous.rotateUp === next.rotateUp &&
+    previous.rotateDown === next.rotateDown &&
+    previous.zoomIn === next.zoomIn &&
+    previous.zoomOut === next.zoomOut &&
+    previous.moveForward === next.moveForward &&
+    previous.moveBackward === next.moveBackward &&
+    previous.moveLeft === next.moveLeft &&
+    previous.moveRight === next.moveRight &&
+    previous.moveUp === next.moveUp &&
+    previous.moveDown === next.moveDown &&
+    previous.step === next.step &&
+    previous.moveStep === next.moveStep &&
+    previous.smooth === next.smooth
   );
 }
 
@@ -496,4 +745,190 @@ function touchPosition(touch: Touch): { x: number; y: number } {
 
 function pinchDistance(first: Touch, second: Touch): number {
   return Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+}
+
+type KeyboardCameraCommand =
+  | 'rotateLeft'
+  | 'rotateRight'
+  | 'rotateUp'
+  | 'rotateDown'
+  | 'zoomIn'
+  | 'zoomOut'
+  | 'moveForward'
+  | 'moveBackward'
+  | 'moveLeft'
+  | 'moveRight'
+  | 'moveUp'
+  | 'moveDown';
+
+function keyboardCommandForEvent(
+  event: KeyboardEvent,
+  controls: TypeGpuKeyboardControls
+): KeyboardCameraCommand | null {
+  if (event.altKey || event.ctrlKey || event.metaKey) return null;
+
+  const commands: KeyboardCameraCommand[] = [
+    'rotateLeft',
+    'rotateRight',
+    'rotateUp',
+    'rotateDown',
+    'zoomIn',
+    'zoomOut',
+    'moveForward',
+    'moveBackward',
+    'moveLeft',
+    'moveRight',
+    'moveUp',
+    'moveDown'
+  ];
+
+  return commands.find((command) => matchesShortcut(event, controls[command])) ?? null;
+}
+
+function matchesShortcut(event: KeyboardEvent, shortcut: string): boolean {
+  return event.key === shortcut || event.code === shortcut;
+}
+
+function rotateCameraByKeyboardStep(
+  orbit: TypeGpuOrbitState,
+  scene: TypeGpuSceneState,
+  yawDelta: number,
+  pitchDelta: number
+): TypeGpuOrbitState {
+  return rotateCamera(
+    orbit,
+    scene,
+    -yawDelta / KEYBOARD_ROTATE_SENSITIVITY,
+    pitchDelta / KEYBOARD_ROTATE_SENSITIVITY,
+    1
+  );
+}
+
+function rotateCamera(
+  orbit: TypeGpuOrbitState,
+  scene: TypeGpuSceneState,
+  dx: number,
+  dy: number,
+  rotateSpeed: number
+): TypeGpuOrbitState {
+  const controller = scene.cameraController!;
+  const rotated = rotateOrbit(orbit, dx, dy, {
+    minDistance: controller.minDistance,
+    maxDistance: controller.maxDistance,
+    invert: controller.invert,
+    rotateSpeed
+  });
+
+  if (controller.mode === 'fly') {
+    return pinOrbitToCameraPosition(rotated, cameraFromOrbit(orbit, scene.camera).position);
+  }
+
+  return rotated;
+}
+
+function pinOrbitToCameraPosition(
+  orbit: TypeGpuOrbitState,
+  position: [number, number, number]
+): TypeGpuOrbitState {
+  const displacement = orbitDisplacement(orbit);
+
+  return {
+    ...orbit,
+    target: [
+      roundToSix(position[0] - displacement[0]),
+      roundToSix(position[1] - displacement[1]),
+      roundToSix(position[2] - displacement[2])
+    ]
+  };
+}
+
+function orbitDisplacement(orbit: TypeGpuOrbitState): [number, number, number] {
+  const cosPitch = Math.cos(orbit.pitch);
+
+  return [
+    roundToSix(orbit.radius * Math.sin(orbit.yaw) * cosPitch),
+    roundToSix(orbit.radius * Math.sin(orbit.pitch)),
+    roundToSix(orbit.radius * Math.cos(orbit.yaw) * cosPitch)
+  ];
+}
+
+function keyboardZoomDelta(orbit: TypeGpuOrbitState, step: number): number {
+  return (orbit.radius * step) / KEYBOARD_ZOOM_SENSITIVITY;
+}
+
+function keyboardStep(controls: TypeGpuKeyboardControls): number {
+  return Number.isFinite(controls.step) ? Math.max(0, controls.step) : 0;
+}
+
+function keyboardMoveStep(controls: TypeGpuKeyboardControls): number {
+  return Number.isFinite(controls.moveStep) ? Math.max(0, controls.moveStep) : 0;
+}
+
+function commandDirection(
+  commands: ReadonlySet<KeyboardCameraCommand>,
+  positive: KeyboardCameraCommand,
+  negative: KeyboardCameraCommand
+): number {
+  return (commands.has(positive) ? 1 : 0) - (commands.has(negative) ? 1 : 0);
+}
+
+function orbitStateEqual(previous: TypeGpuOrbitState, next: TypeGpuOrbitState): boolean {
+  return (
+    previous.radius === next.radius &&
+    previous.yaw === next.yaw &&
+    previous.pitch === next.pitch &&
+    vectorEqual(previous.target, next.target)
+  );
+}
+
+function keyboardMovementVector(
+  orbit: TypeGpuOrbitState,
+  commands: ReadonlySet<KeyboardCameraCommand>,
+  controls: TypeGpuKeyboardControls
+): [number, number, number] {
+  const step = keyboardMoveStep(controls);
+  const forward: [number, number, number] = [-Math.sin(orbit.yaw), 0, -Math.cos(orbit.yaw)];
+  const left: [number, number, number] = [forward[2], 0, -forward[0]];
+  const forwardDirection = commandDirection(commands, 'moveForward', 'moveBackward');
+  const leftDirection = commandDirection(commands, 'moveLeft', 'moveRight');
+  const verticalDirection = commandDirection(commands, 'moveUp', 'moveDown');
+  const combined: [number, number, number] = [
+    forward[0] * forwardDirection + left[0] * leftDirection,
+    verticalDirection,
+    forward[2] * forwardDirection + left[2] * leftDirection
+  ];
+  const length = Math.hypot(combined[0], combined[1], combined[2]);
+
+  if (length === 0 || step === 0) {
+    return [0, 0, 0];
+  }
+
+  return scaleVector([combined[0] / length, combined[1] / length, combined[2] / length], step);
+}
+
+function translateOrbit(
+  orbit: TypeGpuOrbitState,
+  displacement: [number, number, number]
+): TypeGpuOrbitState {
+  return {
+    ...orbit,
+    target: [
+      roundToSix(orbit.target[0] + displacement[0]),
+      roundToSix(orbit.target[1] + displacement[1]),
+      roundToSix(orbit.target[2] + displacement[2])
+    ]
+  };
+}
+
+function scaleVector(vector: [number, number, number], scale: number): [number, number, number] {
+  return [
+    roundToSix(vector[0] * scale),
+    roundToSix(vector[1] * scale),
+    roundToSix(vector[2] * scale)
+  ];
+}
+
+function roundToSix(value: number): number {
+  const rounded = Math.round(value * 1_000_000) / 1_000_000;
+  return Object.is(rounded, -0) ? 0 : rounded;
 }

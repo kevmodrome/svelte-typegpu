@@ -7,7 +7,7 @@ const RENDERER_CAMERA_PRECISION = 1_000_000;
 
 export interface CameraControls {
   position: Vector3Tuple;
-  lookAt: Vector3Tuple;
+  target: Vector3Tuple;
   fov: number;
   near: number;
   far: number;
@@ -60,7 +60,7 @@ export function copySceneControls(target: SceneControls, source: SceneControls):
   target.cubeCount = next.cubeCount;
   target.hue = next.hue;
   target.camera.position = next.camera.position;
-  target.camera.lookAt = next.camera.lookAt;
+  target.camera.target = next.camera.target;
   target.camera.fov = next.camera.fov;
   target.camera.near = next.camera.near;
   target.camera.far = next.camera.far;
@@ -71,7 +71,7 @@ export function cameraControlsForCount(count: number): CameraControls {
 
   return {
     position: [...camera.position],
-    lookAt: [...camera.lookAt],
+    target: [...camera.target],
     fov: 45,
     near: 0.1,
     far: 500
@@ -80,7 +80,7 @@ export function cameraControlsForCount(count: number): CameraControls {
 
 export function applyCameraChange(controls: SceneControls, detail: CameraChangeDetail): void {
   controls.camera.position = preciseVector(detail.camera.position, -1000, 1000);
-  controls.camera.lookAt = preciseVector(detail.camera.lookAt, -1000, 1000);
+  controls.camera.target = preciseVector(detail.camera.target, -1000, 1000);
   controls.camera.fov = preciseNumber(detail.camera.fov, 20, 100);
   const near = preciseNumber(detail.camera.near, 0.01, 10);
   controls.camera.near = near;
@@ -109,11 +109,11 @@ function normalizeHue(hue: number): number {
 
 function clampCameraControls(camera: CameraControls): CameraControls {
   const near = round(clamp(camera.near, 0.01, 10));
-  const lookAt = clampVector(camera.lookAt, -1000, 1000);
+  const target = clampVector(camera.target, -1000, 1000);
 
   return {
-    position: ensureCameraDistance(clampVector(camera.position, -1000, 1000), lookAt),
-    lookAt,
+    position: ensureCameraDistance(clampVector(camera.position, -1000, 1000), target),
+    target,
     fov: round(clamp(camera.fov, 20, 100)),
     near,
     far: round(Math.max(clamp(camera.far, 0.1, 1000), near + 1))
@@ -132,21 +132,21 @@ function preciseNumber(value: number, min: number, max: number): number {
   return Math.round(clamp(value, min, max) * RENDERER_CAMERA_PRECISION) / RENDERER_CAMERA_PRECISION;
 }
 
-function ensureCameraDistance(position: Vector3Tuple, lookAt: Vector3Tuple): Vector3Tuple {
-  const dx = position[0] - lookAt[0];
-  const dy = position[1] - lookAt[1];
-  const dz = position[2] - lookAt[2];
+function ensureCameraDistance(position: Vector3Tuple, target: Vector3Tuple): Vector3Tuple {
+  const dx = position[0] - target[0];
+  const dy = position[1] - target[1];
+  const dz = position[2] - target[2];
 
   if (Math.hypot(dx, dy, dz) >= MIN_CAMERA_DISTANCE) {
     return position;
   }
 
   const fallbackZ =
-    lookAt[2] + MIN_CAMERA_DISTANCE <= 1000
-      ? lookAt[2] + MIN_CAMERA_DISTANCE
-      : lookAt[2] - MIN_CAMERA_DISTANCE;
+    target[2] + MIN_CAMERA_DISTANCE <= 1000
+      ? target[2] + MIN_CAMERA_DISTANCE
+      : target[2] - MIN_CAMERA_DISTANCE;
 
-  return [lookAt[0], lookAt[1], round(fallbackZ)];
+  return [target[0], target[1], round(fallbackZ)];
 }
 
 function round(value: number): number {

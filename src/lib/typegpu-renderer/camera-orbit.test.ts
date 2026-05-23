@@ -10,16 +10,16 @@ import {
 describe('TypeGPU orbit camera math', () => {
   const camera = {
     position: [0, 1.4, 5] as [number, number, number],
-    lookAt: [0, 0, 0] as [number, number, number],
+    target: [0, 0, 0] as [number, number, number],
     fov: 45,
     near: 0.1,
     far: 500
   };
 
-  it('derives orbit state from camera position and lookAt', () => {
+  it('derives orbit state from camera position and target', () => {
     const state = deriveOrbitState(camera, { minDistance: 1, maxDistance: 100 });
 
-    expect(state.lookAt).toEqual([0, 0, 0]);
+    expect(state.target).toEqual([0, 0, 0]);
     expect(state.radius).toBeCloseTo(5.1923);
     expect(state.yaw).toBeCloseTo(0);
     expect(state.pitch).toBeCloseTo(0.2730);
@@ -32,7 +32,7 @@ describe('TypeGPU orbit camera math', () => {
     expect(nextCamera.position[0]).toBeCloseTo(0);
     expect(nextCamera.position[1]).toBeCloseTo(1.4);
     expect(nextCamera.position[2]).toBeCloseTo(5);
-    expect(nextCamera.lookAt).toEqual([0, 0, 0]);
+    expect(nextCamera.target).toEqual([0, 0, 0]);
     expect(nextCamera.fov).toBe(45);
     expect(nextCamera.near).toBe(0.1);
     expect(nextCamera.far).toBe(500);
@@ -83,21 +83,21 @@ describe('TypeGPU orbit camera math', () => {
 
   it('derives stable orbit state from zero and near-zero camera offsets', () => {
     const exact = deriveOrbitState(
-      { ...camera, position: [1, 1, 1], lookAt: [1, 1, 1] },
+      { ...camera, position: [1, 1, 1], target: [1, 1, 1] },
       { minDistance: 4, maxDistance: 10 }
     );
     const nearZero = deriveOrbitState(
-      { ...camera, position: [1.0000001, 1, 1], lookAt: [1, 1, 1] },
+      { ...camera, position: [1.0000001, 1, 1], target: [1, 1, 1] },
       { minDistance: 4, maxDistance: 10 }
     );
     const nonFinite = deriveOrbitState(
-      { ...camera, position: [Number.POSITIVE_INFINITY, 1, 1], lookAt: [1, 1, 1] },
+      { ...camera, position: [Number.POSITIVE_INFINITY, 1, 1], target: [1, 1, 1] },
       { minDistance: 4, maxDistance: 10 }
     );
 
-    expect(exact).toMatchObject({ lookAt: [1, 1, 1], radius: 4, yaw: 0, pitch: 0 });
-    expect(nearZero).toMatchObject({ lookAt: [1, 1, 1], radius: 4, yaw: 0, pitch: 0 });
-    expect(nonFinite).toMatchObject({ lookAt: [1, 1, 1], radius: 4, yaw: 0, pitch: 0 });
+    expect(exact).toMatchObject({ target: [1, 1, 1], radius: 4, yaw: 0, pitch: 0 });
+    expect(nearZero).toMatchObject({ target: [1, 1, 1], radius: 4, yaw: 0, pitch: 0 });
+    expect(nonFinite).toMatchObject({ target: [1, 1, 1], radius: 4, yaw: 0, pitch: 0 });
   });
 
   it('normalizes and clamps wheel deltas', () => {

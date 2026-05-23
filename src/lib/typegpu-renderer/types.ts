@@ -11,7 +11,7 @@ export type TypeGpuLightKind = 'ambient' | 'hemisphere' | 'directional' | 'point
 
 export interface TypeGpuCameraSettings {
   position: Vector3Tuple;
-  lookAt: Vector3Tuple;
+  target: Vector3Tuple;
   fov: number;
   near: number;
   far: number;
@@ -36,11 +36,22 @@ export interface TypeGpuKeyboardControls {
   rotateDown: string;
   zoomIn: string;
   zoomOut: string;
+  moveForward: string;
+  moveBackward: string;
+  moveLeft: string;
+  moveRight: string;
+  moveUp: string;
+  moveDown: string;
   step: number;
+  moveStep: number;
+  smooth: boolean;
 }
 
-export interface TypeGpuOrbitController {
-  kind: 'orbit';
+export type TypeGpuControlsMode = 'orbit' | 'fly';
+
+export interface TypeGpuControlsController {
+  kind: 'controls';
+  mode: TypeGpuControlsMode;
   minDistance: number;
   maxDistance: number;
   invert: boolean;
@@ -48,11 +59,12 @@ export interface TypeGpuOrbitController {
   keyboard: TypeGpuKeyboardControls | null;
 }
 
-export type TypeGpuCameraController = TypeGpuOrbitController;
+export type TypeGpuCameraController = TypeGpuControlsController;
 
 export interface TypeGpuCameraState {
   node: TypeGpuNode | null;
   settings: TypeGpuCameraSettings;
+  controllerNode: TypeGpuNode | null;
   controller: TypeGpuCameraController | null;
 }
 
@@ -139,6 +151,7 @@ export interface TypeGpuDrawBatch {
 export interface TypeGpuSceneState {
   camera: TypeGpuCameraSettings;
   cameraNode: TypeGpuNode | null;
+  cameraControllerNode: TypeGpuNode | null;
   cameraController: TypeGpuCameraController | null;
   scale: number;
   animationSpeed: number;

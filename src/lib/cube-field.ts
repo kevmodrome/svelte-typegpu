@@ -9,7 +9,7 @@ export interface CubeInstance {
 
 export interface SceneCameraSettings {
   position: [number, number, number];
-  lookAt: [number, number, number];
+  target: [number, number, number];
   floorSize: number;
   cubeSize: number;
 }
@@ -51,7 +51,7 @@ export function sceneCameraForCount(count: number): SceneCameraSettings {
   if (clampCubeCount(count) === 1) {
     return {
       position: [0, 1.4, 5],
-      lookAt: [0, 0, 0],
+      target: [0, 0, 0],
       floorSize: 6,
       cubeSize: 1.5
     };
@@ -59,7 +59,7 @@ export function sceneCameraForCount(count: number): SceneCameraSettings {
 
   return {
     position: [9, 7, 13],
-    lookAt: [0, 0, 0],
+    target: [0, 0, 0],
     floorSize: 18,
     cubeSize: 0.24
   };

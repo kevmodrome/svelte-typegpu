@@ -53,7 +53,7 @@ describe('TypeGPU Svelte renderer runtime', () => {
     const root = createFragment();
     const scene = createElement('scene');
     const camera = createElement('perspectiveCamera');
-    const orbit = createElement('orbitControls');
+    const controls = createElement('controls');
     const pointer = createElement('pointerControls');
     const mesh = createElement('mesh');
     const onMeshClick = vi.fn();
@@ -67,8 +67,8 @@ describe('TypeGPU Svelte renderer runtime', () => {
     );
 
     addEventListener(mesh, 'click', onMeshClick);
-    insert(orbit, pointer, null);
-    insert(camera, orbit, null);
+    insert(controls, pointer, null);
+    insert(camera, controls, null);
     insert(scene, camera, null);
     insert(scene, mesh, null);
     insert(root, scene, null);
@@ -94,7 +94,7 @@ describe('TypeGPU Svelte renderer runtime', () => {
     const root = createFragment();
     const scene = createElement('scene');
     const camera = createElement('perspectiveCamera');
-    const orbit = createElement('orbitControls');
+    const controls = createElement('controls');
     const pointer = createElement('pointerControls');
     const mesh = createElement('mesh');
     const onMeshClick = vi.fn();
@@ -108,8 +108,8 @@ describe('TypeGPU Svelte renderer runtime', () => {
     );
 
     addEventListener(mesh, 'click', onMeshClick);
-    insert(orbit, pointer, null);
-    insert(camera, orbit, null);
+    insert(controls, pointer, null);
+    insert(camera, controls, null);
     insert(scene, camera, null);
     insert(scene, mesh, null);
     insert(root, scene, null);

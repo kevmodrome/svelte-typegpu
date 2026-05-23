@@ -7,6 +7,7 @@ import {
 } from '../scene-controls';
 import { createCameraInteractionController } from './camera-interaction';
 import type {
+  TypeGpuKeyboardControls,
   TypeGpuCameraSettings,
   TypeGpuPointerControls,
   TypeGpuSceneState
@@ -68,7 +69,7 @@ class FakeEventTarget {
 
 const camera: TypeGpuCameraSettings = {
   position: [0, 0, 5],
-  lookAt: [0, 0, 0],
+  target: [0, 0, 0],
   fov: 45,
   near: 0.1,
   far: 100
@@ -82,29 +83,53 @@ const pointerControls: TypeGpuPointerControls = {
   touch: 'orbit-pinch'
 };
 
+const keyboardControls: TypeGpuKeyboardControls = {
+  rotateLeft: 'ArrowLeft',
+  rotateRight: 'ArrowRight',
+  rotateUp: 'ArrowUp',
+  rotateDown: 'ArrowDown',
+  zoomIn: '+',
+  zoomOut: '-',
+  moveForward: 'KeyW',
+  moveBackward: 'KeyS',
+  moveLeft: 'KeyA',
+  moveRight: 'KeyD',
+  moveUp: 'Space',
+  moveDown: 'KeyC',
+  moveStep: 0.35,
+  smooth: false,
+  step: 0.08
+};
+
 function sceneState({
   cameraSettings = camera,
   cameraNode = createElement('camera'),
+  cameraControllerNode = cameraNode,
   controller = 'orbit',
-  pointer = pointerControls
+  pointer = pointerControls,
+  keyboard = null
 }: {
   cameraSettings?: TypeGpuCameraSettings;
   cameraNode?: TypeGpuNode | null;
-  controller?: 'orbit' | null;
+  cameraControllerNode?: TypeGpuNode | null;
+  controller?: 'orbit' | 'fly' | null;
   pointer?: TypeGpuPointerControls | null | true;
+  keyboard?: TypeGpuKeyboardControls | null | true;
 } = {}): TypeGpuSceneState {
   return {
     camera: cameraSettings,
     cameraNode,
+    cameraControllerNode,
     cameraController:
-      controller === 'orbit'
+      controller !== null
         ? {
-            kind: 'orbit',
+            kind: 'controls',
+            mode: controller,
             minDistance: 1,
             maxDistance: 100,
             invert: false,
             pointer: pointer === true ? pointerControls : pointer,
-            keyboard: null
+            keyboard: keyboard === true ? keyboardControls : keyboard
           }
         : null,
     scale: 1,
@@ -130,25 +155,50 @@ function fakeCanvas(): FakeEventTarget & { clientHeight: number } {
   return Object.assign(new FakeEventTarget(), { clientHeight: 600 });
 }
 
+function fakeFocusableCanvas(): FakeEventTarget & {
+  clientHeight: number;
+  tabIndex: number;
+  focus: ReturnType<typeof vi.fn<() => void>>;
+  hasAttribute(name: string): boolean;
+} {
+  return Object.assign(new FakeEventTarget(), {
+    clientHeight: 600,
+    tabIndex: -1,
+    focus: vi.fn<() => void>(),
+    hasAttribute: vi.fn((name: string) => name === 'tabindex' && false)
+  });
+}
+
 function fakeFrameScheduler(): {
   requestFrame: ReturnType<typeof vi.fn<TestRequestFrame>>;
   cancelFrame: ReturnType<typeof vi.fn<TestCancelFrame>>;
-  runFrame(): void;
+  pendingCount(): number;
+  runFrame(time?: number): void;
 } {
-  let callback: FrameRequestCallback | null = null;
+  const callbacks = new Map<number, FrameRequestCallback>();
+  let nextHandle = 42;
   const requestFrame = vi.fn<TestRequestFrame>((nextCallback) => {
-    callback = nextCallback;
-    return 42;
+    const handle = nextHandle;
+    nextHandle += 1;
+    callbacks.set(handle, nextCallback);
+    return handle;
   });
-  const cancelFrame = vi.fn<TestCancelFrame>(() => {
-    callback = null;
+  const cancelFrame = vi.fn<TestCancelFrame>((handle) => {
+    callbacks.delete(handle);
   });
 
   return {
     requestFrame,
     cancelFrame,
-    runFrame() {
-      callback?.(100);
+    pendingCount() {
+      return callbacks.size;
+    },
+    runFrame(time = 100) {
+      const [handle, callback] = callbacks.entries().next().value ?? [];
+      if (!callback) return;
+
+      callbacks.delete(handle);
+      callback(time);
     }
   };
 }
@@ -202,6 +252,72 @@ describe('TypeGPU camera interaction controller', () => {
     expect(canvas.listenerOptions('touchmove')).toEqual({ passive: false });
     expect(windowTarget.listenerOptions('mousemove')).toEqual({ passive: false });
     expect(windowTarget.listenerOptions('touchmove')).toEqual({ passive: false });
+  });
+
+  it('attaches scoped canvas listeners for active keyboard controls', () => {
+    const canvas = new FakeEventTarget();
+    const windowTarget = new FakeEventTarget();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer: fakeRenderer(),
+      windowTarget: windowTarget as unknown as Window
+    });
+
+    controller.reconcile(sceneState({ pointer: null, keyboard: true }));
+
+    expect(canvas.listenerCount()).toBe(4);
+    expect(canvas.listenerCount('keydown')).toBe(1);
+    expect(canvas.listenerCount('keyup')).toBe(1);
+    expect(canvas.listenerCount('blur')).toBe(1);
+    expect(canvas.listenerCount('pointerdown')).toBe(1);
+    expect(windowTarget.listenerCount()).toBe(0);
+  });
+
+  it('makes the canvas focusable for keyboard controls', () => {
+    const canvas = fakeFocusableCanvas();
+    const windowTarget = new FakeEventTarget();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer: fakeRenderer(),
+      windowTarget: windowTarget as unknown as Window
+    });
+
+    controller.reconcile(sceneState({ pointer: null, keyboard: true }));
+
+    expect(canvas.tabIndex).toBe(0);
+  });
+
+  it('focuses the canvas before keyboard controls are used', () => {
+    const canvas = fakeFocusableCanvas();
+    const windowTarget = new FakeEventTarget();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer: fakeRenderer(),
+      windowTarget: windowTarget as unknown as Window
+    });
+
+    controller.reconcile(sceneState({ pointer: null, keyboard: true }));
+    canvas.dispatch<PointerEvent>('pointerdown');
+
+    expect(canvas.focus).toHaveBeenCalledOnce();
+  });
+
+  it('removes keyboard listeners when controls become inactive', () => {
+    const canvas = new FakeEventTarget();
+    const windowTarget = new FakeEventTarget();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer: fakeRenderer(),
+      windowTarget: windowTarget as unknown as Window
+    });
+
+    controller.reconcile(sceneState({ pointer: null, keyboard: true }));
+    expect(canvas.listenerCount('keydown')).toBe(1);
+
+    controller.reconcile(sceneState({ controller: null }));
+
+    expect(canvas.listenerCount()).toBe(0);
+    expect(windowTarget.listenerCount()).toBe(0);
   });
 
   it('removes listeners when reconciled with no active pointer controls', () => {
@@ -298,7 +414,7 @@ describe('TypeGPU camera interaction controller', () => {
     expect(wheelEvent.preventDefault).toHaveBeenCalledOnce();
     expect(renderer.setCamera).toHaveBeenCalledOnce();
     const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
-    expect(nextCamera.lookAt).toEqual(camera.lookAt);
+    expect(nextCamera.target).toEqual(camera.target);
     expect(nextCamera.fov).toBe(camera.fov);
     expect(nextCamera.near).toBe(camera.near);
     expect(nextCamera.far).toBe(camera.far);
@@ -567,6 +683,483 @@ describe('TypeGPU camera interaction controller', () => {
     expect(renderer.setCamera).toHaveBeenCalledOnce();
     const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
     expect(nextCamera.position[0]).toBeLessThan(0);
+  });
+
+  it('rotates the target around the camera position in fly mode', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    controller.reconcile(sceneState({ controller: 'fly', pointer: true }));
+    canvas.dispatch<MouseEvent>('mousedown', { button: 0, clientX: 10, clientY: 20 } as Partial<
+      MouseEvent
+    >);
+    windowTarget.dispatch<MouseEvent>('mousemove', {
+      buttons: 1,
+      clientX: 110,
+      clientY: 20
+    } as Partial<MouseEvent>);
+
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+    const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+    expect(nextCamera.position).toEqual(camera.position);
+    expect(nextCamera.target[0]).toBeGreaterThan(0);
+    expect(nextCamera.target[2]).toBeGreaterThan(0);
+  });
+
+  it('dispatches camera changes from the controls node', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const cameraNode = createElement('camera');
+    const controlsNode = createElement('controls');
+    const cameraChanges: unknown[] = [];
+    const cameraNodeChanges: unknown[] = [];
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    addEventListener(controlsNode, 'camerachange', (event) => {
+      cameraChanges.push(event);
+    });
+    addEventListener(cameraNode, 'camerachange', (event) => {
+      cameraNodeChanges.push(event);
+    });
+
+    controller.reconcile(
+      sceneState({ cameraNode, cameraControllerNode: controlsNode, pointer: null, keyboard: true })
+    );
+    canvas.dispatch<KeyboardEvent>('keydown', {
+      key: 'ArrowLeft',
+      code: 'ArrowLeft',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+
+    expect(cameraChanges).toHaveLength(1);
+    expect(cameraNodeChanges).toHaveLength(0);
+  });
+
+  it('rotates the camera from a keyboard shortcut', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const cameraNode = createElement('camera');
+    const cameraChanges: unknown[] = [];
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    addEventListener(cameraNode, 'camerachange', (event) => {
+      cameraChanges.push(event);
+    });
+
+    controller.reconcile(sceneState({ cameraNode, pointer: null, keyboard: true }));
+    const keyEvent = canvas.dispatch<KeyboardEvent>('keydown', {
+      key: 'ArrowLeft',
+      code: 'ArrowLeft',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+
+    expect(keyEvent.preventDefault).toHaveBeenCalledOnce();
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+    const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+    expect(nextCamera.position[0]).toBeLessThan(0);
+    expect(cameraChanges).toHaveLength(1);
+    expect(cameraChanges[0]).toMatchObject({
+      originalEvent: keyEvent,
+      detail: {
+        camera: nextCamera,
+        orbit: {
+          radius: expect.any(Number),
+          yaw: expect.any(Number),
+          pitch: expect.any(Number)
+        }
+      }
+    });
+  });
+
+  it('rotates the target from a keyboard shortcut in fly mode', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    controller.reconcile(sceneState({ controller: 'fly', pointer: null, keyboard: true }));
+    canvas.dispatch<KeyboardEvent>('keydown', {
+      key: 'ArrowLeft',
+      code: 'ArrowLeft',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+    const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+    expect(nextCamera.position).toEqual(camera.position);
+    expect(nextCamera.target[0]).toBeGreaterThan(0);
+    expect(nextCamera.target[2]).toBeGreaterThan(0);
+  });
+
+  it('moves diagonally from combined smooth movement keys', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const frames = fakeFrameScheduler();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: frames.requestFrame,
+      cancelFrame: frames.cancelFrame
+    });
+
+    controller.reconcile(
+      sceneState({
+        controller: 'fly',
+        pointer: null,
+        keyboard: { ...keyboardControls, smooth: true }
+      })
+    );
+    canvas.dispatch<KeyboardEvent>('keydown', {
+      key: 'w',
+      code: 'KeyW',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+    canvas.dispatch<KeyboardEvent>('keydown', {
+      key: 'a',
+      code: 'KeyA',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+    frames.runFrame();
+
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+    const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+    expect(nextCamera.position).toEqual([-0.247487, 0, 4.752513]);
+    expect(nextCamera.target).toEqual([-0.247487, 0, -0.247487]);
+    expect(frames.pendingCount()).toBe(1);
+  });
+
+  it('normalizes every horizontal smooth movement diagonal', () => {
+    const cases = [
+      {
+        keys: [
+          ['w', 'KeyW'],
+          ['a', 'KeyA']
+        ],
+        position: [-0.247487, 0, 4.752513],
+        target: [-0.247487, 0, -0.247487]
+      },
+      {
+        keys: [
+          ['w', 'KeyW'],
+          ['d', 'KeyD']
+        ],
+        position: [0.247487, 0, 4.752513],
+        target: [0.247487, 0, -0.247487]
+      },
+      {
+        keys: [
+          ['s', 'KeyS'],
+          ['a', 'KeyA']
+        ],
+        position: [-0.247487, 0, 5.247487],
+        target: [-0.247487, 0, 0.247487]
+      },
+      {
+        keys: [
+          ['s', 'KeyS'],
+          ['d', 'KeyD']
+        ],
+        position: [0.247487, 0, 5.247487],
+        target: [0.247487, 0, 0.247487]
+      }
+    ] as const;
+
+    for (const testCase of cases) {
+      const canvas = fakeCanvas();
+      const windowTarget = new FakeEventTarget();
+      const renderer = fakeRenderer();
+      const frames = fakeFrameScheduler();
+      const controller = createCameraInteractionController({
+        canvas: canvas as unknown as HTMLCanvasElement,
+        renderer,
+        windowTarget: windowTarget as unknown as Window,
+        requestFrame: frames.requestFrame,
+        cancelFrame: frames.cancelFrame
+      });
+
+      controller.reconcile(
+        sceneState({
+          controller: 'fly',
+          pointer: null,
+          keyboard: { ...keyboardControls, smooth: true }
+        })
+      );
+      for (const [key, code] of testCase.keys) {
+        canvas.dispatch<KeyboardEvent>('keydown', {
+          key,
+          code,
+          preventDefault: vi.fn()
+        } as Partial<KeyboardEvent>);
+      }
+      frames.runFrame();
+
+      const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+      expect(nextCamera.position).toEqual(testCase.position);
+      expect(nextCamera.target).toEqual(testCase.target);
+    }
+  });
+
+  it('rotates and moves during the same smooth keyboard frame', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const frames = fakeFrameScheduler();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: frames.requestFrame,
+      cancelFrame: frames.cancelFrame
+    });
+
+    controller.reconcile(
+      sceneState({
+        controller: 'fly',
+        pointer: null,
+        keyboard: { ...keyboardControls, smooth: true }
+      })
+    );
+    canvas.dispatch<KeyboardEvent>('keydown', {
+      key: 'w',
+      code: 'KeyW',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+    canvas.dispatch<KeyboardEvent>('keydown', {
+      key: 'ArrowLeft',
+      code: 'ArrowLeft',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+    frames.runFrame();
+
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+    const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+    expect(nextCamera.position[0]).toBeGreaterThan(0);
+    expect(nextCamera.position[2]).toBeLessThan(5);
+    expect(nextCamera.target[0]).toBeGreaterThan(nextCamera.position[0]);
+  });
+
+  it('stops smooth keyboard animation when held keys are released', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const frames = fakeFrameScheduler();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: frames.requestFrame,
+      cancelFrame: frames.cancelFrame
+    });
+
+    controller.reconcile(
+      sceneState({
+        controller: 'fly',
+        pointer: null,
+        keyboard: { ...keyboardControls, smooth: true }
+      })
+    );
+    canvas.dispatch<KeyboardEvent>('keydown', {
+      key: 'w',
+      code: 'KeyW',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+    canvas.dispatch<KeyboardEvent>('keyup', {
+      key: 'w',
+      code: 'KeyW',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+    frames.runFrame();
+
+    expect(frames.cancelFrame).toHaveBeenCalledWith(42);
+    expect(renderer.setCamera).not.toHaveBeenCalled();
+  });
+
+  it('zooms the camera from a keyboard shortcut', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    controller.reconcile(sceneState({ pointer: null, keyboard: true }));
+    const keyEvent = canvas.dispatch<KeyboardEvent>('keydown', {
+      key: '+',
+      code: 'Equal',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+
+    expect(keyEvent.preventDefault).toHaveBeenCalledOnce();
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+    const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+    expect(nextCamera.position[2]).toBeLessThan(camera.position[2]);
+  });
+
+  it('moves the camera and target forward from a keyboard shortcut', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const cameraNode = createElement('camera');
+    const cameraChanges: unknown[] = [];
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    addEventListener(cameraNode, 'camerachange', (event) => {
+      cameraChanges.push(event);
+    });
+
+    controller.reconcile(sceneState({ cameraNode, pointer: null, keyboard: true }));
+    const keyEvent = canvas.dispatch<KeyboardEvent>('keydown', {
+      key: 'w',
+      code: 'KeyW',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+
+    expect(keyEvent.preventDefault).toHaveBeenCalledOnce();
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+    const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+    expect(nextCamera.position).toEqual([0, 0, 4.65]);
+    expect(nextCamera.target).toEqual([0, 0, -0.35]);
+    expect(cameraChanges).toHaveLength(1);
+    expect(cameraChanges[0]).toMatchObject({
+      originalEvent: keyEvent,
+      detail: {
+        camera: nextCamera,
+        orbit: {
+          radius: 5,
+          yaw: 0,
+          pitch: 0
+        }
+      }
+    });
+  });
+
+  it('strafes the camera left relative to its facing direction', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    controller.reconcile(sceneState({ pointer: null, keyboard: true }));
+    canvas.dispatch<KeyboardEvent>('keydown', {
+      key: 'a',
+      code: 'KeyA',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+
+    const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+    expect(nextCamera.position).toEqual([-0.35, 0, 5]);
+    expect(nextCamera.target).toEqual([-0.35, 0, 0]);
+  });
+
+  it('moves the camera vertically from keyboard shortcuts', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    controller.reconcile(sceneState({ pointer: null, keyboard: true }));
+    canvas.dispatch<KeyboardEvent>('keydown', {
+      key: ' ',
+      code: 'Space',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+
+    const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+    expect(nextCamera.position).toEqual([0, 0.35, 5]);
+    expect(nextCamera.target).toEqual([0, 0.35, 0]);
+  });
+
+  it('ignores unrelated keyboard shortcuts', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const frames = fakeFrameScheduler();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: frames.requestFrame,
+      cancelFrame: frames.cancelFrame
+    });
+
+    controller.reconcile(sceneState({ pointer: null, keyboard: true }));
+    const keyEvent = canvas.dispatch<KeyboardEvent>('keydown', {
+      key: 'q',
+      code: 'KeyQ',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+
+    expect(keyEvent.preventDefault).not.toHaveBeenCalled();
+    expect(frames.requestFrame).not.toHaveBeenCalled();
+    expect(renderer.setCamera).not.toHaveBeenCalled();
   });
 
   it('continues dragging after app camera-change state is reconciled', () => {

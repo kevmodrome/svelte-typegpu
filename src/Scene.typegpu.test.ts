@@ -61,7 +61,7 @@ describe('TypeGPU demo scene authoring API', () => {
       camera: {
         ...DEFAULT_SCENE_CONTROLS.camera,
         position: [9, 7, 13],
-        lookAt: [0.5, 0.25, -0.5]
+        target: [0.5, 0.25, -0.5]
       }
     };
 
@@ -72,9 +72,11 @@ describe('TypeGPU demo scene authoring API', () => {
 
     const scene = onlyElement(root, 'scene');
     const camera = onlyNamed(scene, 'perspectiveCamera');
-    const orbit = onlyNamed(camera, 'orbitControls');
-    const pointer = onlyNamed(orbit, 'pointerControls');
-    const keyboard = onlyNamed(orbit, 'keyboardControls');
+    const pose = onlyNamed(camera, 'cameraPose');
+    const lens = onlyNamed(camera, 'cameraLens');
+    const cameraControls = onlyNamed(camera, 'controls');
+    const pointer = onlyNamed(cameraControls, 'pointerControls');
+    const keyboard = onlyNamed(cameraControls, 'keyboardControls');
     const ambientLight = onlyNamed(scene, 'ambientLight');
     const hemisphereLight = onlyNamed(scene, 'hemisphereLight');
     const directionalLight = onlyNamed(scene, 'directionalLight');
@@ -90,14 +92,18 @@ describe('TypeGPU demo scene authoring API', () => {
       animationSpeed: 1.25,
       colorShift: 120
     });
-    expect(camera.attributes).toMatchObject({
+    expect(camera.attributes).toEqual({});
+    expect(pose.attributes).toMatchObject({
       position: controls.camera.position,
-      lookAt: controls.camera.lookAt,
+      target: controls.camera.target
+    });
+    expect(lens.attributes).toMatchObject({
       fov: controls.camera.fov,
       near: controls.camera.near,
       far: controls.camera.far
     });
-    expect(orbit.attributes).toMatchObject({
+    expect(cameraControls.attributes).toMatchObject({
+      mode: 'fly',
       minDistance: 1,
       maxDistance: 100
     });
@@ -108,7 +114,15 @@ describe('TypeGPU demo scene authoring API', () => {
       rotateUp: 'ArrowUp',
       rotateDown: 'ArrowDown',
       zoomIn: '+',
-      zoomOut: '-'
+      zoomOut: '-',
+      moveForward: 'KeyW',
+      moveBackward: 'KeyS',
+      moveLeft: 'KeyA',
+      moveRight: 'KeyD',
+      moveUp: 'Space',
+      moveDown: 'KeyC',
+      moveStep: 0.35,
+      smooth: true
     });
 
     expect(ambientLight.attributes).toMatchObject({ intensity: 0.18 });
@@ -168,7 +182,7 @@ describe('TypeGPU demo scene authoring API', () => {
     const cameraChange: CameraChangeDetail = {
       camera: {
         position: [2, 3, 4],
-        lookAt: [0, 0, 0],
+        target: [0, 0, 0],
         fov: 50,
         near: 0.2,
         far: 400
@@ -179,7 +193,7 @@ describe('TypeGPU demo scene authoring API', () => {
         pitch: 0.1
       }
     };
-    dispatchNodeEvent(camera, 'camerachange', { detail: cameraChange });
+    dispatchNodeEvent(cameraControls, 'camerachange', { detail: cameraChange });
 
     expect(onShapeClick).toHaveBeenCalledTimes(2);
     expect(onCameraChange).toHaveBeenCalledWith(cameraChange);

@@ -44,7 +44,7 @@ const DEGREES_TO_RADIANS = Math.PI / 180;
 const MAX_DEVICE_PIXEL_RATIO = 1.5;
 const DEFAULT_TYPEGPU_CAMERA: TypeGpuCameraSettings = {
   position: [9, 7, 13],
-  lookAt: [0, 0, 0],
+  target: [0, 0, 0],
   fov: 45,
   near: 0.1,
   far: 100
@@ -172,6 +172,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.setScene({
       camera: DEFAULT_TYPEGPU_CAMERA,
       cameraNode: null,
+      cameraControllerNode: null,
       cameraController: null,
       scale: 1,
       animationSpeed: 1,

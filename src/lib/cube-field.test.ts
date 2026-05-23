@@ -32,14 +32,14 @@ describe('cube field', () => {
   it('moves the camera back for multi-cube stress tests', () => {
     expect(sceneCameraForCount(1)).toEqual({
       position: [0, 1.4, 5],
-      lookAt: [0, 0, 0],
+      target: [0, 0, 0],
       floorSize: 6,
       cubeSize: 1.5
     });
 
     expect(sceneCameraForCount(10_000)).toEqual({
       position: [9, 7, 13],
-      lookAt: [0, 0, 0],
+      target: [0, 0, 0],
       floorSize: 18,
       cubeSize: 0.24
     });
