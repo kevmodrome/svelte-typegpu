@@ -254,6 +254,29 @@ describe('TypeGPU renderer core', () => {
     expect(sceneState.cameraController).toEqual(state.controller);
   });
 
+  it('uses direct orthographic camera state for runtime scene state', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const camera = createElement('orthographicCamera');
+
+    setAttribute(camera, 'position', [3, 4, 5]);
+    setAttribute(camera, 'target', [0, 1, 0]);
+    setAttribute(camera, 'zoom', 2.5);
+    setAttribute(camera, 'near', 0.2);
+    setAttribute(camera, 'far', 300);
+    insert(scene, camera, null);
+    insert(root, scene, null);
+
+    expect(createSceneState(root).camera).toEqual({
+      projection: 'orthographic',
+      position: [3, 4, 5],
+      target: [0, 1, 0],
+      zoom: 2.5,
+      near: 0.2,
+      far: 300
+    });
+  });
+
   it('falls back and clamps invalid camera-control options', () => {
     const root = createFragment();
     const scene = createElement('scene');

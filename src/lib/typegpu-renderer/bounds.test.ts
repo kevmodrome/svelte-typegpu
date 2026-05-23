@@ -30,6 +30,31 @@ describe('TypeGPU bounds math', () => {
     ).toEqual({ min: [3, -1, -1], max: [7, 1, 1] });
   });
 
+  it('transforms bounds with rotation', () => {
+    const transformed = transformBounds(boxBounds([2, 4, 2]), {
+      position: [0, 0, 0],
+      rotation: [0, 0, Math.PI / 2],
+      scale: [1, 1, 1]
+    });
+
+    expect(transformed.min[0]).toBeCloseTo(-2);
+    expect(transformed.min[1]).toBeCloseTo(-1);
+    expect(transformed.min[2]).toBeCloseTo(-1);
+    expect(transformed.max[0]).toBeCloseTo(2);
+    expect(transformed.max[1]).toBeCloseTo(1);
+    expect(transformed.max[2]).toBeCloseTo(1);
+  });
+
+  it('transforms bounds with negative scale', () => {
+    expect(
+      transformBounds(boxBounds([2, 4, 6]), {
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+        scale: [-2, 1, -0.5]
+      })
+    ).toEqual({ min: [-2, -2, -1.5], max: [2, 2, 1.5] });
+  });
+
   it('returns nearest positive ray intersection distance and point', () => {
     const hit = rayIntersectsBounds(
       { origin: [0, 0, 5], direction: [0, 0, -1] },

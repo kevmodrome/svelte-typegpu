@@ -179,7 +179,7 @@ export function multiply4(left: Float32Array, right: Float32Array): Float32Array
   return out;
 }
 
-export function invert4(matrix: Float32Array): Float32Array {
+export function invert4(matrix: Float32Array): Float32Array | null {
   const out = new Float32Array(16);
   const m = matrix;
   const b00 = m[0] * m[5] - m[1] * m[4];
@@ -197,7 +197,7 @@ export function invert4(matrix: Float32Array): Float32Array {
   const det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
 
   if (Math.abs(det) <= 1e-12) {
-    return out;
+    return null;
   }
 
   const invDet = 1 / det;

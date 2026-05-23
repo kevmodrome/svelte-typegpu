@@ -14,25 +14,40 @@ export type TypeGpuMaterialKind = 'standard';
 export type TypeGpuLightKind = 'ambient' | 'hemisphere' | 'directional' | 'point' | 'spot';
 export type TypeGpuInstanceId = number | string;
 
+export interface TypeGpuPerspectiveCameraSettings {
+  projection: 'perspective';
+  position: Vector3Tuple;
+  target: Vector3Tuple;
+  fov: number;
+  zoom?: never;
+  near: number;
+  far: number;
+}
+
+export interface TypeGpuOrthographicCameraSettings {
+  projection: 'orthographic';
+  position: Vector3Tuple;
+  target: Vector3Tuple;
+  fov?: never;
+  zoom: number;
+  near: number;
+  far: number;
+}
+
+export type TypeGpuNormalizedCameraSettings =
+  | TypeGpuPerspectiveCameraSettings
+  | TypeGpuOrthographicCameraSettings;
+
+export type TypeGpuLegacyPerspectiveCameraSettings = Omit<
+  TypeGpuPerspectiveCameraSettings,
+  'projection'
+> & {
+  projection?: 'perspective';
+};
+
 export type TypeGpuCameraSettings =
-  | {
-      projection?: 'perspective';
-      position: Vector3Tuple;
-      target: Vector3Tuple;
-      fov: number;
-      zoom?: never;
-      near: number;
-      far: number;
-    }
-  | {
-      projection: 'orthographic';
-      position: Vector3Tuple;
-      target: Vector3Tuple;
-      fov?: never;
-      zoom: number;
-      near: number;
-      far: number;
-    };
+  | TypeGpuLegacyPerspectiveCameraSettings
+  | TypeGpuNormalizedCameraSettings;
 
 export type TypeGpuPointerDragButton = 'primary' | 'middle' | 'secondary';
 export type TypeGpuPointerWheelMode = 'zoom' | 'none';
@@ -94,7 +109,7 @@ export type TypeGpuCameraController = TypeGpuControlsController | TypeGpuOrbitCa
 
 export interface TypeGpuCameraState {
   node: TypeGpuNode | null;
-  settings: TypeGpuCameraSettings;
+  settings: TypeGpuNormalizedCameraSettings;
   controllerNode: TypeGpuNode | null;
   controller: TypeGpuCameraController | null;
 }

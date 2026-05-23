@@ -10,6 +10,7 @@ export function boxBounds(size: Vector3Tuple): TypeGpuBounds {
   return centeredBounds(size);
 }
 
+// Planes use the existing primitive size tuple: [width, depth, unused].
 export function planeBounds(size: Vector3Tuple): TypeGpuBounds {
   return {
     min: [-size[0] / 2, 0, -size[1] / 2],

@@ -1,4 +1,5 @@
 import { clampedNumberArg, numberArg, vectorTuple } from './attributes';
+import { readPerspectiveCameraState } from './components/perspective-camera';
 import { findFirst, type TypeGpuNode } from './core';
 import {
   add3,
@@ -17,12 +18,13 @@ import type {
   TypeGpuCameraController,
   TypeGpuCameraSettings,
   TypeGpuCameraState,
+  TypeGpuNormalizedCameraSettings,
   TypeGpuOrbitCameraController,
   TypeGpuRay,
   Vector3Tuple
 } from './types';
 
-export const DEFAULT_CAMERA: TypeGpuCameraSettings = {
+export const DEFAULT_CAMERA: TypeGpuNormalizedCameraSettings = {
   projection: 'perspective',
   position: [9, 7, 13],
   target: [0, 0, 0],
@@ -36,13 +38,17 @@ const DEFAULT_MAX_DISTANCE = 100;
 
 export function readCameraState(root: TypeGpuNode): TypeGpuCameraState {
   const camera = findActiveCamera(root);
-  const controllerNode = findFirst(root, (node) => node.name === 'orbitControls');
+  const orbitControllerNode = findFirst(root, (node) => node.name === 'orbitControls');
+  const legacyState = camera?.name === 'perspectiveCamera' ? readPerspectiveCameraState(root) : null;
+  const controllerNode = orbitControllerNode ?? legacyState?.controllerNode ?? null;
 
   return {
     node: camera,
     settings: camera ? readCameraSettings(camera) : DEFAULT_CAMERA,
     controllerNode,
-    controller: controllerNode ? readOrbitController(controllerNode) : null
+    controller: orbitControllerNode
+      ? readOrbitController(orbitControllerNode)
+      : legacyState?.controller ?? null
   };
 }
 
@@ -50,11 +56,22 @@ export function createViewProjectionMatrix(
   aspect: number,
   camera: TypeGpuCameraSettings = DEFAULT_CAMERA
 ): Float32Array {
-  const view = lookAtMatrix(camera.position, camera.target, [0, 1, 0]);
+  const normalizedCamera = normalizeCameraSettings(camera);
+  const view = lookAtMatrix(normalizedCamera.position, normalizedCamera.target, [0, 1, 0]);
   const projection =
-    camera.projection === 'orthographic'
-      ? createOrthographicProjection(aspect, camera.zoom, camera.near, camera.far)
-      : perspectiveMatrix((camera.fov * Math.PI) / 180, aspect, camera.near, camera.far);
+    normalizedCamera.projection === 'orthographic'
+      ? createOrthographicProjection(
+          aspect,
+          normalizedCamera.zoom,
+          normalizedCamera.near,
+          normalizedCamera.far
+        )
+      : perspectiveMatrix(
+          (normalizedCamera.fov * Math.PI) / 180,
+          aspect,
+          normalizedCamera.near,
+          normalizedCamera.far
+        );
 
   return multiply4(projection, view);
 }
@@ -65,24 +82,32 @@ export function cameraRayFromViewport(input: {
   viewport: { width: number; height: number };
   camera: TypeGpuCameraSettings;
 }): TypeGpuRay {
+  if (!isFinitePositive(input.viewport.width) || !isFinitePositive(input.viewport.height)) {
+    throw new Error('Viewport dimensions must be finite positive numbers');
+  }
+
+  const camera = normalizeCameraSettings(input.camera);
   const ndcX = (input.x / input.viewport.width) * 2 - 1;
   const ndcY = 1 - (input.y / input.viewport.height) * 2;
 
-  if (input.camera.projection === 'orthographic') {
+  if (camera.projection === 'orthographic') {
     const inverseViewProjection = invert4(
-      createViewProjectionMatrix(input.viewport.width / input.viewport.height, input.camera)
+      createViewProjectionMatrix(input.viewport.width / input.viewport.height, camera)
     );
+    if (!inverseViewProjection) {
+      throw new Error('Camera view-projection matrix is not invertible');
+    }
     const origin = transformPoint4(inverseViewProjection, [ndcX, ndcY, -1]);
-    const direction = normalize3(subtract3(input.camera.target, input.camera.position), [0, 0, -1]);
+    const direction = normalize3(subtract3(camera.target, camera.position), [0, 0, -1]);
 
     return { origin, direction };
   }
 
-  const forward = normalize3(subtract3(input.camera.target, input.camera.position), [0, 0, -1]);
+  const forward = normalize3(subtract3(camera.target, camera.position), [0, 0, -1]);
   const right = normalize3(cross3(forward, [0, 1, 0]), [1, 0, 0]);
   const up = normalize3(cross3(right, forward), [0, 1, 0]);
   const aspect = input.viewport.width / input.viewport.height;
-  const halfHeight = Math.tan((input.camera.fov * Math.PI) / 360);
+  const halfHeight = Math.tan((camera.fov * Math.PI) / 360);
   const halfWidth = halfHeight * aspect;
   const direction = normalize3(
     add3(add3(forward, scale3(right, ndcX * halfWidth)), scale3(up, ndcY * halfHeight)),
@@ -90,8 +115,35 @@ export function cameraRayFromViewport(input: {
   );
 
   return {
-    origin: [...input.camera.position],
+    origin: [...camera.position],
     direction
+  };
+}
+
+export function normalizeCameraSettings(
+  camera: TypeGpuCameraSettings = DEFAULT_CAMERA
+): TypeGpuNormalizedCameraSettings {
+  const near = isFinitePositive(camera.near) ? camera.near : DEFAULT_CAMERA.near;
+  const far = Number.isFinite(camera.far) && camera.far > near ? camera.far : DEFAULT_CAMERA.far;
+
+  if (camera.projection === 'orthographic') {
+    return {
+      projection: 'orthographic',
+      position: vectorTuple(camera.position, DEFAULT_CAMERA.position),
+      target: vectorTuple(camera.target, DEFAULT_CAMERA.target),
+      zoom: isFinitePositive(camera.zoom) ? camera.zoom : 1,
+      near,
+      far
+    };
+  }
+
+  return {
+    projection: 'perspective',
+    position: vectorTuple(camera.position, DEFAULT_CAMERA.position),
+    target: vectorTuple(camera.target, DEFAULT_CAMERA.target),
+    fov: Number.isFinite(camera.fov) && camera.fov > 0 && camera.fov < 180 ? camera.fov : 45,
+    near,
+    far
   };
 }
 
@@ -111,26 +163,33 @@ function findActiveCamera(root: TypeGpuNode): TypeGpuNode | null {
   return activeCamera ?? firstCamera;
 }
 
-function readCameraSettings(node: TypeGpuNode): TypeGpuCameraSettings {
+function readCameraSettings(node: TypeGpuNode): TypeGpuNormalizedCameraSettings {
   if (node.name === 'orthographicCamera') {
-    return {
+    return normalizeCameraSettings({
       projection: 'orthographic',
       position: vectorTuple(node.attributes.position, DEFAULT_CAMERA.position),
       target: vectorTuple(node.attributes.target, DEFAULT_CAMERA.target),
-      zoom: clampedNumberArg(node.attributes.zoom, 1, 0.0001, Number.MAX_SAFE_INTEGER),
+      zoom: numberArg(node.attributes.zoom, 1),
       near: numberArg(node.attributes.near, DEFAULT_CAMERA.near),
       far: numberArg(node.attributes.far, DEFAULT_CAMERA.far)
-    };
+    });
   }
 
-  return {
+  const pose = firstChildNamed(node, 'cameraPose');
+  const lens = firstChildNamed(node, 'cameraLens');
+  const poseAttributes = pose?.attributes ?? node.attributes;
+  const lensAttributes = lens?.attributes ?? node.attributes;
+  const position = vectorTuple(poseAttributes.position, DEFAULT_CAMERA.position);
+  const target = vectorTuple(poseAttributes.target, DEFAULT_CAMERA.target);
+
+  return normalizeCameraSettings({
     projection: 'perspective',
-    position: vectorTuple(node.attributes.position, DEFAULT_CAMERA.position),
-    target: vectorTuple(node.attributes.target, DEFAULT_CAMERA.target),
-    fov: clampedNumberArg(node.attributes.fov, 45, 0.0001, 179.999),
-    near: numberArg(node.attributes.near, DEFAULT_CAMERA.near),
-    far: numberArg(node.attributes.far, DEFAULT_CAMERA.far)
-  };
+    position,
+    target,
+    fov: numberArg(lensAttributes.fov, 45),
+    near: numberArg(lensAttributes.near, DEFAULT_CAMERA.near),
+    far: numberArg(lensAttributes.far, DEFAULT_CAMERA.far)
+  });
 }
 
 function readOrbitController(node: TypeGpuNode): TypeGpuCameraController {
@@ -181,6 +240,18 @@ function walk(node: TypeGpuNode, visit: (node: TypeGpuNode) => void): void {
   for (let child = node.firstChild; child; child = child.nextSibling) {
     walk(child, visit);
   }
+}
+
+function firstChildNamed(node: TypeGpuNode, name: string): TypeGpuNode | null {
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    if (child.name === name) return child;
+  }
+
+  return null;
+}
+
+function isFinitePositive(value: number): boolean {
+  return Number.isFinite(value) && value > 0;
 }
 
 function stringOrNull(value: unknown): string | null {
