@@ -7,6 +7,7 @@ import type {
   TypeGpuDrawBatch,
   TypeGpuGeometryData,
   TypeGpuGeometryKind,
+  TypeGpuProceduralGeometryKind,
   TypeGpuInstanceDirtyRange,
   TypeGpuMaterialKind,
   TypeGpuMeshDrawItem
@@ -26,7 +27,7 @@ export interface TypeGpuDrawBatchCache {
 }
 
 export function createDrawBatchCache(): TypeGpuDrawBatchCache {
-  const geometries: Record<TypeGpuGeometryKind, TypeGpuGeometryData> = {
+  const geometries: Record<TypeGpuProceduralGeometryKind, TypeGpuGeometryData> = {
     box: createBoxGeometryData(),
     sphere: createSphereGeometryData()
   };
@@ -42,7 +43,7 @@ export function createDrawBatchCache(): TypeGpuDrawBatchCache {
         const material = items[0].material;
         const batch = readDrawBatch(
           key,
-          geometries[geometryKind],
+          geometryKind === 'imported' ? items[0].geometry.data : geometries[geometryKind],
           material,
           items,
           previousBatches.get(key)

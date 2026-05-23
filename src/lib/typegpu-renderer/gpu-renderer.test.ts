@@ -112,7 +112,7 @@ describe('TypeGPU GPU renderer', () => {
     image.close();
 
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:checker');
-    expect(createdImage?.src).toBe('');
+    expect((createdImage as FakeImage | null)?.src).toBe('');
   });
 
   it('uses TypeGPU pipeline binding for material draws', () => {

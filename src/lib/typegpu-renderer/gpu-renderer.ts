@@ -69,9 +69,17 @@ type TypeGpuLightingUniformBuffer = TgpuBuffer<typeof typegpuLightingSchema> & U
 type TypeGpuMaterialTexture = TgpuTexture & SampledFlag;
 type TypeGpuDepthTexture = TgpuTexture & RenderFlag;
 type TypeGpuMeshPipeline = ReturnType<typeof createMeshPipeline>;
+type TypeGpuExternalImageSource =
+  | HTMLCanvasElement
+  | HTMLImageElement
+  | HTMLVideoElement
+  | ImageBitmap
+  | ImageData
+  | OffscreenCanvas
+  | VideoFrame;
 
 export interface LoadedTextureImage {
-  source: ExternalImageSource | Uint8ClampedArray;
+  source: TypeGpuExternalImageSource | Uint8ClampedArray;
   width: number;
   height: number;
   close(): void;
@@ -288,7 +296,10 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
         key,
         status: 'loading'
       });
-      void this.#loadMaterialTexture(key, batch.material.map?.src ?? null);
+      void this.#loadMaterialTexture(
+        key,
+        batch.material.map?.kind === 'url' ? batch.material.map.src : null
+      );
     }
 
     return this.#fallbackMaterial;
@@ -580,8 +591,10 @@ function loadHtmlTextureImage(blob: Blob): Promise<LoadedTextureImage> {
 }
 
 function writeLoadedTexture(texture: TypeGpuMaterialTexture, image: LoadedTextureImage): void {
-  if (ArrayBuffer.isView(image.source)) {
-    texture.write(image.source);
+  if (image.source instanceof Uint8ClampedArray) {
+    texture.write(
+      new Uint8Array(image.source.buffer, image.source.byteOffset, image.source.byteLength)
+    );
     return;
   }
 
@@ -595,7 +608,10 @@ function rasterizeImage(image: CanvasImageSource, width: number, height: number)
       : document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  const context = canvas.getContext('2d');
+  const context = canvas.getContext('2d') as
+    | CanvasRenderingContext2D
+    | OffscreenCanvasRenderingContext2D
+    | null;
 
   if (!context) {
     throw new Error('Unable to rasterize material texture.');

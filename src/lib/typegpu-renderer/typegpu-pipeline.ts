@@ -1,4 +1,4 @@
-import tgpu, { d, type TgpuRenderPipeline, type TgpuRoot } from 'typegpu';
+import tgpu, { d, type TgpuRoot } from 'typegpu';
 import { DEPTH_FORMAT } from './render-constants';
 import {
   lightingBindGroupLayout,
@@ -266,7 +266,7 @@ export const meshFragmentMain = tgpu
   })
   .$name('meshFragmentMain');
 
-export function createMeshPipeline(root: TgpuRoot, format: GPUTextureFormat): TgpuRenderPipeline<d.v4f> {
+export function createMeshPipeline(root: TgpuRoot, format: GPUTextureFormat) {
   return root
     .createRenderPipeline({
       attribs: {

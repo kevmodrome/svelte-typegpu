@@ -194,8 +194,10 @@ function fakeFrameScheduler(): {
       return callbacks.size;
     },
     runFrame(time = 100) {
-      const [handle, callback] = callbacks.entries().next().value ?? [];
-      if (!callback) return;
+      const next = callbacks.entries().next().value;
+      if (!next) return;
+
+      const [handle, callback] = next;
 
       callbacks.delete(handle);
       callback(time);
