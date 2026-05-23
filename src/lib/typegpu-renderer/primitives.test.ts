@@ -29,10 +29,17 @@ describe('TypeGPU primitive descriptors', () => {
   });
 
   it('marks scene render settings without forcing mesh rebuilds', () => {
-    const dirty = dirtyForAttribute('scene', 'clearColor', undefined, [0, 0, 0, 1]);
-
-    expectExactDirty(dirty, Dirty.RenderSettings);
-    expect(hasDirty(dirty, Dirty.RenderSettings)).toBe(true);
+    expectExactDirty(
+      dirtyForAttribute('scene', 'clearColor', undefined, [0, 0, 0, 1]),
+      Dirty.RenderSettings
+    );
+    expectExactDirty(dirtyForAttribute('scene', 'scale', 1, 1.5), Dirty.RenderSettings);
+    expectExactDirty(
+      dirtyForAttribute('scene', 'animationSpeed', 1, 0.5),
+      Dirty.RenderSettings
+    );
+    expectExactDirty(dirtyForAttribute('scene', 'colorShift', 0, 47), Dirty.RenderSettings);
+    const dirty = dirtyForAttribute('scene', 'scale', 1, 1.5);
     expect(hasDirty(dirty, Dirty.DrawBatches)).toBe(false);
   });
 

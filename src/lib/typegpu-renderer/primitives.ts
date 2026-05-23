@@ -125,7 +125,7 @@ export function dirtyForAttribute(
 
   if (name === 'scene') {
     if (sceneAttributes.has(attribute)) return Dirty.RenderSettings;
-    if (sceneUniformAttributes.has(attribute)) return Dirty.InstanceData;
+    if (sceneUniformAttributes.has(attribute)) return Dirty.RenderSettings;
     return Dirty.None;
   }
 

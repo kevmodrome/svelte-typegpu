@@ -1115,9 +1115,8 @@ describe('TypeGPU renderer core', () => {
     expect(scheduleSync).toHaveBeenLastCalledWith(
       root,
       controls,
-      Dirty.Tree | Dirty.Camera
+      Dirty.Tree | Dirty.Camera | Dirty.DrawBatches | Dirty.Interaction
     );
-    expect(invalidatesDrawBatches(root, controls, syncedTreeRevision)).toBe(true);
     expect(invalidatesLights(root, controls, syncedTreeRevision)).toBe(false);
   });
 
@@ -1134,7 +1133,7 @@ describe('TypeGPU renderer core', () => {
 
     setAttribute(scene, 'scale', 1.5);
 
-    expect(scheduleSync).toHaveBeenLastCalledWith(root, scene, Dirty.InstanceData);
+    expect(scheduleSync).toHaveBeenLastCalledWith(root, scene, Dirty.RenderSettings);
   });
 
   it('passes updated light nodes to runtime sync scheduling', () => {
@@ -1283,6 +1282,79 @@ describe('TypeGPU renderer core', () => {
     expect(readDrawBatches).not.toHaveBeenCalled();
     expect(secondState.drawBatches).toBe(cache.cleanDrawBatches);
     expect(secondState.drawBatches[0].instances).toBe(firstState.drawBatches[0].instances);
+  });
+
+  it('recomputes draw batches when inserting wrapper subtrees with drawable descendants', () => {
+    const cache = createTypeGpuSceneCache();
+    const root = createFragment();
+    const scene = createElement('scene');
+    const existingMesh = createElement('mesh');
+    const existingGeometry = createElement('boxGeometry');
+    const existingMaterial = createElement('standardMaterial');
+    const controls = createElement('controls');
+    const wrappedMesh = createElement('mesh');
+    const wrappedGeometry = createElement('boxGeometry');
+    const wrappedMaterial = createElement('standardMaterial');
+    const scheduleSync = vi.fn();
+
+    insert(existingMesh, existingGeometry, null);
+    insert(existingMesh, existingMaterial, null);
+    insert(scene, existingMesh, null);
+    insert(root, scene, null);
+
+    createSceneState(root, cache);
+    const readDrawBatches = vi.spyOn(cache.drawBatchCache, 'read');
+    root.runtime = { scheduleSync };
+
+    insert(wrappedMesh, wrappedGeometry, null);
+    insert(wrappedMesh, wrappedMaterial, null);
+    insert(controls, wrappedMesh, null);
+    insert(scene, controls, null);
+
+    const [, dirtyNode, dirtyMask = Dirty.None] = scheduleSync.mock.lastCall ?? [];
+    const state = createSceneState(root, cache, { dirty: dirtyMask });
+
+    expect(dirtyNode).toBe(controls);
+    expect(hasDirty(dirtyMask, Dirty.DrawBatches)).toBe(true);
+    expect(readDrawBatches).toHaveBeenCalledOnce();
+    expect(state.drawBatches[0].instanceCount).toBe(2);
+  });
+
+  it('recomputes draw batches when removing wrapper subtrees with drawable descendants', () => {
+    const cache = createTypeGpuSceneCache();
+    const root = createFragment();
+    const scene = createElement('scene');
+    const existingMesh = createElement('mesh');
+    const existingGeometry = createElement('boxGeometry');
+    const existingMaterial = createElement('standardMaterial');
+    const wrapper = createElement('unknown-wrapper');
+    const wrappedMesh = createElement('mesh');
+    const wrappedGeometry = createElement('boxGeometry');
+    const wrappedMaterial = createElement('standardMaterial');
+    const scheduleSync = vi.fn();
+
+    insert(existingMesh, existingGeometry, null);
+    insert(existingMesh, existingMaterial, null);
+    insert(wrappedMesh, wrappedGeometry, null);
+    insert(wrappedMesh, wrappedMaterial, null);
+    insert(wrapper, wrappedMesh, null);
+    insert(scene, existingMesh, null);
+    insert(scene, wrapper, null);
+    insert(root, scene, null);
+
+    createSceneState(root, cache);
+    const readDrawBatches = vi.spyOn(cache.drawBatchCache, 'read');
+    root.runtime = { scheduleSync };
+
+    remove(wrapper);
+
+    const [, dirtyNode, dirtyMask = Dirty.None] = scheduleSync.mock.lastCall ?? [];
+    const state = createSceneState(root, cache, { dirty: dirtyMask });
+
+    expect(dirtyNode).toBe(wrapper);
+    expect(hasDirty(dirtyMask, Dirty.DrawBatches)).toBe(true);
+    expect(readDrawBatches).toHaveBeenCalledOnce();
+    expect(state.drawBatches[0].instanceCount).toBe(1);
   });
 
   it('re-packs only changed mesh nodes when the mesh structure is stable', () => {

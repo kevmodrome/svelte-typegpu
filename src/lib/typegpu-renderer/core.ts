@@ -1,4 +1,4 @@
-import { Dirty } from './dirty';
+import { Dirty, mergeDirty } from './dirty';
 import {
   dirtyForAttribute,
   dirtyForEventListener,
@@ -126,7 +126,7 @@ export function insert(parent: TypeGpuNode, node: TypeGpuNode, anchor: TypeGpuNo
   }
 
   const root = markTreeChanged(parent);
-  invalidateRoot(root, node, dirtyForInsert(node.name));
+  invalidateRoot(root, node, dirtyForStructuralSubtree(node, dirtyForInsert));
 }
 
 export function remove(node: TypeGpuNode): void {
@@ -135,7 +135,7 @@ export function remove(node: TypeGpuNode): void {
   const parent = node.parent;
   const previous = node.previousSibling;
   const next = node.nextSibling;
-  const dirtyMask = dirtyForRemove(node.name);
+  const dirtyMask = dirtyForStructuralSubtree(node, dirtyForRemove);
 
   if (previous) {
     previous.nextSibling = next;
@@ -279,6 +279,19 @@ function invalidateRoot(root: TypeGpuNode, dirtyNode: TypeGpuNode, dirtyMask: Di
   if (dirtyMask === Dirty.None) return;
 
   root.runtime?.scheduleSync(root, dirtyNode, dirtyMask);
+}
+
+function dirtyForStructuralSubtree(
+  node: TypeGpuNode,
+  dirtyForNode: (nodeName: string | undefined) => Dirty
+): Dirty {
+  let dirty = dirtyForNode(node.name);
+
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    dirty = mergeDirty(dirty, dirtyForStructuralSubtree(child, dirtyForNode));
+  }
+
+  return dirty;
 }
 
 function findRoot(node: TypeGpuNode): TypeGpuNode {
