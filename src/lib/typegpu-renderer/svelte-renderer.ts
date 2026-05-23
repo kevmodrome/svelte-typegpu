@@ -1,6 +1,10 @@
 import { createRenderer } from 'svelte/renderer';
 import { createCameraInteractionController } from './camera-interaction';
-import { createTypeGpuRenderer, type TypeGpuRenderer } from './gpu-renderer';
+import {
+  createTypeGpuRenderer,
+  type TypeGpuRenderer,
+  type TypeGpuRendererOptions
+} from './gpu-renderer';
 import {
   addEventListener,
   createComment,
@@ -28,7 +32,11 @@ import { createSceneState, createTypeGpuSceneCache } from './scene-state';
 import { createModelCache, type TypeGpuModelCacheOptions } from './model-cache';
 import type { TypeGpuInteractionHit, TypeGpuInteractionTarget, TypeGpuSceneState } from './types';
 
-export interface TypeGpuRootOptions {
+export interface TypeGpuRootOptions
+  extends Pick<
+    TypeGpuRendererOptions,
+    'frameloop' | 'maxDevicePixelRatio' | 'clearColor' | 'depth' | 'alphaMode'
+  > {
   target: HTMLElement;
   canvas?: HTMLCanvasElement;
   onFps?: (fps: number) => void;
@@ -81,12 +89,25 @@ export default renderer;
 export async function createTypeGpuRoot({
   target,
   canvas = document.createElement('canvas'),
-  onFps
+  onFps,
+  frameloop,
+  maxDevicePixelRatio,
+  clearColor,
+  depth,
+  alphaMode
 }: TypeGpuRootOptions): Promise<TypeGpuRoot> {
   canvas.className = 'renderer-root-canvas';
   if (!canvas.parentNode) target.append(canvas);
 
-  const gpu = await createTypeGpuRenderer({ canvas, onFps });
+  const gpu = await createTypeGpuRenderer({
+    canvas,
+    onFps,
+    frameloop,
+    maxDevicePixelRatio,
+    clearColor,
+    depth,
+    alphaMode
+  });
   const root = createFragment() as TypeGpuRoot;
   const runtime = createRuntime(root, canvas, gpu);
 

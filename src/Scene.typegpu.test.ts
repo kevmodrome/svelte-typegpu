@@ -4,11 +4,7 @@ import * as svelteClient from 'svelte/internal/client';
 import { describe, expect, it, vi } from 'vitest';
 import { createCubeField, sceneCameraForCount } from './lib/cube-field';
 import { demoColorForIndex } from './lib/demo-colors';
-import {
-  DEFAULT_SCENE_CONTROLS,
-  type CameraChangeDetail,
-  type SceneControls
-} from './lib/scene-controls';
+import { DEFAULT_SCENE_CONTROLS, type SceneControls } from './lib/scene-controls';
 import {
   createFragment,
   dispatchNodeEvent,
@@ -20,38 +16,26 @@ import renderer from './lib/typegpu-renderer/svelte-renderer';
 describe('TypeGPU demo scene authoring API', () => {
   const source = readFileSync('src/Scene.typegpu.svelte', 'utf8');
 
-  it('authors meshes directly instead of using compatibility shape components', () => {
+  it('authors the public demo around target primitives and reusable resources', () => {
     expect(source).not.toMatch(/from\s+['"].\/(?:Box|Sphere)\.typegpu\.svelte['"]/);
     expect(source).not.toMatch(/<\/?(?:Box|Sphere)\b/);
-    expect(source).toContain('<mesh');
-    expect(source).toContain('<boxGeometry');
-    expect(source).toContain('<sphereGeometry');
-    expect(source).toContain('<standardMaterial');
+    expect(source).toContain('<perspectiveCamera');
+    expect(source).toContain('<orbitControls');
+    expect(source).toContain('<resources>');
+    expect(source).toContain('<boxGeometry id="cube"');
+    expect(source).toContain('<texture id="checker"');
+    expect(source).toContain('<sampler id="repeatLinear"');
+    expect(source).toMatch(/<phongMaterial[\s\S]*id="fieldMaterial"/);
+    expect(source).toContain('<instancedMesh');
+    expect(source).not.toContain('<cameraPose');
+    expect(source).not.toContain('<controls');
+    expect(source).not.toContain('/models/column.glb');
   });
 
-  it('keeps demo hue changes out of per-instance material props', () => {
-    expect(source).toContain('colorShift={controls.hue}');
-    expect(source).toContain('demoColorForIndex(index, 0)');
-    expect(source).toContain('demoColorForIndex(index + 7, 28)');
-    expect(source).toContain('/textures/checker.svg');
-    expect(source).not.toContain('demoColorForIndex(index, controls.hue)');
-    expect(source).not.toContain('demoColorForIndex(index + 7, controls.hue + 28)');
-  });
-
-  it('authors broad light nodes in the demo scene', () => {
-    expect(source).toContain('<ambientLight');
-    expect(source).toContain('<hemisphereLight');
-    expect(source).toContain('<directionalLight');
-    expect(source).toContain('<pointLight');
-    expect(source).toContain('<spotLight');
-    expect(source).toContain('lookAt={[0, 0, 0]}');
-  });
-
-  it('renders the direct mesh API into TypeGPU scene nodes', () => {
+  it('renders resources, orbit controls, one instanced cube field, and clickable feature meshes', () => {
     const root = createFragment();
     const Scene = loadTypeGpuSceneComponent(source);
     const onShapeClick = vi.fn();
-    const onCameraChange = vi.fn();
     const controls: SceneControls = {
       ...DEFAULT_SCENE_CONTROLS,
       spinSpeed: 1.25,
@@ -68,138 +52,116 @@ describe('TypeGPU demo scene authoring API', () => {
 
     renderer.render(Scene, {
       target: root,
-      props: { controls, onShapeClick, onCameraChange }
+      props: { controls, onShapeClick }
     });
 
     const scene = onlyElement(root, 'scene');
     const camera = onlyNamed(scene, 'perspectiveCamera');
-    const pose = onlyNamed(camera, 'cameraPose');
-    const lens = onlyNamed(camera, 'cameraLens');
-    const cameraControls = onlyNamed(camera, 'controls');
-    const pointer = onlyNamed(cameraControls, 'pointerControls');
-    const keyboard = onlyNamed(cameraControls, 'keyboardControls');
-    const ambientLight = onlyNamed(scene, 'ambientLight');
-    const hemisphereLight = onlyNamed(scene, 'hemisphereLight');
-    const directionalLight = onlyNamed(scene, 'directionalLight');
-    const pointLight = onlyNamed(scene, 'pointLight');
-    const spotLight = onlyNamed(scene, 'spotLight');
+    const orbitControls = onlyNamed(scene, 'orbitControls');
+    const resources = onlyNamed(scene, 'resources');
+    const boxGeometry = onlyNamed(resources, 'boxGeometry');
+    const texture = onlyNamed(resources, 'texture');
+    const sampler = onlyNamed(resources, 'sampler');
+    const fieldMaterial = onlyNamed(resources, 'phongMaterial');
+    const featureMaterial = onlyNamed(resources, 'standardMaterial');
+    const instancedMesh = onlyNamed(scene, 'instancedMesh');
     const meshes = namedChildren(scene, 'mesh');
-    const boxMesh = meshes[0];
-    const laterBoxMesh = meshes[1];
-    const sphereMesh = meshes[5];
 
     expect(scene.attributes).toMatchObject({
       scale: 1.35,
       animationSpeed: 1.25,
-      colorShift: 120
+      colorShift: 120,
+      clearColor: [0.067, 0.078, 0.102, 1]
     });
-    expect(camera.attributes).toEqual({});
-    expect(pose.attributes).toMatchObject({
+    expect(camera.attributes).toMatchObject({
+      id: 'main',
+      active: true,
       position: controls.camera.position,
-      target: controls.camera.target
-    });
-    expect(lens.attributes).toMatchObject({
+      target: controls.camera.target,
       fov: controls.camera.fov,
       near: controls.camera.near,
       far: controls.camera.far
     });
-    expect(cameraControls.attributes).toMatchObject({
-      mode: 'fly',
+    expect(orbitControls.attributes).toMatchObject({
+      camera: 'main',
+      target: controls.camera.target,
       minDistance: 1,
-      maxDistance: 100
-    });
-    expect(pointer.attributes).toMatchObject({
+      maxDistance: 100,
       rotateSpeed: 1.75
     });
-    expect(keyboard.attributes).toMatchObject({
-      rotateLeft: 'ArrowLeft',
-      rotateRight: 'ArrowRight',
-      rotateUp: 'ArrowUp',
-      rotateDown: 'ArrowDown',
-      zoomIn: '+',
-      zoomOut: '-',
-      moveForward: 'KeyW',
-      moveBackward: 'KeyS',
-      moveLeft: 'KeyA',
-      moveRight: 'KeyD',
-      moveUp: 'Space',
-      moveDown: 'KeyC',
-      moveStep: 0.35,
-      smooth: true
-    });
-
-    expect(ambientLight.attributes).toMatchObject({ intensity: 0.18 });
-    expect(hemisphereLight.attributes).toMatchObject({ intensity: 0.38 });
-    expect(directionalLight.attributes).toMatchObject({ intensity: 1.45 });
-    expect(pointLight.attributes).toMatchObject({ intensity: 5.5, range: 16, decay: 2 });
-    expect(spotLight.attributes).toMatchObject({
-      lookAt: [0, 0, 0],
-      intensity: 7,
-      range: 22,
-      angle: 0.42,
-      penumbra: 0.35
-    });
-
-    expect(meshes).toHaveLength(10);
-    expect(boxMesh.attributes).toMatchObject({
-      role: 'button',
-      tabindex: '0',
-      'aria-label': 'Change box color',
-      spinSpeed: 0.35
-    });
-    expect(sphereMesh.attributes).toMatchObject({
-      role: 'button',
-      tabindex: '0',
-      'aria-label': 'Change sphere color',
-      spinSpeed: 0.55
-    });
-
-    const boxGeometry = onlyNamed(boxMesh, 'boxGeometry');
-    const boxMaterial = onlyNamed(boxMesh, 'standardMaterial');
-    const laterBoxMaterial = onlyNamed(laterBoxMesh, 'standardMaterial');
-    const sphereGeometry = onlyNamed(sphereMesh, 'sphereGeometry');
-    const sphereMaterial = onlyNamed(sphereMesh, 'standardMaterial');
 
     expect(boxGeometry.attributes).toMatchObject({
-      width: 0.432,
-      height: 0.132,
-      depth: 0.348
+      id: 'cube',
+      width: 1,
+      height: 1,
+      depth: 1
     });
-    expect(boxMaterial.attributes).toMatchObject({
-      map: '/textures/checker.svg',
-      roughness: 0.62,
-      metalness: 0.04
+    expect(texture.attributes).toMatchObject({
+      id: 'checker',
+      src: '/textures/checker.svg'
     });
-    expect(laterBoxMaterial.attributes.map).toBeUndefined();
-    expectNumberAttribute(sphereGeometry, 'radius', 0.138);
-    expectNumberAttribute(sphereGeometry, 'width', 0.276);
-    expectNumberAttribute(sphereGeometry, 'height', 0.276);
-    expectNumberAttribute(sphereGeometry, 'depth', 0.276);
-    expect(sphereMaterial.attributes).toMatchObject({
+    expect(sampler.attributes).toMatchObject({
+      id: 'repeatLinear',
+      addressModeU: 'repeat',
+      addressModeV: 'repeat'
+    });
+    expect(fieldMaterial.attributes).toMatchObject({
+      id: 'fieldMaterial',
+      map: 'checker',
+      sampler: 'repeatLinear'
+    });
+    expect(featureMaterial.attributes).toMatchObject({
+      id: 'featureMaterial',
       roughness: 0.18,
       metalness: 0.28
     });
 
-    dispatchNodeEvent(boxMesh, 'click');
-    dispatchNodeEvent(sphereMesh, 'keydown', { key: 'Enter' } as never);
-    const cameraChange: CameraChangeDetail = {
-      camera: {
-        position: [2, 3, 4],
-        target: [0, 0, 0],
-        fov: 50,
-        near: 0.2,
-        far: 400
-      },
-      orbit: {
-        radius: 6,
-        yaw: 0.25,
-        pitch: 0.1
-      }
-    };
-    dispatchNodeEvent(cameraControls, 'camerachange', { detail: cameraChange });
+    expect(instancedMesh.attributes).toMatchObject({
+      geometry: 'cube',
+      material: 'fieldMaterial',
+      phase: 0,
+      spinSpeed: 1.25
+    });
+    expect(instancedMesh.attributes.instances).toHaveLength(10);
+    expect(attributeFunction<(box: { id: number }, index: number) => number>(instancedMesh, 'getKey')(
+      { id: 4 },
+      4
+    )).toBe(4);
+    expect(
+      attributeFunction<
+        (box: { position: [number, number, number] }, index: number) => {
+          position: [number, number, number];
+          scale: [number, number, number];
+        }
+      >(instancedMesh, 'getTransform')({ position: [1, 2, 3] }, 0)
+    ).toMatchObject({
+      position: [1, 2, 3],
+      scale: [0.24, 0.24, 0.24]
+    });
+    expect(attributeFunction<(box: { id: number }, index: number) => unknown>(instancedMesh, 'getColor')(
+      { id: 0 },
+      0
+    )).toEqual(demoColorForIndex(0, 0));
+
+    expect(meshes).toHaveLength(2);
+    expect(meshes[0].attributes).toMatchObject({
+      role: 'button',
+      tabindex: '0',
+      'aria-label': 'Change featured cube color',
+      geometry: 'cube',
+      material: 'featureMaterial'
+    });
+    expect(meshes[1].attributes).toMatchObject({
+      role: 'button',
+      tabindex: '0',
+      'aria-label': 'Change featured sphere color'
+    });
+    expect(onlyNamed(meshes[1], 'sphereGeometry').attributes.radius).toBeCloseTo(0.45);
+
+    dispatchNodeEvent(meshes[0], 'click');
+    dispatchNodeEvent(meshes[1], 'keydown', { key: 'Enter' } as never);
 
     expect(onShapeClick).toHaveBeenCalledTimes(2);
-    expect(onCameraChange).toHaveBeenCalledWith(cameraChange);
   });
 });
 
@@ -232,8 +194,15 @@ function namedChildren(root: TypeGpuNode, name: string): TypeGpuNode[] {
   return matches;
 }
 
-function expectNumberAttribute(node: TypeGpuNode, name: string, expected: number): void {
-  expect(Number(node.attributes[name])).toBeCloseTo(expected);
+function attributeFunction<T extends (...args: any[]) => unknown>(
+  node: TypeGpuNode,
+  name: string
+): T {
+  const value = node.attributes[name];
+
+  expect(typeof value).toBe('function');
+
+  return value as T;
 }
 
 function loadTypeGpuSceneComponent(source: string) {

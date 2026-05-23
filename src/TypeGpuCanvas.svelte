@@ -29,7 +29,15 @@
     let root: TypeGpuRoot | null = null;
     let instance: { unmount(): void } | null = null;
 
-    createTypeGpuRoot({ target: host, onFps })
+    createTypeGpuRoot({
+      target: host,
+      onFps,
+      frameloop: 'always',
+      maxDevicePixelRatio: 1.5,
+      clearColor: [0.067, 0.078, 0.102, 1],
+      depth: true,
+      alphaMode: 'premultiplied'
+    })
       .then((nextRoot) => {
         if (cancelled) {
           nextRoot.dispose();
