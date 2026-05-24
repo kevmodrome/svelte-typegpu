@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { RgbaTuple, Vector3Tuple } from './lib/typegpu-renderer/types';
+  import type { RgbaTuple, Vector3Tuple } from 'svelte-typegpu';
 
   interface Props {
     ariaLabel: string;

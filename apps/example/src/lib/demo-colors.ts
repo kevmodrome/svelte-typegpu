@@ -1,4 +1,4 @@
-import type { RgbaTuple } from './typegpu-renderer/types';
+import type { RgbaTuple } from 'svelte-typegpu';
 
 export function demoColorForIndex(index: number, hue: number): RgbaTuple {
   const baseColor = hslToRgb(hue, 0.82, 0.62);

@@ -1,5 +1,5 @@
 import { clampCubeCount, createCubeField, type CubeInstance } from './cube-field';
-import type { Vector3Tuple } from './typegpu-renderer/types';
+import type { Vector3Tuple } from 'svelte-typegpu';
 
 export interface QuadrantCubeInstance extends CubeInstance {
   colorOffset: number;

@@ -8,7 +8,7 @@
   import { createCubeQuadrants, type QuadrantCubeInstance } from './lib/cube-quadrants';
   import { demoColorForIndex } from './lib/demo-colors';
   import type { CameraChangeDetail, SceneControls } from './lib/scene-controls';
-  import type { RgbaTuple, Vector3Tuple } from './lib/typegpu-renderer/types';
+  import type { RgbaTuple, Vector3Tuple } from 'svelte-typegpu';
 
   interface InstanceTransform {
     position: Vector3Tuple;

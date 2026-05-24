@@ -1,12 +1,11 @@
 <script lang="ts">
-  import type { RgbaTuple, Vector3Tuple } from './lib/typegpu-renderer/types';
+  import type { RgbaTuple, Vector3Tuple } from 'svelte-typegpu';
 
   interface Props {
     position: Vector3Tuple;
     phase?: number;
     color?: RgbaTuple;
     map?: string;
-    radius?: number;
     width?: number;
     height?: number;
     depth?: number;
@@ -19,10 +18,9 @@
     phase = 0,
     color = [1, 1, 1, 1],
     map = undefined,
-    radius = 0.5,
-    width = radius * 2,
-    height = radius * 2,
-    depth = radius * 2,
+    width = 1,
+    height = 1,
+    depth = 1,
     spinSpeed = 0,
     onclick = () => {}
   }: Props = $props();
@@ -37,13 +35,13 @@
 <mesh
   role="button"
   tabindex="0"
-  aria-label="Change sphere color"
+  aria-label="Change box color"
   {position}
   {phase}
   {spinSpeed}
   onclick={onclick}
   onkeydown={activateFromKeyboard}
 >
-  <sphereGeometry {radius} {width} {height} {depth}></sphereGeometry>
+  <boxGeometry {width} {height} {depth}></boxGeometry>
   <standardMaterial {color} {map}></standardMaterial>
 </mesh>

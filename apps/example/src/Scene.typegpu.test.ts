@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { compile } from 'svelte/compiler';
 import * as svelteClient from 'svelte/internal/client';
 import { describe, expect, it, vi } from 'vitest';
@@ -15,17 +16,20 @@ import {
   dispatchNodeEvent,
   walk,
   type TypeGpuNode
-} from './lib/typegpu-renderer/core';
-import renderer from './lib/typegpu-renderer/svelte-renderer';
-import type { Vector3Tuple } from './lib/typegpu-renderer/types';
+} from 'svelte-typegpu/testing';
+import renderer, { type Vector3Tuple } from 'svelte-typegpu';
+
+const typeGpuRendererPath = fileURLToPath(
+  new URL('../../../packages/svelte-typegpu/src/svelte-renderer.ts', import.meta.url)
+);
 
 describe('TypeGPU demo scene authoring API', () => {
-  const source = readFileSync('src/Scene.typegpu.svelte', 'utf8');
+  const source = readFileSync(new URL('./Scene.typegpu.svelte', import.meta.url), 'utf8');
 
   it('authors the public demo around named scene components and reusable resources', () => {
-    const quadrantSource = readFileSync('src/Quadrant.typegpu.svelte', 'utf8');
-    const cubeSource = readFileSync('src/Cube.typegpu.svelte', 'utf8');
-    const sphereSource = readFileSync('src/FeatureSphere.typegpu.svelte', 'utf8');
+    const quadrantSource = readFileSync(new URL('./Quadrant.typegpu.svelte', import.meta.url), 'utf8');
+    const cubeSource = readFileSync(new URL('./Cube.typegpu.svelte', import.meta.url), 'utf8');
+    const sphereSource = readFileSync(new URL('./FeatureSphere.typegpu.svelte', import.meta.url), 'utf8');
 
     expect(source).toContain("import Quadrant from './Quadrant.typegpu.svelte'");
     expect(source).toContain("import Cube from './Cube.typegpu.svelte'");
@@ -324,11 +328,17 @@ function attributeFunction<T extends (...args: any[]) => unknown>(
 }
 
 function loadTypeGpuSceneComponent(source: string, dependencies: Record<string, unknown> = {}) {
-  const Quadrant = loadTypeGpuComponent('src/Quadrant.typegpu.svelte');
-  const Cube = loadTypeGpuComponent('src/Cube.typegpu.svelte');
-  const FeatureSphere = loadTypeGpuComponent('src/FeatureSphere.typegpu.svelte');
+  const Quadrant = loadTypeGpuComponent(
+    fileURLToPath(new URL('./Quadrant.typegpu.svelte', import.meta.url))
+  );
+  const Cube = loadTypeGpuComponent(
+    fileURLToPath(new URL('./Cube.typegpu.svelte', import.meta.url))
+  );
+  const FeatureSphere = loadTypeGpuComponent(
+    fileURLToPath(new URL('./FeatureSphere.typegpu.svelte', import.meta.url))
+  );
 
-  return loadTypeGpuComponent('src/Scene.typegpu.svelte', source, {
+  return loadTypeGpuComponent(fileURLToPath(new URL('./Scene.typegpu.svelte', import.meta.url)), source, {
     Cube,
     FeatureSphere,
     Quadrant,
@@ -362,7 +372,7 @@ function loadTypeGpuComponent(
     generate: 'client',
     runes: true,
     experimental: {
-      customRenderer: '/src/lib/typegpu-renderer/svelte-renderer.ts'
+      customRenderer: typeGpuRendererPath
     }
   });
   const componentName = result.js.code.match(/export default function ([^(]+)/)?.[1];

@@ -2,10 +2,7 @@
   import { onMount } from 'svelte';
   import Scene from './Scene.typegpu.svelte';
   import type { CameraChangeDetail, SceneControls } from './lib/scene-controls';
-  import renderer, {
-    createTypeGpuRoot,
-    type TypeGpuRoot
-  } from './lib/typegpu-renderer/svelte-renderer';
+  import renderer, { createTypeGpuRoot, type TypeGpuRoot } from 'svelte-typegpu';
 
   interface Props {
     controls: SceneControls;

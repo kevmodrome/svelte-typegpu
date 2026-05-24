@@ -2,9 +2,9 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('app camera controls', () => {
-  const source = readFileSync('src/App.svelte', 'utf8');
-  const canvasSource = readFileSync('src/TypeGpuCanvas.svelte', 'utf8');
-  const styleSource = readFileSync('src/style.css', 'utf8');
+  const source = readFileSync(new URL('./App.svelte', import.meta.url), 'utf8');
+  const canvasSource = readFileSync(new URL('./TypeGpuCanvas.svelte', import.meta.url), 'utf8');
+  const styleSource = readFileSync(new URL('./style.css', import.meta.url), 'utf8');
 
   it('clamps camera position while sliders are moving', () => {
     const marker = 'bind:value={controls.camera.position[axis]}';
