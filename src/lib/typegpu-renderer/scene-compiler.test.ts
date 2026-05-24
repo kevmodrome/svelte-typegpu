@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { readModelDrawItems as readLegacyModelDrawItems } from './components/model';
 import { addEventListener, createElement, createFragment, insert, setAttribute } from './core';
 import { Dirty, hasDirty } from './dirty';
 import type { TypeGpuLoadedModel } from './glb-loader';
-import { createModelCache, type TypeGpuModelCache } from './model-cache';
+import { createModelCache } from './model-cache';
 import { createSceneState, createTypeGpuSceneCache } from './scene-compiler';
-import { IDENTITY_TRANSFORM } from './transform';
 
 describe('TypeGPU scene compiler', () => {
   it('compiles render settings, camera, lights, draw batches, interaction, and live keys', () => {
@@ -386,38 +384,6 @@ describe('TypeGPU scene compiler', () => {
     expect(state.drawBatches[0].material.kind).toBe('phong');
     expect(state.drawBatches[0].pipelineKey).toContain('material:phong');
     expect(state.drawBatches[0].materialKey).toContain('material:phong');
-  });
-
-  it('legacy model component draw items use current geometry and interaction shape', () => {
-    const model = createElement('model');
-    const loaded = loadedModelFixture('url:/models/legacy.glb');
-    const cache: TypeGpuModelCache = {
-      read: () => ({ status: 'ready', model: loaded, revision: 7 })
-    };
-
-    setAttribute(model, 'position', [2, 3, 4]);
-    setAttribute(model, 'color', [0.2, 0.3, 0.4, 0.5]);
-    setAttribute(model, 'renderOrder', 5);
-    setAttribute(model, 'hitTest', 'mesh');
-    setAttribute(model, 'pointerEvents', 'none');
-
-    const [item] = readLegacyModelDrawItems(
-      model,
-      { transform: IDENTITY_TRANSFORM, revision: 1 },
-      cache
-    );
-
-    expect(item).toMatchObject({
-      id: `model:${model.uid}:primitive:0`,
-      node: model,
-      geometry: loaded.meshes[0].geometry,
-      bounds: { min: [2, 3, 4], max: [3, 4, 5] },
-      color: [0.2, 0.3, 0.4, 0.5],
-      renderOrder: 5,
-      hitTest: 'mesh',
-      pointerEvents: 'none'
-    });
-    expect(item.geometry.vertexData).toBe(loaded.meshes[0].geometry.vertexData);
   });
 
   it('preserves loaded model textures when material children override only color', async () => {

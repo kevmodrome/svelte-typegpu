@@ -18,7 +18,7 @@
   - Add RGB tuple and clamp helpers for light prop parsing.
 - `src/lib/typegpu-renderer/vector-math.ts`
   - New focused CPU vector helpers for light direction math.
-- `src/lib/typegpu-renderer/components/lights.ts`
+- `src/lib/typegpu-renderer/component-helpers/lights.ts`
   - New scene-reader module for supported light nodes, transform inheritance, defaults, clamping, revision calculation, and subtree queries.
 - `src/lib/typegpu-renderer/scene-dirtiness.ts`
   - New runtime invalidation module for draw-batch dirtiness and lighting dirtiness.
@@ -52,7 +52,7 @@ Do not touch the unrelated untracked `docs/superpowers/plans/2026-05-22-typegpu-
 - Modify: `src/lib/typegpu-renderer/types.ts`
 - Modify: `src/lib/typegpu-renderer/attributes.ts`
 - Create: `src/lib/typegpu-renderer/vector-math.ts`
-- Create: `src/lib/typegpu-renderer/components/lights.ts`
+- Create: `src/lib/typegpu-renderer/component-helpers/lights.ts`
 - Test: `src/lib/typegpu-renderer/core.test.ts`
 
 - [ ] **Step 1: Write failing tests for light collection**
@@ -185,7 +185,7 @@ Append these tests to `src/lib/typegpu-renderer/core.test.ts` inside the existin
 Add these imports to the top of `core.test.ts`:
 
 ```ts
-import { collectLights } from './components/lights';
+import { collectLights } from './component-helpers/lights';
 import { MAX_TYPEGPU_LIGHTS } from './types';
 ```
 
@@ -197,7 +197,7 @@ Run:
 npm test -- src/lib/typegpu-renderer/core.test.ts
 ```
 
-Expected: fails because `./components/lights` does not exist.
+Expected: fails because `./component-helpers/lights` does not exist.
 
 - [ ] **Step 3: Add light types**
 
@@ -310,7 +310,7 @@ export function rotateVectorXyz(vector: Vector3Tuple, rotation: Vector3Tuple): V
 
 - [ ] **Step 6: Add light scene reader**
 
-Create `src/lib/typegpu-renderer/components/lights.ts`:
+Create `src/lib/typegpu-renderer/component-helpers/lights.ts`:
 
 ```ts
 import {
@@ -474,7 +474,7 @@ Expected: all `core.test.ts` tests pass.
 git add src/lib/typegpu-renderer/types.ts \
   src/lib/typegpu-renderer/attributes.ts \
   src/lib/typegpu-renderer/vector-math.ts \
-  src/lib/typegpu-renderer/components/lights.ts \
+  src/lib/typegpu-renderer/component-helpers/lights.ts \
   src/lib/typegpu-renderer/core.test.ts
 git commit -m "Add TypeGPU light scene reader"
 ```
@@ -529,10 +529,10 @@ Append these tests to `src/lib/typegpu-renderer/core.test.ts`:
     insert(scene, mesh, null);
     insert(root, scene, null);
 
-    expect(invalidatesLights(root, light, root.treeRevision)).toBe(true);
-    expect(invalidatesLights(root, group, root.treeRevision)).toBe(true);
-    expect(invalidatesLights(root, mesh, root.treeRevision)).toBe(false);
-    expect(invalidatesDrawBatches(root, light, root.treeRevision)).toBe(false);
+    expect(light invalidation helper(root, light, root.treeRevision)).toBe(true);
+    expect(light invalidation helper(root, group, root.treeRevision)).toBe(true);
+    expect(light invalidation helper(root, mesh, root.treeRevision)).toBe(false);
+    expect(draw-batch invalidation helper(root, light, root.treeRevision)).toBe(false);
   });
 ```
 
@@ -540,8 +540,8 @@ Add these imports:
 
 ```ts
 import {
-  invalidatesDrawBatches,
-  invalidatesLights
+  draw-batch invalidation helper,
+  light invalidation helper
 } from './scene-dirtiness';
 ```
 
@@ -576,10 +576,10 @@ export interface TypeGpuSceneState {
 Create `src/lib/typegpu-renderer/scene-dirtiness.ts`:
 
 ```ts
-import { isSupportedLightNode, subtreeHasSupportedLight } from './components/lights';
+import { isSupportedLightNode, subtreeHasSupportedLight } from './component-helpers/lights';
 import type { TypeGpuNode } from './core';
 
-export function invalidatesDrawBatches(
+export function draw-batch invalidation helper(
   root: TypeGpuNode,
   dirtyNode: TypeGpuNode | undefined,
   syncedTreeRevision: number
@@ -594,7 +594,7 @@ export function invalidatesDrawBatches(
   );
 }
 
-export function invalidatesLights(
+export function light invalidation helper(
   root: TypeGpuNode,
   dirtyNode: TypeGpuNode | undefined,
   syncedTreeRevision: number
@@ -612,7 +612,7 @@ export function invalidatesLights(
 Modify `src/lib/typegpu-renderer/scene-state.ts`:
 
 ```ts
-import { collectLights } from './components/lights';
+import { collectLights } from './component-helpers/lights';
 ```
 
 Update the interfaces and cache factory:
@@ -673,8 +673,8 @@ Modify `src/lib/typegpu-renderer/svelte-renderer.ts`:
 
 ```ts
 import {
-  invalidatesDrawBatches,
-  invalidatesLights
+  draw-batch invalidation helper,
+  light invalidation helper
 } from './scene-dirtiness';
 ```
 
@@ -690,8 +690,8 @@ Update `scheduleSync(...)`:
 ```ts
   function scheduleSync(nextRoot: TypeGpuNode, dirtyNode?: TypeGpuNode) {
     root = nextRoot;
-    drawBatchesDirty ||= invalidatesDrawBatches(root, dirtyNode, syncedTreeRevision);
-    lightsDirty ||= invalidatesLights(root, dirtyNode, syncedTreeRevision);
+    drawBatchesDirty ||= draw-batch invalidation helper(root, dirtyNode, syncedTreeRevision);
+    lightsDirty ||= light invalidation helper(root, dirtyNode, syncedTreeRevision);
 
     if (queued) return;
 
@@ -711,7 +711,7 @@ Update `scheduleSync(...)`:
   }
 ```
 
-Remove the old local `invalidatesDrawBatches(...)` function from `svelte-renderer.ts`.
+Remove the old local `draw-batch invalidation helper(...)` function from `svelte-renderer.ts`.
 
 - [ ] **Step 7: Run tests to verify they pass**
 

@@ -268,7 +268,7 @@ Primitive descriptors should own these concerns:
 - Dirty behavior.
 - Resource and scene compilation hooks.
 
-Runtime scheduling should use `Dirty`. The old `invalidatesDrawBatches` and `invalidatesLights` approach can be deleted instead of migrated.
+Runtime scheduling should use `Dirty`. The earlier per-component invalidation helpers can be deleted instead of migrated.
 
 ## Draw Batches And Resource Keys
 

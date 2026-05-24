@@ -17,8 +17,8 @@
 - Create `src/lib/typegpu-renderer/glb-test-fixtures.ts`: test-only helpers that generate tiny GLB `ArrayBuffer` fixtures from JSON and binary chunks.
 - Create `src/lib/typegpu-renderer/model-cache.ts`: async cache for URL and `ArrayBuffer` model loading with ready/loading/failed states and completion notification.
 - Create `src/lib/typegpu-renderer/model-cache.test.ts`: model cache tests with injected loaders and fetch functions.
-- Create `src/lib/typegpu-renderer/components/model.ts`: read `<model>` nodes from the scene graph and turn ready loaded model meshes into `TypeGpuMeshDrawItem` records.
-- Create `src/lib/typegpu-renderer/components/draw-items.ts`: walk the scene graph once and collect procedural mesh draw items plus imported model draw items with inherited transforms.
+- Create `src/lib/typegpu-renderer/component-helpers/model.ts`: read `<model>` nodes from the scene graph and turn ready loaded model meshes into `TypeGpuMeshDrawItem` records.
+- Create `src/lib/typegpu-renderer/component-helpers/draw-items.ts`: walk the scene graph once and collect procedural mesh draw items plus imported model draw items with inherited transforms.
 - Modify `src/lib/typegpu-renderer/types.ts`: add imported geometry descriptors and embedded texture sources.
 - Modify `src/lib/typegpu-renderer/materials.ts`: normalize embedded texture sources and key materials by embedded texture identity.
 - Modify `src/lib/typegpu-renderer/gpu-renderer.ts`: decode embedded texture image bytes without fetching and keep URL texture behavior intact.
@@ -1062,8 +1062,8 @@ git commit -m "Add async GLB model cache"
 ## Task 6: Model Scene Reading And Draw Batching
 
 **Files:**
-- Create: `src/lib/typegpu-renderer/components/model.ts`
-- Create: `src/lib/typegpu-renderer/components/draw-items.ts`
+- Create: `src/lib/typegpu-renderer/component-helpers/model.ts`
+- Create: `src/lib/typegpu-renderer/component-helpers/draw-items.ts`
 - Modify: `src/lib/typegpu-renderer/draw-batch-cache.ts`
 - Modify: `src/lib/typegpu-renderer/scene-state.ts`
 - Modify: `src/lib/typegpu-renderer/scene-dirtiness.ts`
@@ -1142,8 +1142,8 @@ it('marks draw batches dirty for model node changes', () => {
   insert(scene, modelNode, null);
   insert(root, scene, null);
 
-  expect(invalidatesDrawBatches(root, modelNode, root.treeRevision)).toBe(true);
-  expect(invalidatesLights(root, modelNode, root.treeRevision)).toBe(false);
+  expect(draw-batch invalidation helper(root, modelNode, root.treeRevision)).toBe(true);
+  expect(light invalidation helper(root, modelNode, root.treeRevision)).toBe(false);
 });
 ```
 
@@ -1155,7 +1155,7 @@ Expected: FAIL because `createTypeGpuSceneCache` does not accept a model cache a
 
 - [ ] **Step 3: Add model draw item collection**
 
-Add `src/lib/typegpu-renderer/components/model.ts`:
+Add `src/lib/typegpu-renderer/component-helpers/model.ts`:
 
 ```ts
 import { numberArg } from '../attributes';
@@ -1211,7 +1211,7 @@ export function subtreeHasModelNode(node: TypeGpuNode | undefined): boolean {
 }
 ```
 
-Add `src/lib/typegpu-renderer/components/draw-items.ts`:
+Add `src/lib/typegpu-renderer/component-helpers/draw-items.ts`:
 
 ```ts
 import { collectMeshDrawItems } from './mesh';
@@ -1309,7 +1309,7 @@ Expected: PASS.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/lib/typegpu-renderer/components/model.ts src/lib/typegpu-renderer/components/draw-items.ts src/lib/typegpu-renderer/draw-batch-cache.ts src/lib/typegpu-renderer/scene-state.ts src/lib/typegpu-renderer/scene-dirtiness.ts src/lib/typegpu-renderer/core.test.ts
+git add src/lib/typegpu-renderer/component-helpers/model.ts src/lib/typegpu-renderer/component-helpers/draw-items.ts src/lib/typegpu-renderer/draw-batch-cache.ts src/lib/typegpu-renderer/scene-state.ts src/lib/typegpu-renderer/scene-dirtiness.ts src/lib/typegpu-renderer/core.test.ts
 git commit -m "Read GLB models into draw batches"
 ```
 

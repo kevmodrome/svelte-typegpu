@@ -1,6 +1,6 @@
 import { clampedNumberArg, numberArg, vectorTuple } from './attributes';
-import { readPerspectiveCameraNodeState } from './components/perspective-camera';
 import { findFirst, type TypeGpuNode } from './core';
+import { readLegacyPerspectiveCameraControllerState } from './legacy-camera';
 import {
   add3,
   cross3,
@@ -40,7 +40,9 @@ export function readCameraState(root: TypeGpuNode): TypeGpuCameraState {
   const camera = findActiveCamera(root);
   const orbitControllerNode = findFirst(root, (node) => node.name === 'orbitControls');
   const legacyState =
-    camera?.name === 'perspectiveCamera' ? readPerspectiveCameraNodeState(camera) : null;
+    camera?.name === 'perspectiveCamera'
+      ? readLegacyPerspectiveCameraControllerState(camera)
+      : null;
   const controllerNode = orbitControllerNode ?? legacyState?.controllerNode ?? null;
 
   return {

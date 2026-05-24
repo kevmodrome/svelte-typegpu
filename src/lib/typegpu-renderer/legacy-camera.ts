@@ -1,21 +1,6 @@
-import { clampedNumberArg, numberArg, vectorTuple } from '../attributes';
-import { findFirst, type TypeGpuNode } from '../core';
-import type {
-  TypeGpuCameraController,
-  TypeGpuCameraSettings,
-  TypeGpuCameraState,
-  TypeGpuKeyboardControls,
-  TypeGpuPointerControls
-} from '../types';
-
-export const DEFAULT_CAMERA: TypeGpuCameraSettings = {
-  projection: 'perspective',
-  position: [9, 7, 13],
-  target: [0, 0, 0],
-  fov: 45,
-  near: 0.1,
-  far: 100
-};
+import { clampedNumberArg } from './attributes';
+import type { TypeGpuNode } from './core';
+import type { TypeGpuCameraController, TypeGpuKeyboardControls, TypeGpuPointerControls } from './types';
 
 const DEFAULT_MIN_DISTANCE = 1;
 const DEFAULT_MAX_DISTANCE = 100;
@@ -44,49 +29,20 @@ const DEFAULT_KEYBOARD_CONTROLS: TypeGpuKeyboardControls = {
   smooth: false
 };
 
-export function readPerspectiveCamera(root: TypeGpuNode): TypeGpuCameraSettings {
-  const { position, target, fov, near, far } = readPerspectiveCameraState(root).settings;
-
-  return { position, target, fov: fov ?? 45, near, far };
+export interface LegacyPerspectiveCameraControllerState {
+  controllerNode: TypeGpuNode | null;
+  controller: TypeGpuCameraController | null;
 }
 
-export function readPerspectiveCameraState(root: TypeGpuNode): TypeGpuCameraState {
-  const camera = findFirst(root, (node) => node.name === 'perspectiveCamera');
-
-  return readPerspectiveCameraNodeState(camera);
-}
-
-export function readPerspectiveCameraNodeState(camera: TypeGpuNode | null): TypeGpuCameraState {
-  const pose = camera ? firstChildNamed(camera, 'cameraPose') : null;
-  const lens = camera ? firstChildNamed(camera, 'cameraLens') : null;
+export function readLegacyPerspectiveCameraControllerState(
+  camera: TypeGpuNode | null
+): LegacyPerspectiveCameraControllerState {
   const controls = camera ? firstChildNamed(camera, 'controls') : null;
-  const poseAttributes = pose?.attributes ?? {};
-  const lensAttributes = lens?.attributes ?? {};
 
   return {
-    node: camera,
-    settings: {
-      projection: 'perspective',
-      position: vectorTuple(poseAttributes.position, DEFAULT_CAMERA.position),
-      target: vectorTuple(poseAttributes.target, DEFAULT_CAMERA.target),
-      fov: numberArg(lensAttributes.fov, 45),
-      near: numberArg(lensAttributes.near, DEFAULT_CAMERA.near),
-      far: numberArg(lensAttributes.far, DEFAULT_CAMERA.far)
-    },
     controllerNode: controls,
     controller: controls ? readCameraController(controls) : null
   };
-}
-
-export function isCameraControlNode(node: TypeGpuNode | undefined): boolean {
-  return (
-    node?.name === 'perspectiveCamera' ||
-    node?.name === 'cameraPose' ||
-    node?.name === 'cameraLens' ||
-    node?.name === 'controls' ||
-    node?.name === 'pointerControls' ||
-    node?.name === 'keyboardControls'
-  );
 }
 
 function readCameraController(controls: TypeGpuNode): TypeGpuCameraController | null {

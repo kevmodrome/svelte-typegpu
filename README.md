@@ -1,6 +1,8 @@
-# Svelte WebGL Renderer
+# Svelte TypeGPU Renderer
 
-Experimental Svelte custom renderer spike for Three.js.
+Experimental scene-oriented TypeGPU/WebGPU custom renderer API for Svelte.
+It compiles declarative scene nodes into TypeGPU resources, draw batches,
+lighting, camera state, and interaction data.
 
 This project targets the open Svelte custom renderer PR:
 https://github.com/sveltejs/svelte/pull/18042
@@ -16,4 +18,3 @@ npm run dev
 
 The setup script clones Svelte's `svelte-custom-renderer` branch into `.svelte-pr/`.
 That directory is intentionally ignored by Git.
-

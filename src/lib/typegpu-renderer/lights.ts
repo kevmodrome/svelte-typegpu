@@ -1,19 +1,19 @@
-import { clampedNumberArg, nonNegativeNumberArg, rgbTuple, vectorTuple } from '../attributes';
-import type { TypeGpuNode } from '../core';
-import { composeTransforms, IDENTITY_TRANSFORM, readLocalTransform } from '../transform';
+import { clampedNumberArg, nonNegativeNumberArg, rgbTuple, vectorTuple } from './attributes';
+import type { TypeGpuNode } from './core';
+import { composeTransforms, IDENTITY_TRANSFORM, readLocalTransform } from './transform';
 import {
   MAX_TYPEGPU_LIGHTS,
   type TypeGpuLight,
   type TypeGpuLightKind,
   type TypeGpuTransform,
   type Vector3Tuple
-} from '../types';
+} from './types';
 import {
   DEFAULT_LIGHT_DIRECTION,
   normalizeVector,
   rotateVectorXyz,
   subtractVectors
-} from '../vector-math';
+} from './vector-math';
 
 export { MAX_TYPEGPU_LIGHTS };
 

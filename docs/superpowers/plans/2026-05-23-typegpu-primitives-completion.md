@@ -30,7 +30,7 @@
 - Replace `src/lib/typegpu-renderer/draw-batch-cache.ts`: draw item grouping keyed by pass, pipeline, material, bind group, geometry, topology, and render order.
 - Replace `src/lib/typegpu-renderer/gpu-renderer.ts`: TypeGPU backend with explicit geometry, instance, material, texture, sampler, pipeline, and render target cache ownership.
 - Replace `src/lib/typegpu-renderer/svelte-renderer.ts`: root runtime, frame loop modes, dirty scheduling, and canvas event dispatch.
-- Update or delete obsolete files under `src/lib/typegpu-renderer/components/` when `scene-compiler.ts` replaces them.
+- Update or delete obsolete files under `src/lib/typegpu-renderer/component-helpers/` when `scene-compiler.ts` replaces them.
 - Update `src/Scene.typegpu.svelte`: rebuild the demo around target primitives.
 - Update `src/TypeGpuCanvas.svelte`: pass root options and call the rebuilt root lifecycle.
 - Update or remove `src/Box.typegpu.svelte` and `src/Sphere.typegpu.svelte`: keep only if they remain useful thin examples over the target primitives.
@@ -2159,7 +2159,7 @@ git commit -m "feat: rebuild typegpu demo on target primitives"
 ## Task 11: Remove Obsolete Renderer Code And Verify
 
 **Files:**
-- Delete or simplify: `src/lib/typegpu-renderer/components/*.ts` files that are no longer imported.
+- Delete or simplify: `src/lib/typegpu-renderer/component-helpers/*.ts` files that are no longer imported.
 - Delete or simplify: obsolete tests under `src/lib/typegpu-renderer/*.test.ts` that assert old internals.
 - Modify: `README.md`
 - Modify: `docs/superpowers/specs/2026-05-23-typegpu-primitives-completion-design.md` only if implementation discovers a corrected final behavior.
@@ -2169,8 +2169,8 @@ git commit -m "feat: rebuild typegpu demo on target primitives"
 Run:
 
 ```bash
-rg "components/" src/lib/typegpu-renderer
-rg "invalidatesDrawBatches|invalidatesLights|findFirstInteractiveMesh" src
+rg "component-helpers/" src/lib/typegpu-renderer
+rg "draw-batch invalidation helper|light invalidation helper|first interactive mesh helper" src
 ```
 
 Expected before cleanup: any remaining references are obsolete.
@@ -2228,7 +2228,7 @@ Run:
 ```bash
 git status --short
 git diff --stat
-rg "T[O]DO|TB[D]|implement[[:space:]]later|findFirstInteractiveMesh|invalidatesDrawBatches|invalidatesLights" src docs README.md
+rg "T[O]DO|TB[D]|implement[[:space:]]later|first interactive mesh helper|draw-batch invalidation helper|light invalidation helper" src docs README.md
 ```
 
 Expected:

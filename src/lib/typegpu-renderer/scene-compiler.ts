@@ -1,12 +1,12 @@
 import { numberArg } from './attributes';
 import { transformBounds } from './bounds';
 import { readCameraState } from './camera';
-import { collectLights } from './components/lights';
 import type { TypeGpuNode } from './core';
 import { Dirty, hasDirty } from './dirty';
 import { createDrawBatchCache, type TypeGpuDrawBatchCache } from './draw-batch-cache';
 import type { TypeGpuLoadedModelMesh } from './glb-loader';
 import { createInteractionIndex } from './interaction-index';
+import { collectLights } from './lights';
 import { createModelCache, type TypeGpuModelCache } from './model-cache';
 import {
   collectSceneResources,

@@ -12,15 +12,9 @@ import {
   removeEventListener,
   setAttribute
 } from './core';
-import { collectLights } from './components/lights';
-import { collectMeshDrawItems, findFirstInteractiveMesh } from './components/mesh';
-import { readMeshMaterial } from './components/material';
-import {
-  readPerspectiveCamera,
-  readPerspectiveCameraState
-} from './components/perspective-camera';
+import { readCameraState } from './camera';
 import type { TypeGpuLoadedModel } from './glb-loader';
-import { createStandardMaterial } from './materials';
+import { collectLights } from './lights';
 import { createModelCache } from './model-cache';
 import { createSceneState, createTypeGpuSceneCache } from './scene-state';
 import { MAX_TYPEGPU_LIGHTS } from './types';
@@ -153,7 +147,8 @@ describe('TypeGPU renderer core', () => {
     insert(scene, camera, null);
     insert(root, scene, null);
 
-    expect(readPerspectiveCamera(root)).toEqual({
+    expect(createSceneState(root).camera).toEqual({
+      projection: 'perspective',
       position: [2, 3, 4],
       target: [1, 1, 1],
       fov: 35,
@@ -210,7 +205,7 @@ describe('TypeGPU renderer core', () => {
     insert(scene, camera, null);
     insert(root, scene, null);
 
-    const state = readPerspectiveCameraState(root);
+    const state = readCameraState(root);
     const sceneState = createSceneState(root);
 
     expect(state.node).toBe(camera);
@@ -352,7 +347,7 @@ describe('TypeGPU renderer core', () => {
     insert(scene, camera, null);
     insert(root, scene, null);
 
-    expect(readPerspectiveCameraState(root).controller).toEqual({
+    expect(readCameraState(root).controller).toEqual({
       kind: 'controls',
       mode: 'orbit',
       minDistance: 1,
@@ -395,7 +390,7 @@ describe('TypeGPU renderer core', () => {
     insert(scene, camera, null);
     insert(root, scene, null);
 
-    expect(readPerspectiveCameraState(root).controller).toBeNull();
+    expect(readCameraState(root).controller).toBeNull();
   });
 
   it('ignores camera-control nodes outside the camera hierarchy', () => {
@@ -410,7 +405,7 @@ describe('TypeGPU renderer core', () => {
     insert(scene, controls, null);
     insert(root, scene, null);
 
-    expect(readPerspectiveCameraState(root).controller).toBeNull();
+    expect(readCameraState(root).controller).toBeNull();
   });
 
   it('ignores pointerControls directly under a perspectiveCamera node', () => {
@@ -423,54 +418,7 @@ describe('TypeGPU renderer core', () => {
     insert(scene, camera, null);
     insert(root, scene, null);
 
-    expect(readPerspectiveCameraState(root).controller).toBeNull();
-  });
-
-  it('normalizes standard material texture props from inline attributes', () => {
-    const mesh = createElement('mesh');
-    const material = createElement('standardMaterial');
-
-    setAttribute(material, 'color', [0.2, 0.3, 0.4, 0.8]);
-    setAttribute(material, 'roughness', 0.7);
-    setAttribute(material, 'metalness', 0.25);
-    setAttribute(material, 'opacity', 0.6);
-    setAttribute(material, 'map', '/textures/crate.png');
-    insert(mesh, material, null);
-
-    expect(readMeshMaterial(mesh)).toEqual({
-      kind: 'standard',
-      color: [0.2, 0.3, 0.4, 0.8],
-      roughness: 0.7,
-      metalness: 0.25,
-      opacity: 0.6,
-      map: { kind: 'url', src: '/textures/crate.png' }
-    });
-  });
-
-  it('normalizes reusable standard material objects and lets inline props override them', () => {
-    const mesh = createElement('mesh');
-    const material = createElement('standardMaterial');
-    const reusable = createStandardMaterial({
-      color: [0.9, 0.8, 0.7, 1],
-      roughness: 0.2,
-      metalness: 0.35,
-      opacity: 0.9,
-      map: '/textures/base.png'
-    });
-
-    setAttribute(material, 'material', reusable);
-    setAttribute(material, 'roughness', 0.65);
-    setAttribute(material, 'map', '/textures/override.png');
-    insert(mesh, material, null);
-
-    expect(readMeshMaterial(mesh)).toEqual({
-      kind: 'standard',
-      color: [0.9, 0.8, 0.7, 1],
-      roughness: 0.65,
-      metalness: 0.35,
-      opacity: 0.9,
-      map: { kind: 'url', src: '/textures/override.png' }
-    });
+    expect(readCameraState(root).controller).toBeNull();
   });
 
   it('splits draw batches by texture identity while preserving same-texture batching', () => {
@@ -1455,180 +1403,31 @@ describe('TypeGPU renderer core', () => {
     expect(secondBoxBatch.instances[MESH_INSTANCE_FLOATS + 7]).toBe(1);
   });
 
-  it('reads a mesh with box geometry and standard material into a draw item', () => {
-    const root = createFragment();
-    const scene = createElement('scene');
-    const mesh = createElement('mesh');
-    const geometry = createElement('boxGeometry');
-    const material = createElement('standardMaterial');
-
-    setAttribute(mesh, 'position', [1, 2, 3]);
-    setAttribute(mesh, 'phase', 0.25);
-    setAttribute(mesh, 'spinSpeed', 1.4);
-    setAttribute(geometry, 'width', 20);
-    setAttribute(geometry, 'height', 5);
-    setAttribute(geometry, 'depth', 10);
-    setAttribute(material, 'color', [0.1, 0.2, 0.3, 1]);
-    setAttribute(material, 'roughness', 0.62);
-    setAttribute(material, 'metalness', 0.18);
-
-    insert(mesh, geometry, null);
-    insert(mesh, material, null);
-    insert(scene, mesh, null);
-    insert(root, scene, null);
-
-    const [item] = collectMeshDrawItems(root);
-
-    expect(item).toMatchObject({
-      id: mesh.uid,
-      phase: 0.25,
-      spinSpeed: 1.4,
-      geometry: {
-        kind: 'box',
-        size: [20, 5, 10]
-      },
-      material: {
-        kind: 'standard',
-        color: [0.1, 0.2, 0.3, 1],
-        roughness: 0.62,
-        metalness: 0.18
-      },
-      transform: {
-        position: [1, 2, 3],
-        rotation: [0, 0, 0],
-        scale: [1, 1, 1]
-      }
-    });
-  });
-
-  it('uses identity transform defaults for an untransformed mesh', () => {
-    const root = createFragment();
-    const scene = createElement('scene');
-    const mesh = createElement('mesh');
-    const geometry = createElement('boxGeometry');
-
-    insert(mesh, geometry, null);
-    insert(scene, mesh, null);
-    insert(root, scene, null);
-
-    const [item] = collectMeshDrawItems(root);
-
-    expect(item.transform).toEqual({
-      position: [0, 0, 0],
-      rotation: [0, 0, 0],
-      scale: [1, 1, 1]
-    });
-  });
-
-  it('applies nested group transforms to child meshes', () => {
-    const root = createFragment();
-    const scene = createElement('scene');
-    const group = createElement('group');
-    const mesh = createElement('mesh');
-    const geometry = createElement('boxGeometry');
-
-    setAttribute(group, 'position', [10, 0, 0]);
-    setAttribute(group, 'scale', [2, 3, 4]);
-    setAttribute(mesh, 'position', [1, 2, 3]);
-    setAttribute(mesh, 'rotation', [0.1, 0.2, 0.3]);
-
-    insert(mesh, geometry, null);
-    insert(group, mesh, null);
-    insert(scene, group, null);
-    insert(root, scene, null);
-
-    const [item] = collectMeshDrawItems(root);
-
-    expect(item.transform.position[0]).toBeCloseTo(12);
-    expect(item.transform.position[1]).toBeCloseTo(6);
-    expect(item.transform.position[2]).toBeCloseTo(12);
-    expect(item.transform.rotation).toEqual([0.1, 0.2, 0.3]);
-    expect(item.transform.scale).toEqual([2, 3, 4]);
-  });
-
-  it('composes nested rotations instead of adding Euler components', () => {
-    const root = createFragment();
-    const scene = createElement('scene');
-    const group = createElement('group');
-    const mesh = createElement('mesh');
-    const geometry = createElement('boxGeometry');
-
-    setAttribute(group, 'rotation', [Math.PI / 2, 0, 0]);
-    setAttribute(mesh, 'rotation', [0, Math.PI / 2, 0]);
-
-    insert(mesh, geometry, null);
-    insert(group, mesh, null);
-    insert(scene, group, null);
-    insert(root, scene, null);
-
-    const [item] = collectMeshDrawItems(root);
-
-    expect(item.transform.rotation[0]).toBeCloseTo(Math.PI / 2);
-    expect(item.transform.rotation[1]).toBeCloseTo(0);
-    expect(item.transform.rotation[2]).toBeCloseTo(Math.PI / 2);
-  });
-
-  it('skips invalid mesh composition without crashing', () => {
-    const root = createFragment();
-    const scene = createElement('scene');
-    const meshWithoutGeometry = createElement('mesh');
-    const looseGeometry = createElement('boxGeometry');
-    const validMesh = createElement('mesh');
-    const validGeometry = createElement('sphereGeometry');
-
-    insert(scene, looseGeometry, null);
-    insert(scene, meshWithoutGeometry, null);
-    insert(validMesh, validGeometry, null);
-    insert(scene, validMesh, null);
-    insert(root, scene, null);
-
-    const items = collectMeshDrawItems(root);
-
-    expect(items).toHaveLength(1);
-    expect(items[0].id).toBe(validMesh.uid);
-    expect(items[0].geometry.kind).toBe('sphere');
-    expect(items[0].material.color).toEqual([1, 1, 1, 1]);
-  });
-
-  it('changes mesh item revision when a material child is replaced', () => {
-    const root = createFragment();
-    const scene = createElement('scene');
-    const mesh = createElement('mesh');
-    const geometry = createElement('boxGeometry');
-    const material = createElement('standardMaterial');
-
-    insert(mesh, geometry, null);
-    insert(mesh, material, null);
-    insert(scene, mesh, null);
-    insert(root, scene, null);
-
-    const treeRevision = root.treeRevision;
-    const [before] = collectMeshDrawItems(root);
-    const replacement = createElement('standardMaterial');
-
-    remove(material);
-    insert(mesh, replacement, null);
-    // Keep the tree seed stable so this isolates child identity in the item revision.
-    root.treeRevision = treeRevision;
-
-    const [after] = collectMeshDrawItems(root);
-
-    expect(after.revision).not.toBe(before.revision);
-  });
-
-  it('finds the first interactive mesh node', () => {
+  it('indexes interactive mesh nodes in scene state', () => {
     const root = createFragment();
     const scene = createElement('scene');
     const first = createElement('mesh');
+    const firstGeometry = createElement('boxGeometry');
     const second = createElement('mesh');
+    const secondGeometry = createElement('boxGeometry');
     const handler = vi.fn();
 
     addEventListener(second, 'click', handler);
+    insert(first, firstGeometry, null);
+    insert(second, secondGeometry, null);
     insert(scene, first, null);
     insert(scene, second, null);
     insert(root, scene, null);
 
-    expect(findFirstInteractiveMesh(root, 'click')).toBe(second);
+    const state = createSceneState(root);
+
+    expect(state.interaction.targets).toHaveLength(1);
+    expect(state.interaction.targets[0]).toMatchObject({
+      node: second,
+      drawItemId: second.uid,
+      pointerEvents: 'auto',
+      hitTest: 'bounds'
+    });
   });
 
   it('reads supported light nodes into normalized light records', () => {
