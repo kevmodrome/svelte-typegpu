@@ -128,33 +128,3 @@ This repository also uses that `pkg.pr.new` URL for development and CI instead
 of a local Svelte checkout.
 
 The example app shows the current Vite setup in `apps/example/vite.config.ts`.
-
-## Releases
-
-This repo uses Changesets for versioning and npm publishing.
-
-Create a changeset for each user-facing package change:
-
-```bash
-pnpm changeset
-```
-
-After changes land on `main`, the release workflow opens or updates a Changesets
-release PR. Merging that release PR publishes `svelte-typegpu` with:
-
-```bash
-pnpm release
-```
-
-The GitHub repository needs an `NPM_TOKEN` secret that can publish the package.
-The first npm setup is:
-
-1. Publish a real first version of `svelte-typegpu` to npm. npm package names
-   are first-come, first-served, and should be used for immediate active
-   packages rather than placeholders.
-2. Create an npm automation token with publish access.
-3. Add that token to the GitHub repository secrets as `NPM_TOKEN`.
-4. Merge the generated Changesets release PR.
-
-Pull requests also publish preview packages through `pkg.pr.new`. Install the
-pkg.pr.new GitHub App on the repository before relying on those preview links.
