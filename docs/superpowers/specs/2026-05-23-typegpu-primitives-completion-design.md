@@ -268,7 +268,7 @@ Primitive descriptors should own these concerns:
 - Dirty behavior.
 - Resource and scene compilation hooks.
 
-Runtime scheduling should use `Dirty`. The earlier per-component invalidation helpers can be deleted instead of migrated.
+Runtime scheduling should use `Dirty`. Task 11 cleanup should delete obsolete active helpers under `src/lib/typegpu-renderer/components/*.ts` instead of migrating them.
 
 ## Draw Batches And Resource Keys
 

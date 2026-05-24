@@ -14,7 +14,7 @@
 
 - Create `src/lib/typegpu-renderer/materials.ts`: reusable material descriptor factory, texture-source normalization, stable texture keys.
 - Modify `src/lib/typegpu-renderer/types.ts`: texture source and richer standard material descriptor types.
-- Modify `src/lib/typegpu-renderer/component-helpers/material.ts`: normalize inline `<standardMaterial>` props and `material={crate}` objects.
+- Modify `src/lib/typegpu-renderer/components/material.ts`: normalize inline `<standardMaterial>` props and `material={crate}` objects.
 - Modify `src/lib/typegpu-renderer/instance-data.ts`: material-ready instance constants and packing.
 - Modify `src/lib/typegpu-renderer/draw-batch-cache.ts`: batch keys include texture identity.
 - Modify `src/lib/typegpu-renderer/box-data.ts`: add UVs to box vertex data.
@@ -40,7 +40,7 @@
 **Files:**
 - Create: `src/lib/typegpu-renderer/materials.ts`
 - Modify: `src/lib/typegpu-renderer/types.ts`
-- Modify: `src/lib/typegpu-renderer/component-helpers/material.ts`
+- Modify: `src/lib/typegpu-renderer/components/material.ts`
 - Test: `src/lib/typegpu-renderer/core.test.ts`
 
 - [ ] **Step 1: Write failing material normalization tests**
@@ -49,7 +49,7 @@ Add these imports to `src/lib/typegpu-renderer/core.test.ts`:
 
 ```ts
 import { createStandardMaterial } from './materials';
-import { readMeshMaterial } from './component-helpers/material';
+import { readMeshMaterial } from './components/material';
 ```
 
 Add these tests inside the existing `describe('TypeGPU renderer core', ...)` block:
@@ -223,7 +223,7 @@ export function textureKeyForMaterial(material: TypeGpuStandardMaterialDescripto
 
 - [ ] **Step 5: Update material reader**
 
-Replace `src/lib/typegpu-renderer/component-helpers/material.ts` with:
+Replace `src/lib/typegpu-renderer/components/material.ts` with:
 
 ```ts
 import {
@@ -278,7 +278,7 @@ Expected: PASS for the new material normalization tests.
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/lib/typegpu-renderer/types.ts src/lib/typegpu-renderer/materials.ts src/lib/typegpu-renderer/component-helpers/material.ts src/lib/typegpu-renderer/core.test.ts
+git add src/lib/typegpu-renderer/types.ts src/lib/typegpu-renderer/materials.ts src/lib/typegpu-renderer/components/material.ts src/lib/typegpu-renderer/core.test.ts
 git commit -m "Add TypeGPU standard material descriptors"
 ```
 

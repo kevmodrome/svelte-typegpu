@@ -13,9 +13,9 @@
 ## File Structure
 
 - Create `src/lib/typegpu-renderer/transform.ts`: parse and compose local/world transforms.
-- Create `src/lib/typegpu-renderer/component-helpers/geometry.ts`: read mesh geometry children into descriptors.
-- Create `src/lib/typegpu-renderer/component-helpers/material.ts`: read mesh material children into descriptors.
-- Create `src/lib/typegpu-renderer/component-helpers/mesh.ts`: collect mesh draw items and find interactive meshes.
+- Create `src/lib/typegpu-renderer/components/geometry.ts`: read mesh geometry children into descriptors.
+- Create `src/lib/typegpu-renderer/components/material.ts`: read mesh material children into descriptors.
+- Create `src/lib/typegpu-renderer/components/mesh.ts`: collect mesh draw items and find interactive meshes.
 - Create `src/lib/typegpu-renderer/draw-batch-cache.ts`: group mesh draw items into reusable draw batches with dirty ranges.
 - Modify `src/lib/typegpu-renderer/types.ts`: add geometry/material/transform/draw-item types and `floatsPerInstance` on batches.
 - Modify `src/lib/typegpu-renderer/attributes.ts`: add scalar-or-vector scale parsing.
@@ -31,9 +31,9 @@
 
 **Files:**
 - Create: `src/lib/typegpu-renderer/transform.ts`
-- Create: `src/lib/typegpu-renderer/component-helpers/geometry.ts`
-- Create: `src/lib/typegpu-renderer/component-helpers/material.ts`
-- Create: `src/lib/typegpu-renderer/component-helpers/mesh.ts`
+- Create: `src/lib/typegpu-renderer/components/geometry.ts`
+- Create: `src/lib/typegpu-renderer/components/material.ts`
+- Create: `src/lib/typegpu-renderer/components/mesh.ts`
 - Modify: `src/lib/typegpu-renderer/types.ts`
 - Modify: `src/lib/typegpu-renderer/attributes.ts`
 - Modify: `src/lib/typegpu-renderer/primitive-cache.ts`
@@ -44,7 +44,7 @@
 Add these imports to `src/lib/typegpu-renderer/core.test.ts`:
 
 ```ts
-import { collectMeshDrawItems, first interactive mesh helper } from './component-helpers/mesh';
+import { collectMeshDrawItems, findFirstInteractiveMesh } from './components/mesh';
 ```
 
 Append these tests inside the `describe('TypeGPU renderer core', () => { ... })` block:
@@ -156,7 +156,7 @@ Append these tests inside the `describe('TypeGPU renderer core', () => { ... })`
     insert(scene, second, null);
     insert(root, scene, null);
 
-    expect(first interactive mesh helper(root, 'click')).toBe(second);
+    expect(findFirstInteractiveMesh(root, 'click')).toBe(second);
   });
 ```
 
@@ -168,7 +168,7 @@ Run:
 npm run test -- src/lib/typegpu-renderer/core.test.ts
 ```
 
-Expected: FAIL because `./component-helpers/mesh` does not exist and `collectMeshDrawItems` is not exported.
+Expected: FAIL because `./components/mesh` does not exist and `collectMeshDrawItems` is not exported.
 
 - [ ] **Step 3: Extend shared renderer types**
 
@@ -339,7 +339,7 @@ function rotateZ([x, y, z]: Vector3Tuple, angle: number): Vector3Tuple {
 
 - [ ] **Step 6: Add geometry and material readers**
 
-Create `src/lib/typegpu-renderer/component-helpers/geometry.ts`:
+Create `src/lib/typegpu-renderer/components/geometry.ts`:
 
 ```ts
 import { dimensionArg } from '../attributes';
@@ -390,7 +390,7 @@ function isSupportedGeometryNode(node: TypeGpuNode): boolean {
 }
 ```
 
-Create `src/lib/typegpu-renderer/component-helpers/material.ts`:
+Create `src/lib/typegpu-renderer/components/material.ts`:
 
 ```ts
 import { colorTuple, numberArg } from '../attributes';
@@ -433,7 +433,7 @@ export function readMeshMaterial(mesh: TypeGpuNode): TypeGpuMaterialReadResult {
 
 - [ ] **Step 7: Add mesh draw-item collection**
 
-Create `src/lib/typegpu-renderer/component-helpers/mesh.ts`:
+Create `src/lib/typegpu-renderer/components/mesh.ts`:
 
 ```ts
 import { numberArg } from '../attributes';
@@ -451,7 +451,7 @@ export function collectMeshDrawItems(root: TypeGpuNode): TypeGpuMeshDrawItem[] {
   return items;
 }
 
-export function first interactive mesh helper(root: TypeGpuNode, type: string): TypeGpuNode | null {
+export function findFirstInteractiveMesh(root: TypeGpuNode, type: string): TypeGpuNode | null {
   return findFirst(root, (node) => node.name === 'mesh' && Boolean(node.listeners.get(type)?.size));
 }
 
@@ -517,7 +517,7 @@ Expected: both commands pass. The older primitive draw-batch assertions still pa
 Run:
 
 ```bash
-git add src/lib/typegpu-renderer/types.ts src/lib/typegpu-renderer/attributes.ts src/lib/typegpu-renderer/primitive-cache.ts src/lib/typegpu-renderer/transform.ts src/lib/typegpu-renderer/component-helpers/geometry.ts src/lib/typegpu-renderer/component-helpers/material.ts src/lib/typegpu-renderer/component-helpers/mesh.ts src/lib/typegpu-renderer/core.test.ts
+git add src/lib/typegpu-renderer/types.ts src/lib/typegpu-renderer/attributes.ts src/lib/typegpu-renderer/primitive-cache.ts src/lib/typegpu-renderer/transform.ts src/lib/typegpu-renderer/components/geometry.ts src/lib/typegpu-renderer/components/material.ts src/lib/typegpu-renderer/components/mesh.ts src/lib/typegpu-renderer/core.test.ts
 git commit -m "Add TypeGPU mesh scene graph readers"
 ```
 
@@ -527,8 +527,8 @@ git commit -m "Add TypeGPU mesh scene graph readers"
 - Create: `src/lib/typegpu-renderer/draw-batch-cache.ts`
 - Modify: `src/lib/typegpu-renderer/instance-data.ts`
 - Modify: `src/lib/typegpu-renderer/scene-state.ts`
-- Modify: `src/lib/typegpu-renderer/component-helpers/box.ts`
-- Modify: `src/lib/typegpu-renderer/component-helpers/sphere.ts`
+- Modify: `src/lib/typegpu-renderer/components/box.ts`
+- Modify: `src/lib/typegpu-renderer/components/sphere.ts`
 - Modify: `src/lib/typegpu-renderer/svelte-renderer.ts`
 - Modify: `src/lib/typegpu-renderer/core.test.ts`
 - Modify: `src/lib/typegpu-renderer/box-data.test.ts`
@@ -715,7 +715,7 @@ Create `src/lib/typegpu-renderer/draw-batch-cache.ts`:
 ```ts
 import { createBoxGeometryData } from './box-data';
 import { createSphereGeometryData } from './sphere-data';
-import { collectMeshDrawItems } from './component-helpers/mesh';
+import { collectMeshDrawItems } from './components/mesh';
 import { MESH_INSTANCE_FLOATS, packMeshInstance } from './instance-data';
 import type {
   TypeGpuDrawBatch,
@@ -870,8 +870,8 @@ function appendDirtyRange(ranges: TypeGpuInstanceDirtyRange[], index: number): v
 Replace `src/lib/typegpu-renderer/scene-state.ts` with:
 
 ```ts
-import { readPerspectiveCamera } from './component-helpers/perspective-camera';
-import { readSceneSettings } from './component-helpers/scene';
+import { readPerspectiveCamera } from './components/perspective-camera';
+import { readSceneSettings } from './components/scene';
 import { createDrawBatchCache, type TypeGpuDrawBatchCache } from './draw-batch-cache';
 import type { TypeGpuNode } from './core';
 import type { TypeGpuSceneState } from './types';
@@ -903,21 +903,21 @@ export function createSceneState(
 
 - [ ] **Step 7: Remove primitive cache component exports**
 
-In `src/lib/typegpu-renderer/component-helpers/box.ts`, remove `createBoxInstanceCache`, `createBoxInstanceBuffer`, and primitive matching functions. Leave only compatibility exports if another file still imports them; after this step, this file should either be deleted or contain no used exports.
+In `src/lib/typegpu-renderer/components/box.ts`, remove `createBoxInstanceCache`, `createBoxInstanceBuffer`, and primitive matching functions. Leave only compatibility exports if another file still imports them; after this step, this file should either be deleted or contain no used exports.
 
-In `src/lib/typegpu-renderer/component-helpers/sphere.ts`, remove `createSphereInstanceCache` and `findFirstInteractiveSphere`. After this step, this file should either be deleted or contain no used exports.
+In `src/lib/typegpu-renderer/components/sphere.ts`, remove `createSphereInstanceCache` and `findFirstInteractiveSphere`. After this step, this file should either be deleted or contain no used exports.
 
 In `src/lib/typegpu-renderer/svelte-renderer.ts`, replace the box-specific click dispatch import:
 
 ```ts
-import { first interactive mesh helper } from './component-helpers/mesh';
+import { findFirstInteractiveMesh } from './components/mesh';
 ```
 
 Then replace `dispatchCanvasClick` with:
 
 ```ts
   function dispatchCanvasClick(event: MouseEvent) {
-    const mesh = first interactive mesh helper(root, 'click');
+    const mesh = findFirstInteractiveMesh(root, 'click');
     if (!mesh) return;
 
     dispatchNodeEvent(mesh, 'click', {
@@ -929,7 +929,7 @@ Then replace `dispatchCanvasClick` with:
 Run:
 
 ```bash
-rg "component-helpers/(box|sphere)|createBoxInstance|createSphereInstance|primitive:" src/lib/typegpu-renderer src -n
+rg "components/(box|sphere)|createBoxInstance|createSphereInstance|primitive:" src/lib/typegpu-renderer src -n
 ```
 
 Expected: no references except deleted-file paths shown by git are absent from the working tree.
@@ -949,7 +949,7 @@ Expected: PASS for mesh batching and updated instance layout tests.
 Run:
 
 ```bash
-git add src/lib/typegpu-renderer/draw-batch-cache.ts src/lib/typegpu-renderer/instance-data.ts src/lib/typegpu-renderer/scene-state.ts src/lib/typegpu-renderer/component-helpers/box.ts src/lib/typegpu-renderer/component-helpers/sphere.ts src/lib/typegpu-renderer/svelte-renderer.ts src/lib/typegpu-renderer/core.test.ts src/lib/typegpu-renderer/box-data.ts src/lib/typegpu-renderer/sphere-data.ts src/lib/typegpu-renderer/box-data.test.ts
+git add src/lib/typegpu-renderer/draw-batch-cache.ts src/lib/typegpu-renderer/instance-data.ts src/lib/typegpu-renderer/scene-state.ts src/lib/typegpu-renderer/components/box.ts src/lib/typegpu-renderer/components/sphere.ts src/lib/typegpu-renderer/svelte-renderer.ts src/lib/typegpu-renderer/core.test.ts src/lib/typegpu-renderer/box-data.ts src/lib/typegpu-renderer/sphere-data.ts src/lib/typegpu-renderer/box-data.test.ts
 git commit -m "Replace primitive batches with mesh draw batches"
 ```
 

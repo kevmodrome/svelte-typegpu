@@ -14,7 +14,7 @@
 
 - Modify `src/lib/typegpu-renderer/types.ts`
   - Add camera controller/input types and add `cameraNode` / `cameraController` metadata to `TypeGpuSceneState`.
-- Modify `src/lib/typegpu-renderer/component-helpers/perspective-camera.ts`
+- Modify `src/lib/typegpu-renderer/components/perspective-camera.ts`
   - Keep `readPerspectiveCamera(...)` for existing callers.
   - Add `readPerspectiveCameraState(...)` for camera settings plus control metadata.
   - Export `isCameraControlNode(...)` for dirtiness logic.
@@ -56,7 +56,7 @@
 
 **Files:**
 - Modify: `src/lib/typegpu-renderer/types.ts`
-- Modify: `src/lib/typegpu-renderer/component-helpers/perspective-camera.ts`
+- Modify: `src/lib/typegpu-renderer/components/perspective-camera.ts`
 - Modify: `src/lib/typegpu-renderer/scene-state.ts`
 - Modify: `src/lib/typegpu-renderer/scene-dirtiness.ts`
 - Test: `src/lib/typegpu-renderer/core.test.ts`
@@ -69,10 +69,10 @@ Add these imports in `src/lib/typegpu-renderer/core.test.ts`:
 import {
   readPerspectiveCamera,
   readPerspectiveCameraState
-} from './component-helpers/perspective-camera';
+} from './components/perspective-camera';
 ```
 
-Replace the existing single import of `readPerspectiveCamera` from `./component-helpers/perspective-camera` with the block above.
+Replace the existing single import of `readPerspectiveCamera` from `./components/perspective-camera` with the block above.
 
 Add these tests after `reads camera settings from a perspectiveCamera node`:
 
@@ -184,12 +184,12 @@ Add this test near the existing dirtiness tests:
     insert(scene, camera, null);
     insert(root, scene, null);
 
-    expect(draw-batch invalidation helper(root, camera, root.treeRevision)).toBe(false);
-    expect(draw-batch invalidation helper(root, orbit, root.treeRevision)).toBe(false);
-    expect(draw-batch invalidation helper(root, pointer, root.treeRevision)).toBe(false);
-    expect(light invalidation helper(root, camera, root.treeRevision)).toBe(false);
-    expect(light invalidation helper(root, orbit, root.treeRevision)).toBe(false);
-    expect(light invalidation helper(root, pointer, root.treeRevision)).toBe(false);
+    expect(invalidatesDrawBatches(root, camera, root.treeRevision)).toBe(false);
+    expect(invalidatesDrawBatches(root, orbit, root.treeRevision)).toBe(false);
+    expect(invalidatesDrawBatches(root, pointer, root.treeRevision)).toBe(false);
+    expect(invalidatesLights(root, camera, root.treeRevision)).toBe(false);
+    expect(invalidatesLights(root, orbit, root.treeRevision)).toBe(false);
+    expect(invalidatesLights(root, pointer, root.treeRevision)).toBe(false);
   });
 ```
 
@@ -272,7 +272,7 @@ export interface TypeGpuSceneState {
 
 - [ ] **Step 4: Implement camera-control parsing**
 
-Replace `src/lib/typegpu-renderer/component-helpers/perspective-camera.ts` with:
+Replace `src/lib/typegpu-renderer/components/perspective-camera.ts` with:
 
 ```ts
 import { clampedNumberArg, numberArg, vectorTuple } from '../attributes';
@@ -433,7 +433,7 @@ function stringOption<const T extends string>(
 Modify `src/lib/typegpu-renderer/scene-state.ts` imports:
 
 ```ts
-import { readPerspectiveCameraState } from './component-helpers/perspective-camera';
+import { readPerspectiveCameraState } from './components/perspective-camera';
 ```
 
 Inside `createSceneState(...)`, before the return, add:
@@ -463,13 +463,13 @@ Update the return object:
 Modify `src/lib/typegpu-renderer/scene-dirtiness.ts` imports:
 
 ```ts
-import { isCameraControlNode } from './component-helpers/perspective-camera';
+import { isCameraControlNode } from './components/perspective-camera';
 ```
 
 Update both dirtiness functions:
 
 ```ts
-export function draw-batch invalidation helper(
+export function invalidatesDrawBatches(
   root: TypeGpuNode,
   dirtyNode: TypeGpuNode | undefined,
   syncedTreeRevision: number
@@ -490,7 +490,7 @@ export function draw-batch invalidation helper(
   );
 }
 
-export function light invalidation helper(
+export function invalidatesLights(
   root: TypeGpuNode,
   dirtyNode: TypeGpuNode | undefined,
   syncedTreeRevision: number
@@ -519,7 +519,7 @@ Expected: PASS.
 Commit:
 
 ```bash
-git add src/lib/typegpu-renderer/types.ts src/lib/typegpu-renderer/component-helpers/perspective-camera.ts src/lib/typegpu-renderer/scene-state.ts src/lib/typegpu-renderer/scene-dirtiness.ts src/lib/typegpu-renderer/core.test.ts
+git add src/lib/typegpu-renderer/types.ts src/lib/typegpu-renderer/components/perspective-camera.ts src/lib/typegpu-renderer/scene-state.ts src/lib/typegpu-renderer/scene-dirtiness.ts src/lib/typegpu-renderer/core.test.ts
 git commit -m "Add declarative camera control parsing"
 ```
 
