@@ -5,7 +5,8 @@ import {
   dirtyForEventListener,
   dirtyForInsert,
   dirtyForRemove,
-  normalizePrimitiveName
+  normalizePrimitiveName,
+  registerPrimitive
 } from './primitives';
 
 function expectExactDirty(mask: Dirty, ...flags: Dirty[]): void {
@@ -50,6 +51,12 @@ describe('TypeGPU primitive descriptors', () => {
     expect(hasDirty(dirty, Dirty.Transform)).toBe(true);
     expect(hasDirty(dirty, Dirty.InstanceData)).toBe(true);
     expect(hasDirty(dirty, Dirty.Interaction)).toBe(true);
+    expectExactDirty(
+      dirtyForAttribute('mesh', 'quaternion', [0, 0, 0, 1], [0, 0.707, 0, 0.707]),
+      Dirty.Transform,
+      Dirty.InstanceData,
+      Dirty.Interaction
+    );
   });
 
   it('marks group transform and visibility changes as light-affecting', () => {
@@ -279,6 +286,30 @@ describe('TypeGPU primitive descriptors', () => {
     expectExactDirty(dirtyForInsert('keyboardControls'), Dirty.Tree, Dirty.Camera);
     expectExactDirty(dirtyForEventListener('mesh', 'click'), Dirty.Interaction);
     expectExactDirty(dirtyForEventListener('mesh', 'keydown'), Dirty.None);
+  });
+
+  it('allows custom primitive descriptors to own dirtiness', () => {
+    registerPrimitive({
+      kind: 'customThing',
+      dirtyForAttribute(attribute) {
+        return attribute === 'mode' ? Dirty.Pipeline : Dirty.None;
+      },
+      dirtyForInsert() {
+        return Dirty.Tree;
+      },
+      dirtyForRemove() {
+        return Dirty.Tree;
+      },
+      dirtyForEventListener(eventName) {
+        return eventName === 'activate' ? Dirty.Interaction : Dirty.None;
+      }
+    });
+
+    expectExactDirty(dirtyForAttribute('customThing', 'mode', 'a', 'b'), Dirty.Pipeline);
+    expectExactDirty(dirtyForAttribute('customThing', 'other', 'a', 'b'), Dirty.None);
+    expectExactDirty(dirtyForInsert('customThing'), Dirty.Tree);
+    expectExactDirty(dirtyForRemove('customThing'), Dirty.Tree);
+    expectExactDirty(dirtyForEventListener('customThing', 'activate'), Dirty.Interaction);
   });
 
   it('treats Dirty.All as every known dirty bit', () => {

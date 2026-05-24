@@ -6,19 +6,11 @@ import { MESH_INSTANCE_FLOATS, MESH_ROTATION_OFFSET } from './instance-data';
 import { TextureResourceCache } from './resource-caches';
 import type { TypeGpuTextureSource } from './types';
 
-function readSource(path: string): string {
-  try {
-    return readFileSync(path, 'utf8');
-  } catch {
-    return '';
-  }
-}
-
 describe('TypeGPU GPU renderer', () => {
-  const rendererSource = readSource('src/lib/typegpu-renderer/gpu-renderer.ts');
-  const cacheSource = readSource('src/lib/typegpu-renderer/resource-caches.ts');
-  const pipelineSource = readFileSync('src/lib/typegpu-renderer/typegpu-pipeline.ts', 'utf8');
-  const layoutsSource = readFileSync('src/lib/typegpu-renderer/typegpu-layouts.ts', 'utf8');
+  const rendererSource = readFileSync(new URL('./gpu-renderer.ts', import.meta.url), 'utf8');
+  const cacheSource = readFileSync(new URL('./resource-caches.ts', import.meta.url), 'utf8');
+  const pipelineSource = readFileSync(new URL('./typegpu-pipeline.ts', import.meta.url), 'utf8');
+  const layoutsSource = readFileSync(new URL('./typegpu-layouts.ts', import.meta.url), 'utf8');
   const source = [rendererSource, cacheSource, pipelineSource, layoutsSource].join('\n');
 
   afterEach(() => {
@@ -208,6 +200,13 @@ describe('TypeGPU GPU renderer', () => {
     expect(pipelineSource).toContain('meshInstanceLayout.attrib.position');
     expect(source).not.toContain('arrayStride: MESH_VERTEX_FLOATS');
     expect(source).not.toContain('arrayStride: MESH_INSTANCE_FLOATS');
+  });
+
+  it('uses TypeGPU index buffers and indexed draws when geometry has indices', () => {
+    expect(cacheSource).toContain(".$usage('index')");
+    expect(cacheSource).toContain('indexBuffer');
+    expect(rendererSource).toContain('.withIndexBuffer');
+    expect(rendererSource).toContain('.drawIndexed(');
   });
 
   it('creates material resources through TypeGPU APIs', () => {

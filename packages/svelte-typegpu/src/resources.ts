@@ -124,6 +124,7 @@ export function readInlineGeometry(node: TypeGpuNode): TypeGpuGeometryData | nul
         node
       ),
       vertices,
+      indices: indicesArg(node.attributes.indices),
       bounds,
       topology: node.attributes.topology === 'triangle-list' ? 'triangle-list' : undefined
     });
@@ -288,6 +289,10 @@ function vector3Arg(value: unknown): Vector3Tuple | null {
 
 function formatArg(value: unknown): GPUTextureFormat | undefined {
   return typeof value === 'string' && value.length > 0 ? (value as GPUTextureFormat) : undefined;
+}
+
+function indicesArg(value: unknown): Uint16Array | Uint32Array | undefined {
+  return value instanceof Uint16Array || value instanceof Uint32Array ? value : undefined;
 }
 
 function versionedKey(base: string, node: TypeGpuNode): string {

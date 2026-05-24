@@ -78,6 +78,34 @@ describe('TypeGPU resource descriptors', () => {
     expect(geometry?.bounds?.min[0]).toBe(-1);
   });
 
+  it('reads inline indexed buffer geometry without mutating caller arrays', () => {
+    const vertices = new Float32Array([
+      -1, 0, -1, 0, 1, 0, 0, 0,
+      1, 0, -1, 0, 1, 0, 1, 0,
+      0, 0, 1, 0, 1, 0, 0.5, 1
+    ]);
+    const indices = new Uint16Array([0, 1, 2]);
+    const node = createElement('bufferGeometry');
+
+    setAttribute(node, 'id', 'indexed');
+    setAttribute(node, 'vertices', vertices);
+    setAttribute(node, 'indices', indices);
+    setAttribute(node, 'bounds', { min: [-1, 0, -1], max: [1, 0, 1] });
+
+    const geometry = readInlineGeometry(node);
+
+    expect(geometry).toMatchObject({
+      kind: 'buffer',
+      indexCount: 3,
+      indexFormat: 'uint16'
+    });
+    expect(geometry?.indexData).toBeInstanceOf(Uint16Array);
+    expect(Array.from(geometry?.indexData ?? [])).toEqual([0, 1, 2]);
+
+    indices[0] = 2;
+    expect(geometry?.indexData?.[0]).toBe(0);
+  });
+
   it('normalizes inline material descriptor variants', () => {
     const basic = createElement('basicMaterial');
     setAttribute(basic, 'color', [0.2, 0.4, 0.6]);

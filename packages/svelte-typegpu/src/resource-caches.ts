@@ -1,7 +1,9 @@
 import {
   d,
+  type IndexFlag,
   type SampledFlag,
   type TgpuBindGroup,
+  type TgpuBuffer,
   type TgpuFixedSampler,
   type TgpuRoot,
   type TgpuTexture,
@@ -23,6 +25,7 @@ type TypeGpuVertexBuffer = {
   write(data: ArrayBuffer, options?: { startOffset?: number; endOffset?: number }): void;
   destroy(): void;
 };
+type TypeGpuIndexBuffer = TgpuBuffer<ReturnType<typeof d.arrayOf>> & IndexFlag;
 
 type TypeGpuMaterialTexture = TgpuTexture & SampledFlag;
 type TypeGpuMeshPipeline = ReturnType<typeof createMeshPipeline>;
@@ -45,7 +48,10 @@ export interface LoadedTextureImage {
 export interface TypeGpuVertexBufferResource {
   key: string;
   vertexBuffer: TypeGpuVertexBuffer;
+  indexBuffer?: TypeGpuIndexBuffer;
   vertexCount: number;
+  indexCount?: number;
+  indexFormat?: GPUIndexFormat;
 }
 
 export interface TypeGpuInstanceBufferResource {
@@ -91,7 +97,16 @@ export class GeometryResourceCache {
         `TypeGPU ${batch.geometry.key} vertices`,
         batch.geometry.vertexData
       ),
-      vertexCount: batch.geometry.vertexCount
+      indexBuffer: batch.geometry.indexData
+        ? createAndUploadIndexBuffer(
+            this.root,
+            `TypeGPU ${batch.geometry.key} indices`,
+            batch.geometry.indexData
+          )
+        : undefined,
+      vertexCount: batch.geometry.vertexCount,
+      indexCount: batch.geometry.indexCount,
+      indexFormat: batch.geometry.indexFormat
     };
 
     this.#resources.set(key, resource);
@@ -103,6 +118,7 @@ export class GeometryResourceCache {
       if (liveKeys.has(key)) continue;
 
       resource.vertexBuffer.destroy();
+      resource.indexBuffer?.destroy();
       this.#resources.delete(key);
     }
   }
@@ -110,6 +126,7 @@ export class GeometryResourceCache {
   dispose(): void {
     for (const resource of this.#resources.values()) {
       resource.vertexBuffer.destroy();
+      resource.indexBuffer?.destroy();
     }
 
     this.#resources.clear();
@@ -630,6 +647,26 @@ function createAndUploadBuffer(
   return buffer;
 }
 
+function createAndUploadIndexBuffer(
+  root: TgpuRoot,
+  label: string,
+  data: Uint16Array | Uint32Array
+): TypeGpuIndexBuffer {
+  const schema = data instanceof Uint16Array
+    ? d.arrayOf(d.u16, Math.max(1, data.length))
+    : d.arrayOf(d.u32, Math.max(1, data.length));
+  const buffer = root
+    .createBuffer(schema as never)
+    .$usage('index')
+    .$name(label) as TypeGpuIndexBuffer;
+
+  if (data.length > 0) {
+    buffer.write(arrayBufferFor(data));
+  }
+
+  return buffer;
+}
+
 function writeFloat32BufferRange(
   buffer: TypeGpuVertexBuffer,
   data: Float32Array,
@@ -647,7 +684,7 @@ function writeFloat32BufferRange(
   });
 }
 
-function arrayBufferFor(data: Float32Array): ArrayBuffer {
+function arrayBufferFor(data: Float32Array | Uint16Array | Uint32Array): ArrayBuffer {
   if (data.byteOffset === 0 && data.byteLength === data.buffer.byteLength) {
     return data.buffer as ArrayBuffer;
   }

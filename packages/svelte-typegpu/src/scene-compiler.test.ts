@@ -110,6 +110,39 @@ describe('TypeGPU scene compiler', () => {
     ).toBe(true);
   });
 
+  it('uses scene activeCamera and background color aliases', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const first = createElement('perspectiveCamera');
+    const second = createElement('orthographicCamera');
+
+    setAttribute(scene, 'activeCamera', 'editor');
+    setAttribute(scene, 'background', [0.1, 0.2, 0.3, 0.4]);
+    setAttribute(first, 'id', 'main');
+    setAttribute(first, 'active', true);
+    setAttribute(first, 'position', [1, 0, 0]);
+    setAttribute(second, 'id', 'editor');
+    setAttribute(second, 'position', [2, 0, 0]);
+    setAttribute(second, 'zoom', 4);
+
+    insert(scene, first, null);
+    insert(scene, second, null);
+    insert(root, scene, null);
+
+    const state = createSceneState(root, createTypeGpuSceneCache(), { dirty: Dirty.All });
+
+    expect(state.renderSettings.clearColor).toEqual([0.1, 0.2, 0.3, 0.4]);
+    expect(state.cameraNode).toBe(second);
+    expect(state.camera).toEqual({
+      projection: 'orthographic',
+      position: [2, 0, 0],
+      target: [0, 0, 0],
+      zoom: 4,
+      near: 0.1,
+      far: 100
+    });
+  });
+
   it('reuses clean draw batches, lights, and interaction indexes by dirty mask', () => {
     const root = createFragment();
     const scene = createElement('scene');

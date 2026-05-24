@@ -5,7 +5,13 @@ import {
   createViewProjectionMatrix,
   readCameraState
 } from './camera-math';
-import { invert4, multiply4, perspectiveMatrix, transformPoint4 } from './math3d';
+import {
+  invert4,
+  multiply4,
+  perspectiveMatrix,
+  readTransformAttributes,
+  transformPoint4
+} from './math3d';
 
 describe('TypeGPU camera math', () => {
   it('reads direct perspective camera props', () => {
@@ -224,6 +230,27 @@ describe('TypeGPU camera math', () => {
     });
 
     expect(Array.from(invalid)).toEqual(Array.from(fallback));
+  });
+
+  it('reads quaternion and matrix transform attributes', () => {
+    const fromQuaternion = readTransformAttributes({
+      quaternion: [0, Math.sin(Math.PI / 4), 0, Math.cos(Math.PI / 4)]
+    });
+    const fromMatrix = readTransformAttributes({
+      matrix: [
+        0, 2, 0, 0,
+        -3, 0, 0, 0,
+        0, 0, 4, 0,
+        4, 5, 6, 1
+      ]
+    });
+
+    expect(fromQuaternion.position).toEqual([0, 0, 0]);
+    expect(fromQuaternion.scale).toEqual([1, 1, 1]);
+    expect(fromQuaternion.rotation[1]).toBeCloseTo(Math.PI / 2);
+    expect(fromMatrix.position).toEqual([4, 5, 6]);
+    expect(fromMatrix.scale).toEqual([2, 3, 4]);
+    expect(fromMatrix.rotation[2]).toBeCloseTo(Math.PI / 2);
   });
 
   it('throws when creating a ray with invalid viewport dimensions', () => {

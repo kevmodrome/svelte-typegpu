@@ -102,7 +102,7 @@ export function createSceneState(
   const dirty = options.dirty ?? Dirty.All;
   const resources = collectSceneResources(root);
   const sceneSettings = readRenderSettings(root);
-  const camera = readCameraState(root);
+  const camera = readCameraState(root, sceneSettings.activeCamera);
   const recomputeLights = options.reuseLights === true ? false : hasDirty(dirty, Dirty.Lights);
   const recomputeDrawBatches =
     options.reuseDrawBatches === true ? false : shouldRecomputeDrawBatches(dirty);
@@ -414,18 +414,20 @@ function readRenderSettings(root: TypeGpuNode): {
   scale: number;
   animationSpeed: number;
   colorShift: number;
+  activeCamera: string | null;
 } {
   const scene = findScene(root);
 
   return {
     renderSettings: {
-      clearColor: rgbaArg(scene?.attributes.clearColor, [0, 0, 0, 1]),
+      clearColor: rgbaArg(scene?.attributes.clearColor ?? scene?.attributes.background, [0, 0, 0, 1]),
       depth: scene?.attributes.depth === false ? false : true,
       alphaMode: scene?.attributes.alphaMode === 'opaque' ? 'opaque' : 'premultiplied'
     },
     scale: numberArg(scene?.attributes.scale, 1),
     animationSpeed: numberArg(scene?.attributes.animationSpeed, 1),
-    colorShift: numberArg(scene?.attributes.colorShift, 0)
+    colorShift: numberArg(scene?.attributes.colorShift, 0),
+    activeCamera: stringArg(scene?.attributes.activeCamera)
   };
 }
 
@@ -748,4 +750,8 @@ function hashString(value: string): number {
   }
 
   return hash;
+}
+
+function stringArg(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
 }

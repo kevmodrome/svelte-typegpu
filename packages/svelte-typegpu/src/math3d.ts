@@ -90,9 +90,12 @@ export function composeTransforms(
 }
 
 export function readTransformAttributes(attributes: Record<string, unknown>): TypeGpuTransform {
+  const matrixTransform = matrixTransformArg(attributes.matrix);
+  if (matrixTransform) return matrixTransform;
+
   return {
     position: vectorTuple(attributes.position),
-    rotation: vectorTuple(attributes.rotation),
+    rotation: quaternionRotationArg(attributes.quaternion) ?? vectorTuple(attributes.rotation),
     scale: scaleTuple(attributes.scale)
   };
 }
@@ -308,4 +311,60 @@ function matrixToEulerXyz(matrix: Matrix3): Vector3Tuple {
 
 function normalizeZero(value: number): number {
   return Math.abs(value) < 1e-12 ? 0 : value;
+}
+
+function quaternionRotationArg(value: unknown): Vector3Tuple | null {
+  if (!Array.isArray(value) && !(value instanceof Float32Array)) return null;
+  if (value.length < 4) return null;
+
+  const x = Number(value[0]);
+  const y = Number(value[1]);
+  const z = Number(value[2]);
+  const w = Number(value[3]);
+  const length = Math.hypot(x, y, z, w);
+  if (!Number.isFinite(length) || length <= 1e-12) return null;
+
+  const nx = x / length;
+  const ny = y / length;
+  const nz = z / length;
+  const nw = w / length;
+  const sinrCosp = 2 * (nw * nx + ny * nz);
+  const cosrCosp = 1 - 2 * (nx * nx + ny * ny);
+  const sinp = 2 * (nw * ny - nz * nx);
+  const sinyCosp = 2 * (nw * nz + nx * ny);
+  const cosyCosp = 1 - 2 * (ny * ny + nz * nz);
+
+  return [
+    normalizeZero(Math.atan2(sinrCosp, cosrCosp)),
+    normalizeZero(Math.abs(sinp) >= 1 ? Math.sign(sinp) * (Math.PI / 2) : Math.asin(sinp)),
+    normalizeZero(Math.atan2(sinyCosp, cosyCosp))
+  ];
+}
+
+function matrixTransformArg(value: unknown): TypeGpuTransform | null {
+  if (!Array.isArray(value) && !(value instanceof Float32Array)) return null;
+  if (value.length < 16) return null;
+
+  const matrix = Array.from(value, Number);
+  if (!matrix.every(Number.isFinite)) return null;
+
+  const xAxis: Vector3Tuple = [matrix[0], matrix[1], matrix[2]];
+  const yAxis: Vector3Tuple = [matrix[4], matrix[5], matrix[6]];
+  const zAxis: Vector3Tuple = [matrix[8], matrix[9], matrix[10]];
+  const scale: Vector3Tuple = [
+    Math.max(length3(xAxis), 1e-12),
+    Math.max(length3(yAxis), 1e-12),
+    Math.max(length3(zAxis), 1e-12)
+  ];
+  const rotationMatrix: Matrix3 = [
+    [xAxis[0] / scale[0], yAxis[0] / scale[1], zAxis[0] / scale[2]],
+    [xAxis[1] / scale[0], yAxis[1] / scale[1], zAxis[1] / scale[2]],
+    [xAxis[2] / scale[0], yAxis[2] / scale[1], zAxis[2] / scale[2]]
+  ];
+
+  return {
+    position: [matrix[12], matrix[13], matrix[14]],
+    rotation: matrixToEulerXyz(rotationMatrix),
+    scale
+  };
 }

@@ -3,6 +3,7 @@ import * as svelteClient from 'svelte/internal/client';
 import { describe, expect, it, vi } from 'vitest';
 import { createFragment, type TypeGpuNode } from './core';
 import renderer from './svelte-renderer';
+import { typeGpuRendererPath } from './test-paths';
 
 describe('TypeGPU target primitive component rendering', () => {
   it('renders guide-level scene primitives into normalized host nodes', () => {
@@ -190,14 +191,14 @@ function compileTypeGpuSource(source: string) {
     generate: 'client',
     runes: true,
     experimental: {
-      customRenderer: '/src/lib/typegpu-renderer/svelte-renderer.ts'
+      customRenderer: typeGpuRendererPath
     }
   });
   const componentName = result.js.code.match(/export default function ([^(]+)/)?.[1];
   if (!componentName) throw new Error('Unable to find compiled component name');
 
   const executableCode = result.js.code
-    .replace("import $renderer from '/src/lib/typegpu-renderer/svelte-renderer.ts';", '')
+    .replace(`import $renderer from '${typeGpuRendererPath}';`, '')
     .replace("import 'svelte/internal/disclose-version';", '')
     .replace("import * as $ from 'svelte/internal/client';", '')
     .replace(`export default function ${componentName}`, `function ${componentName}`);

@@ -1,0 +1,35 @@
+{
+  "name": "svelte-typegpu",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./svelte-renderer": {
+      "types": "./src/svelte-renderer.ts",
+      "import": "./src/svelte-renderer.ts"
+    },
+    "./testing": {
+      "types": "./src/testing.ts",
+      "import": "./src/testing.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "svelte": "file:../../.svelte-pr/packages/svelte",
+    "typegpu": "^0.11.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@webgpu/types": "^0.1.70",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.14"
+  }
+}

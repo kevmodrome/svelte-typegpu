@@ -19,10 +19,32 @@ const aliases = new Map<string, string>([
   ['standard-material', 'standardMaterial']
 ]);
 
-const transformAttributes = new Set(['position', 'rotation', 'scale', 'matrix']);
+export interface PrimitiveDescriptor {
+  kind: string;
+  dirtyForAttribute?(attribute: string, previous: unknown, next: unknown): Dirty;
+  dirtyForInsert?(nodeName: string | undefined): Dirty;
+  dirtyForRemove?(nodeName: string | undefined): Dirty;
+  dirtyForEventListener?(eventName: string): Dirty;
+}
+
+const customDescriptors = new Map<string, PrimitiveDescriptor>();
+
+const transformAttributes = new Set(['position', 'rotation', 'quaternion', 'scale', 'matrix']);
 const sceneAttributes = new Set(['clearColor', 'background', 'activeCamera']);
 const sceneUniformAttributes = new Set(['scale', 'animationSpeed', 'colorShift']);
-const cameraAttributes = new Set(['id', 'active', 'position', 'target', 'fov', 'near', 'far', 'zoom']);
+const cameraAttributes = new Set([
+  'id',
+  'active',
+  'position',
+  'rotation',
+  'quaternion',
+  'matrix',
+  'target',
+  'fov',
+  'near',
+  'far',
+  'zoom'
+]);
 const controlAttributes = new Set([
   'camera',
   'enabled',
@@ -114,6 +136,10 @@ export function normalizePrimitiveName(name: string): string {
   return aliases.get(name) ?? name;
 }
 
+export function registerPrimitive(descriptor: PrimitiveDescriptor): void {
+  customDescriptors.set(normalizePrimitiveName(descriptor.kind), descriptor);
+}
+
 export function dirtyForAttribute(
   nodeName: string | undefined,
   attribute: string,
@@ -123,8 +149,13 @@ export function dirtyForAttribute(
   if (sameAttributeValue(previous, next)) return Dirty.None;
 
   const name = normalizePrimitiveName(nodeName ?? '');
+  const customDirty = customDescriptors
+    .get(name)
+    ?.dirtyForAttribute?.(attribute, previous, next);
+  if (customDirty !== undefined) return customDirty;
 
   if (name === 'scene') {
+    if (attribute === 'activeCamera') return Dirty.Camera;
     if (sceneAttributes.has(attribute)) return Dirty.RenderSettings;
     if (sceneUniformAttributes.has(attribute)) return Dirty.RenderSettings;
     return Dirty.None;
@@ -216,15 +247,23 @@ export function dirtyForAttribute(
 }
 
 export function dirtyForInsert(nodeName: string | undefined): Dirty {
+  const customDirty = customDescriptors.get(normalizePrimitiveName(nodeName ?? ''))?.dirtyForInsert?.(nodeName);
+  if (customDirty !== undefined) return customDirty;
+
   return dirtyForTreeChange(nodeName);
 }
 
 export function dirtyForRemove(nodeName: string | undefined): Dirty {
+  const customDirty = customDescriptors.get(normalizePrimitiveName(nodeName ?? ''))?.dirtyForRemove?.(nodeName);
+  if (customDirty !== undefined) return customDirty;
+
   return dirtyForTreeChange(nodeName);
 }
 
 export function dirtyForEventListener(nodeName: string | undefined, eventName: string): Dirty {
   const name = normalizePrimitiveName(nodeName ?? '');
+  const customDirty = customDescriptors.get(name)?.dirtyForEventListener?.(eventName);
+  if (customDirty !== undefined) return customDirty;
 
   return (name === 'mesh' || name === 'instancedMesh' || name === 'model') && pointerEvents.has(eventName)
     ? Dirty.Interaction

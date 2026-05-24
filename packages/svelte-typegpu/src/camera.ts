@@ -36,8 +36,8 @@ export const DEFAULT_CAMERA: TypeGpuNormalizedCameraSettings = {
 const DEFAULT_MIN_DISTANCE = 1;
 const DEFAULT_MAX_DISTANCE = 100;
 
-export function readCameraState(root: TypeGpuNode): TypeGpuCameraState {
-  const camera = findActiveCamera(root);
+export function readCameraState(root: TypeGpuNode, activeCameraId?: string | null): TypeGpuCameraState {
+  const camera = findActiveCamera(root, activeCameraId);
   const orbitControllerNode = findFirst(root, (node) => node.name === 'orbitControls');
   const legacyState =
     camera?.name === 'perspectiveCamera'
@@ -150,20 +150,24 @@ export function normalizeCameraSettings(
   };
 }
 
-function findActiveCamera(root: TypeGpuNode): TypeGpuNode | null {
+function findActiveCamera(root: TypeGpuNode, activeCameraId?: string | null): TypeGpuNode | null {
   let firstCamera: TypeGpuNode | null = null;
   let activeCamera: TypeGpuNode | null = null;
+  let namedCamera: TypeGpuNode | null = null;
 
   walk(root, (node) => {
     if (node.name !== 'perspectiveCamera' && node.name !== 'orthographicCamera') return;
 
     firstCamera ??= node;
+    if (activeCameraId && node.attributes.id === activeCameraId) {
+      namedCamera ??= node;
+    }
     if (node.attributes.active === true) {
       activeCamera ??= node;
     }
   });
 
-  return activeCamera ?? firstCamera;
+  return namedCamera ?? activeCamera ?? firstCamera;
 }
 
 function readCameraSettings(node: TypeGpuNode): TypeGpuNormalizedCameraSettings {

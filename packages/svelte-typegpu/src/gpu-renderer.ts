@@ -6,7 +6,7 @@ import tgpu, {
   type TgpuTexture,
   type UniformFlag
 } from 'typegpu';
-import { createFpsMeter } from '../fps-meter';
+import { createFpsMeter } from './fps-meter';
 import { createViewProjectionMatrix } from './camera-math';
 import { createContinuityTracker } from './continuity';
 import { Dirty } from './dirty';
@@ -579,12 +579,19 @@ function drawTypeGpuMaterialBatch({
   if (!instanceResource.buffer) return;
 
   const passPipeline = pipeline.with(pass).with(sceneBindGroup).with(lightingBindGroup);
-
-  passPipeline
+  const materialPipeline = passPipeline
     .with(materialResource.bindGroup)
     .with(meshVertexLayout, geometryResource.vertexBuffer.buffer)
-    .with(meshInstanceLayout, instanceResource.buffer.buffer)
-    .draw(batch.geometry.vertexCount, instanceResource.instanceCount);
+    .with(meshInstanceLayout, instanceResource.buffer.buffer);
+
+  if (geometryResource.indexBuffer && geometryResource.indexCount && geometryResource.indexFormat) {
+    materialPipeline
+      .withIndexBuffer(geometryResource.indexBuffer.buffer, geometryResource.indexFormat)
+      .drawIndexed(geometryResource.indexCount, instanceResource.instanceCount);
+    return;
+  }
+
+  materialPipeline.draw(batch.geometry.vertexCount, instanceResource.instanceCount);
 }
 
 function normalizeFrameloop(frameloop: TypeGpuRendererOptions['frameloop']): TypeGpuFrameLoop {

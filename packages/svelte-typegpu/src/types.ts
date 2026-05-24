@@ -127,7 +127,10 @@ export interface TypeGpuGeometryData {
   key: string;
   kind?: TypeGpuGeometryKind;
   vertexData: Float32Array;
+  indexData?: Uint16Array | Uint32Array;
   vertexCount: number;
+  indexCount?: number;
+  indexFormat?: GPUIndexFormat;
   vertexFloats: number;
   bounds?: TypeGpuBounds;
   shape?: Vector3Tuple;

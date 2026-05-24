@@ -101,6 +101,7 @@ export function createSphereGeometryData(
 export function createBufferGeometryData(input: {
   key: string;
   vertices: Float32Array;
+  indices?: Uint16Array | Uint32Array;
   bounds: TypeGpuBounds;
   topology?: TypeGpuPrimitiveTopology;
 }): TypeGpuGeometryData | null {
@@ -109,12 +110,16 @@ export function createBufferGeometryData(input: {
   }
 
   const vertexData = new Float32Array(input.vertices);
+  const indexData = input.indices ? copyIndexData(input.indices) : undefined;
 
   return {
     key: input.key,
     kind: 'buffer',
     vertexData,
+    indexData,
     vertexCount: vertexData.length / MESH_VERTEX_FLOATS,
+    indexCount: indexData?.length,
+    indexFormat: indexData instanceof Uint16Array ? 'uint16' : indexData ? 'uint32' : undefined,
     vertexFloats: MESH_VERTEX_FLOATS,
     bounds: {
       min: [...input.bounds.min],
@@ -139,4 +144,8 @@ function scalePositions(vertexData: Float32Array, scale: [number, number, number
   }
 
   return scaled;
+}
+
+function copyIndexData(indices: Uint16Array | Uint32Array): Uint16Array | Uint32Array {
+  return indices instanceof Uint16Array ? new Uint16Array(indices) : new Uint32Array(indices);
 }

@@ -1,10 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  applyCameraChange,
-  clampSceneControls,
-  DEFAULT_SCENE_CONTROLS,
-  type CameraChangeDetail
-} from '../scene-controls';
 import { createCameraInteractionController } from './camera-interaction';
 import { Dirty } from './dirty';
 import type {
@@ -77,6 +71,36 @@ const camera: TypeGpuCameraSettings = {
   near: 0.1,
   far: 100
 };
+
+interface CameraChangeDetail {
+  camera: TypeGpuCameraSettings;
+}
+
+interface TestSceneControls {
+  camera: TypeGpuCameraSettings;
+}
+
+const DEFAULT_SCENE_CONTROLS: TestSceneControls = {
+  camera
+};
+
+function clampSceneControls(controls: TestSceneControls): TestSceneControls {
+  return {
+    camera: {
+      ...controls.camera,
+      position: [...controls.camera.position],
+      target: [...controls.camera.target]
+    }
+  };
+}
+
+function applyCameraChange(controls: TestSceneControls, detail: CameraChangeDetail): void {
+  controls.camera = {
+    ...detail.camera,
+    position: [...detail.camera.position],
+    target: [...detail.camera.target]
+  };
+}
 
 const pointerControls: TypeGpuPointerControls = {
   dragButton: 'primary',
