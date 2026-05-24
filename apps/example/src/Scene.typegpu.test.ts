@@ -20,7 +20,7 @@ import {
 import renderer, { type Vector3Tuple } from 'svelte-typegpu';
 
 const typeGpuRendererPath = fileURLToPath(
-  new URL('../../../packages/svelte-typegpu/src/svelte-renderer.ts', import.meta.url)
+  import.meta.resolve('svelte-typegpu/svelte-renderer')
 );
 
 describe('TypeGPU demo scene authoring API', () => {

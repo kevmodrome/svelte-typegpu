@@ -4,17 +4,19 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const sourceRoot = fileURLToPath(new URL('./', import.meta.url));
+const appConfig = fileURLToPath(new URL('../vite.config.ts', import.meta.url));
 const packageJson = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
 };
 
-const sourceFiles = collectSourceFiles(sourceRoot);
+const sourceFiles = [...collectSourceFiles(sourceRoot), appConfig];
 const rendererBoundaryPatterns = [
   ['.', 'lib', 'typegpu-renderer'].join('/'),
   ['..', 'lib', 'typegpu-renderer'].join('/'),
   ['.', 'typegpu-renderer'].join('/'),
-  ['..', 'typegpu-renderer'].join('/')
+  ['..', 'typegpu-renderer'].join('/'),
+  ['packages', 'svelte-typegpu', 'src'].join('/')
 ];
 
 describe('example package boundary', () => {
