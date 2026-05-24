@@ -1,6 +1,6 @@
 {
-  "name": "svelte-webgl-renderer",
-  "version": "0.0.1",
+  "name": "svelte-typegpu-workspace",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.28.1",
