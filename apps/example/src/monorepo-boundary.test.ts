@@ -40,7 +40,7 @@ describe('example package boundary', () => {
 
   it('keeps TypeGPU owned by the renderer package', () => {
     expect(packageJson.dependencies).toEqual({
-      svelte: 'file:../../.svelte-pr/packages/svelte',
+      svelte: 'https://pkg.pr.new/svelte@18042',
       'svelte-typegpu': 'workspace:*'
     });
     expect(packageJson.dependencies).not.toHaveProperty('typegpu');

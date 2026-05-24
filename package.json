@@ -5,14 +5,18 @@
   "type": "module",
   "packageManager": "pnpm@10.28.1",
   "scripts": {
-    "setup:svelte-pr": "node scripts/setup-svelte-pr.mjs",
     "dev": "pnpm --filter example --fail-if-no-match dev",
     "build": "pnpm -r --if-present run build",
     "test": "vitest run && pnpm -r --if-present run test",
-    "test:watch": "pnpm --filter example --fail-if-no-match test:watch"
+    "test:watch": "pnpm --filter example --fail-if-no-match test:watch",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "pnpm build && changeset publish"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.31.0",
     "@types/node": "^24.10.1",
+    "pkg-pr-new": "^0.0.75",
     "typescript": "^5.9.3",
     "vitest": "^4.0.14"
   }
