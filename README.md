@@ -10,11 +10,18 @@ https://github.com/sveltejs/svelte/pull/18042
 ## Setup
 
 ```bash
-npm run setup:svelte-pr
-npm install
-npm run test
-npm run dev
+pnpm run setup:svelte-pr
+pnpm install
+pnpm test
+pnpm dev
 ```
 
 The setup script clones Svelte's `svelte-custom-renderer` branch into `.svelte-pr/`.
 That directory is intentionally ignored by Git.
+
+The reusable renderer package lives in `packages/svelte-typegpu`. The current demo
+application lives in `apps/example` and can be started directly with:
+
+```bash
+pnpm --filter example --fail-if-no-match dev
+```
