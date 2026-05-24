@@ -191,17 +191,13 @@ describe('TypeGPU primitive descriptors', () => {
     );
   });
 
-  it('does not suppress mutable dirty-relevant values with the same reference', () => {
+  it('suppresses stable tuple values but not mutable object or callback values', () => {
     const position = [0, 0, 0];
     const material = { color: [1, 1, 1, 1] };
     const accessor = () => null;
 
-    expectExactDirty(
-      dirtyForAttribute('mesh', 'position', position, position),
-      Dirty.Transform,
-      Dirty.InstanceData,
-      Dirty.Interaction
-    );
+    expectExactDirty(dirtyForAttribute('mesh', 'position', position, position), Dirty.None);
+    expectExactDirty(dirtyForAttribute('mesh', 'position', [0, 0, 0], [0, 0, 0]), Dirty.None);
     expectExactDirty(
       dirtyForAttribute('standardMaterial', 'material', material, material),
       Dirty.Material,

@@ -4,7 +4,8 @@ import {
   dirtyForEventListener,
   dirtyForInsert,
   dirtyForRemove,
-  normalizePrimitiveName
+  normalizePrimitiveName,
+  sameAttributeValue
 } from './primitives';
 
 export type TypeGpuNodeKind = 'fragment' | 'element' | 'text' | 'comment';
@@ -67,12 +68,16 @@ export function createComment(value = ''): TypeGpuNode {
 
 export function setAttribute(node: TypeGpuNode, key: string, value: unknown): void {
   const previous = node.attributes[key];
+  if (sameAttributeValue(previous, value)) return;
+
   node.attributes[key] = value;
   node.revision += 1;
   invalidateFrom(node, dirtyForAttribute(node.name, key, previous, value));
 }
 
 export function removeAttribute(node: TypeGpuNode, key: string): void {
+  if (!(key in node.attributes)) return;
+
   const previous = node.attributes[key];
   delete node.attributes[key];
   node.revision += 1;

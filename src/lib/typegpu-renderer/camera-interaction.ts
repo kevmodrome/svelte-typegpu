@@ -686,7 +686,7 @@ function activeInputControlsFor(
 
   return {
     pointer,
-    keyboard: null
+    keyboard: controller.keyboard
   };
 }
 
@@ -731,14 +731,17 @@ function cameraControllersEqual(
     return (
       previous.camera === next.camera &&
       previous.enabled === next.enabled &&
+      previous.mode === next.mode &&
       vectorEqual(previous.target, next.target) &&
       previous.minDistance === next.minDistance &&
       previous.maxDistance === next.maxDistance &&
+      previous.invert === next.invert &&
       previous.enablePan === next.enablePan &&
       previous.enableZoom === next.enableZoom &&
       previous.enableRotate === next.enableRotate &&
       previous.rotateSpeed === next.rotateSpeed &&
-      previous.zoomSpeed === next.zoomSpeed
+      previous.zoomSpeed === next.zoomSpeed &&
+      keyboardControlsEqual(previous.keyboard, next.keyboard)
     );
   }
 
@@ -894,11 +897,11 @@ function rotateCamera(
   const rotated = rotateOrbit(orbit, dx, dy, {
     minDistance: controller.minDistance,
     maxDistance: controller.maxDistance,
-    invert: controller.kind === 'controls' ? controller.invert : false,
+    invert: controller.kind === 'controls' ? controller.invert : controller.invert,
     rotateSpeed
   });
 
-  if (controller.kind === 'controls' && controller.mode === 'fly') {
+  if (controller.mode === 'fly') {
     return pinOrbitToCameraPosition(rotated, cameraFromOrbit(orbit, scene.camera).position);
   }
 

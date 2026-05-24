@@ -1,5 +1,11 @@
 <script lang="ts">
-  import { createCubeField, sceneCameraForCount, type CubeInstance } from './lib/cube-field';
+  import { sineInOut } from 'svelte/easing';
+  import { Tween, prefersReducedMotion } from 'svelte/motion';
+  import Cube from './Cube.typegpu.svelte';
+  import FeatureSphere from './FeatureSphere.typegpu.svelte';
+  import Quadrant from './Quadrant.typegpu.svelte';
+  import { sceneCameraForCount } from './lib/cube-field';
+  import { createCubeQuadrants, type QuadrantCubeInstance } from './lib/cube-quadrants';
   import { demoColorForIndex } from './lib/demo-colors';
   import type { CameraChangeDetail, SceneControls } from './lib/scene-controls';
   import type { RgbaTuple, Vector3Tuple } from './lib/typegpu-renderer/types';
@@ -16,38 +22,50 @@
     onCameraChange?: (detail: CameraChangeDetail) => void;
   }
 
+  const FEATURE_CUBE_SPIN_RATE = 1.35;
+  const FEATURE_SPHERE_SPIN_RATE = 1.7;
+  const SCALE_TWEEN_MS = 180;
+  const SPIN_TWEEN_BASE_MS = 320;
+  const SPIN_TWEEN_PER_UNIT_MS = 100;
+
   let {
     controls,
     onShapeClick = () => {},
     onCameraChange = () => {}
   }: Props = $props();
 
-  let boxes = $derived(createCubeField(controls.cubeCount));
   let frame = $derived(sceneCameraForCount(controls.cubeCount));
   let cubeSize = $derived(frame.cubeSize);
-  let animationSpeed = $derived(controls.spinEnabled ? controls.spinSpeed : 0);
+  let quadrants = $derived(createCubeQuadrants(controls.cubeCount, frame.floorSize));
+  let smoothScale = Tween.of(() => controls.cubeScale, {
+    duration: () => (prefersReducedMotion.current ? 0 : SCALE_TWEEN_MS),
+    easing: sineInOut
+  });
+  let smoothAnimationSpeed = Tween.of(() => (controls.spinEnabled ? controls.spinSpeed : 0), {
+    duration: (from, to) =>
+      prefersReducedMotion.current
+        ? 0
+        : SPIN_TWEEN_BASE_MS + Math.abs(to - from) * SPIN_TWEEN_PER_UNIT_MS,
+    easing: sineInOut
+  });
+  let sceneScale = $derived(smoothScale.current);
+  let animationSpeed = $derived(smoothAnimationSpeed.current);
   let featureOffset = $derived(Math.max(1.4, frame.floorSize * 0.18));
   let featureScale = $derived(Math.max(0.55, cubeSize * 2.2));
 
-  function cubeKey(box: CubeInstance): number {
+  function cubeKey(box: QuadrantCubeInstance): number {
     return box.id;
   }
 
-  function cubeTransform(box: CubeInstance): InstanceTransform {
+  function cubeTransform(box: QuadrantCubeInstance): InstanceTransform {
     return {
       position: box.position,
       scale: [cubeSize, cubeSize, cubeSize]
     };
   }
 
-  function cubeColor(box: CubeInstance): RgbaTuple {
-    return demoColorForIndex(box.id, 0);
-  }
-
-  function activateShapeFromKeyboard(event: KeyboardEvent) {
-    if (event.key === 'Enter' || event.key === ' ') {
-      onShapeClick();
-    }
+  function cubeColor(box: QuadrantCubeInstance): RgbaTuple {
+    return demoColorForIndex(box.id, box.colorOffset);
   }
 
   function handleCameraChange(event: CustomEvent<CameraChangeDetail>) {
@@ -56,7 +74,7 @@
 </script>
 
 <scene
-  scale={controls.cubeScale}
+  scale={sceneScale}
   {animationSpeed}
   colorShift={controls.hue}
   clearColor={[0.067, 0.078, 0.102, 1]}
@@ -69,17 +87,28 @@
     fov={controls.camera.fov}
     near={controls.camera.near}
     far={controls.camera.far}
-  ></perspectiveCamera>
-
-  <orbitControls
-    camera="main"
-    target={controls.camera.target}
-    minDistance={1}
-    maxDistance={100}
-    rotateSpeed={controls.mouseSensitivity}
-    zoomSpeed={1}
-    oncamerachange={handleCameraChange}
-  ></orbitControls>
+  >
+    <controls mode="fly" minDistance={1} maxDistance={100} oncamerachange={handleCameraChange}>
+      <pointerControls rotateSpeed={controls.mouseSensitivity}></pointerControls>
+      <keyboardControls
+        rotateLeft="ArrowLeft"
+        rotateRight="ArrowRight"
+        rotateUp="ArrowUp"
+        rotateDown="ArrowDown"
+        zoomIn="+"
+        zoomOut="-"
+        moveForward="KeyW"
+        moveBackward="KeyS"
+        moveLeft="KeyA"
+        moveRight="KeyD"
+        moveUp="Space"
+        moveDown="KeyC"
+        step={0.08}
+        moveStep={0.35}
+        smooth={true}
+      ></keyboardControls>
+    </controls>
+  </perspectiveCamera>
 
   <resources>
     <boxGeometry id="cube" width={1} height={1} depth={1}></boxGeometry>
@@ -118,42 +147,24 @@
     decay={2}
   ></pointLight>
 
-  <instancedMesh
-    geometry="cube"
-    material="fieldMaterial"
-    instances={boxes}
-    getKey={cubeKey}
-    getTransform={cubeTransform}
-    getColor={cubeColor}
-    phase={0}
-    spinSpeed={animationSpeed}
-  ></instancedMesh>
+  {#each quadrants as quadrant (quadrant.id)}
+    <Quadrant {quadrant} getKey={cubeKey} getTransform={cubeTransform} getColor={cubeColor} />
+  {/each}
 
-  <mesh
-    role="button"
-    tabindex="0"
-    aria-label="Change featured cube color"
-    geometry="cube"
-    material="featureMaterial"
+  <Cube
+    ariaLabel="Change featured cube color"
     color={demoColorForIndex(3, 24)}
     position={[-featureOffset, featureScale * 0.7, -featureOffset]}
     scale={[featureScale, featureScale * 0.7, featureScale]}
-    spinSpeed={animationSpeed * 1.35}
-    onclick={onShapeClick}
-    onkeydown={activateShapeFromKeyboard}
-  ></mesh>
+    spinSpeed={FEATURE_CUBE_SPIN_RATE}
+    onActivate={onShapeClick}
+  />
 
-  <mesh
-    role="button"
-    tabindex="0"
-    aria-label="Change featured sphere color"
+  <FeatureSphere
+    ariaLabel="Change featured sphere color"
     position={[featureOffset, featureScale * 0.8, featureOffset]}
     color={demoColorForIndex(7, 38)}
-    spinSpeed={animationSpeed * 1.7}
-    onclick={onShapeClick}
-    onkeydown={activateShapeFromKeyboard}
-  >
-    <sphereGeometry radius={0.45} widthSegments={24} heightSegments={12}></sphereGeometry>
-    <standardMaterial color={[0.62, 0.76, 1, 1]} roughness={0.24} metalness={0.18}></standardMaterial>
-  </mesh>
+    spinSpeed={FEATURE_SPHERE_SPIN_RATE}
+    onActivate={onShapeClick}
+  />
 </scene>

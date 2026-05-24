@@ -108,6 +108,7 @@ const pointerEvents = new Set([
   'pointerdown',
   'pointerup'
 ]);
+const MAX_STABLE_TUPLE_LENGTH = 32;
 
 export function normalizePrimitiveName(name: string): string {
   return aliases.get(name) ?? name;
@@ -119,7 +120,7 @@ export function dirtyForAttribute(
   previous: unknown,
   next: unknown
 ): Dirty {
-  if (sameStableScalar(previous, next)) return Dirty.None;
+  if (sameAttributeValue(previous, next)) return Dirty.None;
 
   const name = normalizePrimitiveName(nodeName ?? '');
 
@@ -253,8 +254,16 @@ function dirtyForTreeChange(nodeName: string | undefined): Dirty {
   return Dirty.Tree;
 }
 
-function sameStableScalar(previous: unknown, next: unknown): boolean {
-  return isStableScalar(previous) && isStableScalar(next) && Object.is(previous, next);
+export function sameAttributeValue(previous: unknown, next: unknown): boolean {
+  if (isStableScalar(previous) && isStableScalar(next) && Object.is(previous, next)) return true;
+  if (!Array.isArray(previous) || !Array.isArray(next)) return false;
+  if (Object.is(previous, next)) return true;
+  if (previous.length !== next.length || previous.length > MAX_STABLE_TUPLE_LENGTH) return false;
+
+  return previous.every(
+    (value, index) =>
+      isStableScalar(value) && isStableScalar(next[index]) && Object.is(value, next[index])
+  );
 }
 
 function isStableScalar(value: unknown): boolean {

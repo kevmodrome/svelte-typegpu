@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import { compile } from 'svelte/compiler';
 import * as svelteClient from 'svelte/internal/client';
 import { describe, expect, it, vi } from 'vitest';
-import { createCubeField, sceneCameraForCount } from './lib/cube-field';
+import { sceneCameraForCount } from './lib/cube-field';
+import { createCubeQuadrants } from './lib/cube-quadrants';
 import { demoColorForIndex } from './lib/demo-colors';
 import {
   DEFAULT_SCENE_CONTROLS,
@@ -16,27 +17,42 @@ import {
   type TypeGpuNode
 } from './lib/typegpu-renderer/core';
 import renderer from './lib/typegpu-renderer/svelte-renderer';
+import type { Vector3Tuple } from './lib/typegpu-renderer/types';
 
 describe('TypeGPU demo scene authoring API', () => {
   const source = readFileSync('src/Scene.typegpu.svelte', 'utf8');
 
-  it('authors the public demo around target primitives and reusable resources', () => {
+  it('authors the public demo around named scene components and reusable resources', () => {
+    const quadrantSource = readFileSync('src/Quadrant.typegpu.svelte', 'utf8');
+    const cubeSource = readFileSync('src/Cube.typegpu.svelte', 'utf8');
+    const sphereSource = readFileSync('src/FeatureSphere.typegpu.svelte', 'utf8');
+
+    expect(source).toContain("import Quadrant from './Quadrant.typegpu.svelte'");
+    expect(source).toContain("import Cube from './Cube.typegpu.svelte'");
+    expect(source).toContain("import FeatureSphere from './FeatureSphere.typegpu.svelte'");
+    expect(source).toContain('<Quadrant');
+    expect(source).toContain('<Cube');
+    expect(source).toContain('<FeatureSphere');
     expect(source).not.toMatch(/from\s+['"].\/(?:Box|Sphere)\.typegpu\.svelte['"]/);
     expect(source).not.toMatch(/<\/?(?:Box|Sphere)\b/);
     expect(source).toContain('<perspectiveCamera');
-    expect(source).toContain('<orbitControls');
+    expect(source).toContain('<controls');
+    expect(source).toContain('<pointerControls');
+    expect(source).toContain('<keyboardControls');
     expect(source).toContain('<resources>');
     expect(source).toContain('<boxGeometry id="cube"');
     expect(source).toContain('<texture id="checker"');
     expect(source).toContain('<sampler id="repeatLinear"');
     expect(source).toMatch(/<phongMaterial[\s\S]*id="fieldMaterial"/);
-    expect(source).toContain('<instancedMesh');
+    expect(quadrantSource).toContain('<instancedMesh');
+    expect(cubeSource).toContain('<mesh');
+    expect(sphereSource).toContain('<sphereGeometry');
     expect(source).not.toContain('<cameraPose');
-    expect(source).not.toContain('<controls');
+    expect(source).not.toContain('<orbitControls');
     expect(source).not.toContain('/models/column.glb');
   });
 
-  it('renders resources, orbit controls, one instanced cube field, and clickable feature meshes', () => {
+  it('renders resources, orbit controls, instanced cube quadrants, and clickable feature meshes', () => {
     const root = createFragment();
     const Scene = loadTypeGpuSceneComponent(source);
     const onShapeClick = vi.fn();
@@ -62,14 +78,16 @@ describe('TypeGPU demo scene authoring API', () => {
 
     const scene = onlyElement(root, 'scene');
     const camera = onlyNamed(scene, 'perspectiveCamera');
-    const orbitControls = onlyNamed(scene, 'orbitControls');
+    const controlsNode = onlyNamed(camera, 'controls');
+    const pointerControls = onlyNamed(controlsNode, 'pointerControls');
+    const keyboardControls = onlyNamed(controlsNode, 'keyboardControls');
     const resources = onlyNamed(scene, 'resources');
     const boxGeometry = onlyNamed(resources, 'boxGeometry');
     const texture = onlyNamed(resources, 'texture');
     const sampler = onlyNamed(resources, 'sampler');
     const fieldMaterial = onlyNamed(resources, 'phongMaterial');
     const featureMaterial = onlyNamed(resources, 'standardMaterial');
-    const instancedMesh = onlyNamed(scene, 'instancedMesh');
+    const instancedMeshes = namedChildren(scene, 'instancedMesh');
     const meshes = namedChildren(scene, 'mesh');
 
     expect(scene.attributes).toMatchObject({
@@ -87,12 +105,30 @@ describe('TypeGPU demo scene authoring API', () => {
       near: controls.camera.near,
       far: controls.camera.far
     });
-    expect(orbitControls.attributes).toMatchObject({
-      camera: 'main',
-      target: controls.camera.target,
+    expect(controlsNode.attributes).toMatchObject({
+      mode: 'fly',
       minDistance: 1,
-      maxDistance: 100,
+      maxDistance: 100
+    });
+    expect(pointerControls.attributes).toMatchObject({
       rotateSpeed: 1.75
+    });
+    expect(keyboardControls.attributes).toMatchObject({
+      rotateLeft: 'ArrowLeft',
+      rotateRight: 'ArrowRight',
+      rotateUp: 'ArrowUp',
+      rotateDown: 'ArrowDown',
+      zoomIn: '+',
+      zoomOut: '-',
+      moveForward: 'KeyW',
+      moveBackward: 'KeyS',
+      moveLeft: 'KeyA',
+      moveRight: 'KeyD',
+      moveUp: 'Space',
+      moveDown: 'KeyC',
+      step: 0.08,
+      moveStep: 0.35,
+      smooth: true
     });
 
     expect(boxGeometry.attributes).toMatchObject({
@@ -121,32 +157,55 @@ describe('TypeGPU demo scene authoring API', () => {
       metalness: 0.28
     });
 
-    expect(instancedMesh.attributes).toMatchObject({
+    expect(instancedMeshes).toHaveLength(4);
+    expect(instancedMeshes.map((mesh) => mesh.attributes.instances)).toHaveLength(4);
+    expect(instancedMeshes.map((mesh) => (mesh.attributes.instances as unknown[]).length)).toEqual([
+      3, 3, 2, 2
+    ]);
+    expect(
+      instancedMeshes.reduce(
+        (total, mesh) => total + (mesh.attributes.instances as unknown[]).length,
+        0
+      )
+    ).toBe(10);
+    expect(instancedMeshes.map((mesh) => mesh.attributes.spinSpeed)).toEqual([
+      0.35, 0.8, 1.25, 1.75
+    ]);
+    expect(instancedMeshes.map((mesh) => mesh.attributes.scale)).toEqual([0.7, 0.9, 1.1, 1.3]);
+    expect(instancedMeshes.map((mesh) => mesh.attributes.phase)).toEqual([0, 0.7, 1.4, 2.1]);
+    expect((instancedMeshes[0].attributes.position as Vector3Tuple)[0]).toBeLessThan(0);
+    expect((instancedMeshes[0].attributes.position as Vector3Tuple)[2]).toBeLessThan(0);
+    expect((instancedMeshes[3].attributes.position as Vector3Tuple)[0]).toBeGreaterThan(0);
+    expect((instancedMeshes[3].attributes.position as Vector3Tuple)[2]).toBeGreaterThan(0);
+
+    const firstQuadrant = instancedMeshes[0];
+    expect(firstQuadrant.attributes).toMatchObject({
       geometry: 'cube',
-      material: 'fieldMaterial',
-      phase: 0,
-      spinSpeed: 1.25
+      material: 'fieldMaterial'
     });
-    expect(instancedMesh.attributes.instances).toHaveLength(10);
-    expect(attributeFunction<(box: { id: number }, index: number) => number>(instancedMesh, 'getKey')(
-      { id: 4 },
-      4
-    )).toBe(4);
+    expect(
+      attributeFunction<(box: { id: number }, index: number) => number>(firstQuadrant, 'getKey')(
+        { id: 4 },
+        4
+      )
+    ).toBe(4);
     expect(
       attributeFunction<
         (box: { position: [number, number, number] }, index: number) => {
           position: [number, number, number];
           scale: [number, number, number];
         }
-      >(instancedMesh, 'getTransform')({ position: [1, 2, 3] }, 0)
+      >(firstQuadrant, 'getTransform')({ position: [1, 2, 3] }, 0)
     ).toMatchObject({
       position: [1, 2, 3],
       scale: [0.24, 0.24, 0.24]
     });
-    expect(attributeFunction<(box: { id: number }, index: number) => unknown>(instancedMesh, 'getColor')(
-      { id: 0 },
-      0
-    )).toEqual(demoColorForIndex(0, 0));
+    expect(
+      attributeFunction<(box: { id: number; colorOffset: number }, index: number) => unknown>(
+        firstQuadrant,
+        'getColor'
+      )({ id: 0, colorOffset: 0 }, 0)
+    ).toEqual(demoColorForIndex(0, 0));
 
     expect(meshes).toHaveLength(2);
     expect(meshes[0].attributes).toMatchObject({
@@ -154,12 +213,14 @@ describe('TypeGPU demo scene authoring API', () => {
       tabindex: '0',
       'aria-label': 'Change featured cube color',
       geometry: 'cube',
-      material: 'featureMaterial'
+      material: 'featureMaterial',
+      spinSpeed: 1.35
     });
     expect(meshes[1].attributes).toMatchObject({
       role: 'button',
       tabindex: '0',
-      'aria-label': 'Change featured sphere color'
+      'aria-label': 'Change featured sphere color',
+      spinSpeed: 1.7
     });
     expect(onlyNamed(meshes[1], 'sphereGeometry').attributes.radius).toBeCloseTo(0.45);
 
@@ -179,10 +240,46 @@ describe('TypeGPU demo scene authoring API', () => {
         pitch: 0.1
       }
     };
-    dispatchNodeEvent(orbitControls, 'camerachange', { detail: cameraChange });
+    dispatchNodeEvent(controlsNode, 'camerachange', { detail: cameraChange });
 
     expect(onShapeClick).toHaveBeenCalledTimes(2);
     expect(onCameraChange).toHaveBeenCalledWith(cameraChange);
+  });
+
+  it('routes pause and scale changes through tweened scene values', () => {
+    const root = createFragment();
+    const Tween = {
+      of: vi.fn((readTarget: () => number) => ({
+        get current() {
+          const target = readTarget();
+
+          if (target === 0) return 0.37;
+          if (target === 1.9) return 1.61;
+
+          return target;
+        }
+      }))
+    };
+    const Scene = loadTypeGpuSceneComponent(source, { Tween });
+    const controls: SceneControls = {
+      ...DEFAULT_SCENE_CONTROLS,
+      spinEnabled: false,
+      spinSpeed: 1.5,
+      cubeScale: 1.9
+    };
+
+    renderer.render(Scene, {
+      target: root,
+      props: { controls }
+    });
+
+    const scene = onlyElement(root, 'scene');
+
+    expect(Tween.of).toHaveBeenCalledTimes(2);
+    expect(scene.attributes).toMatchObject({
+      scale: 1.61,
+      animationSpeed: 0.37
+    });
   });
 });
 
@@ -226,9 +323,42 @@ function attributeFunction<T extends (...args: any[]) => unknown>(
   return value as T;
 }
 
-function loadTypeGpuSceneComponent(source: string) {
+function loadTypeGpuSceneComponent(source: string, dependencies: Record<string, unknown> = {}) {
+  const Quadrant = loadTypeGpuComponent('src/Quadrant.typegpu.svelte');
+  const Cube = loadTypeGpuComponent('src/Cube.typegpu.svelte');
+  const FeatureSphere = loadTypeGpuComponent('src/FeatureSphere.typegpu.svelte');
+
+  return loadTypeGpuComponent('src/Scene.typegpu.svelte', source, {
+    Cube,
+    FeatureSphere,
+    Quadrant,
+    Tween: createImmediateTweenApi(),
+    prefersReducedMotion: { current: false },
+    sineInOut: (time: number) => time,
+    createCubeQuadrants,
+    sceneCameraForCount,
+    demoColorForIndex,
+    ...dependencies
+  });
+}
+
+function createImmediateTweenApi() {
+  return {
+    of: (readTarget: () => number) => ({
+      get current() {
+        return readTarget();
+      }
+    })
+  };
+}
+
+function loadTypeGpuComponent(
+  filename: string,
+  source = readFileSync(filename, 'utf8'),
+  dependencies: Record<string, unknown> = {}
+) {
   const result = compile(source, {
-    filename: 'src/Scene.typegpu.svelte',
+    filename,
     generate: 'client',
     runes: true,
     experimental: {
@@ -236,25 +366,22 @@ function loadTypeGpuSceneComponent(source: string) {
     }
   });
   const componentName = result.js.code.match(/export default function ([^(]+)/)?.[1];
-  if (!componentName) throw new Error('Unable to find compiled Scene component name');
+  if (!componentName) throw new Error(`Unable to find compiled component name for ${filename}`);
 
   const executableCode = result.js.code
     .replace(/^import .*;\n/gm, '')
     .replace(`export default function ${componentName}`, `function ${componentName}`);
+  const dependencyNames = Object.keys(dependencies);
   const createComponent = new Function(
     '$',
     '$renderer',
-    'createCubeField',
-    'sceneCameraForCount',
-    'demoColorForIndex',
+    ...dependencyNames,
     `${executableCode}\nreturn ${componentName};`
   );
 
   return createComponent(
     svelteClient,
     renderer,
-    createCubeField,
-    sceneCameraForCount,
-    demoColorForIndex
+    ...dependencyNames.map((name) => dependencies[name])
   ) as Parameters<typeof renderer.render>[0];
 }

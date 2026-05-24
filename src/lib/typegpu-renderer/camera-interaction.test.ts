@@ -186,14 +186,17 @@ function directOrbitControls(
     kind: 'orbit',
     camera: 'main',
     enabled: true,
+    mode: 'orbit',
     target: [0, 0, 0],
     minDistance: 1,
     maxDistance: 100,
+    invert: false,
     enablePan: true,
     enableZoom: true,
     enableRotate: true,
     rotateSpeed: 1,
     zoomSpeed: 1,
+    keyboard: null,
     ...overrides
   };
 }
@@ -394,6 +397,141 @@ describe('TypeGPU camera interaction controller', () => {
         }
       }
     });
+  });
+
+  it('rotates from direct orbit keyboard controls and dispatches camerachange from the orbit node', () => {
+    const canvas = fakeFocusableCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const orbitNode = createElement('orbitControls');
+    const cameraChanges: unknown[] = [];
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    addEventListener(orbitNode, 'camerachange', (event) => {
+      cameraChanges.push(event);
+    });
+
+    controller.reconcile(
+      sceneState({
+        cameraControllerNode: orbitNode,
+        controller: directOrbitControls({ keyboard: keyboardControls })
+      })
+    );
+    const keyEvent = canvas.dispatch<KeyboardEvent>('keydown', {
+      key: 'ArrowLeft',
+      code: 'ArrowLeft',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+
+    expect(canvas.tabIndex).toBe(0);
+    expect(canvas.listenerCount('keydown')).toBe(1);
+    expect(keyEvent.preventDefault).toHaveBeenCalledOnce();
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+    const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+    expect(nextCamera.position[0]).toBeLessThan(0);
+    expect(cameraChanges).toHaveLength(1);
+    expect(cameraChanges[0]).toMatchObject({
+      target: orbitNode,
+      originalEvent: keyEvent,
+      detail: {
+        camera: nextCamera,
+        orbit: {
+          radius: expect.any(Number),
+          yaw: expect.any(Number),
+          pitch: expect.any(Number)
+        }
+      }
+    });
+  });
+
+  it('uses direct orbit fly keyboard controls for smooth diagonal movement', () => {
+    const canvas = fakeFocusableCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const frames = fakeFrameScheduler();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: frames.requestFrame,
+      cancelFrame: frames.cancelFrame
+    });
+
+    controller.reconcile(
+      sceneState({
+        controller: directOrbitControls({
+          keyboard: { ...keyboardControls, smooth: true },
+          mode: 'fly'
+        } as Partial<TypeGpuOrbitCameraController>)
+      })
+    );
+    canvas.dispatch<KeyboardEvent>('keydown', {
+      key: 'w',
+      code: 'KeyW',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+    canvas.dispatch<KeyboardEvent>('keydown', {
+      key: 'a',
+      code: 'KeyA',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+
+    expect(renderer.setCamera).not.toHaveBeenCalled();
+    frames.runFrame();
+
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+    const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+    expect(nextCamera.position).toEqual([-0.247487, 0, 4.752513]);
+    expect(nextCamera.target).toEqual([-0.247487, 0, -0.247487]);
+    expect(frames.pendingCount()).toBe(1);
+  });
+
+  it('uses direct orbit fly keyboard controls for rotation and movement in one smooth frame', () => {
+    const canvas = fakeFocusableCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const frames = fakeFrameScheduler();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      requestFrame: frames.requestFrame,
+      cancelFrame: frames.cancelFrame
+    });
+
+    controller.reconcile(
+      sceneState({
+        controller: directOrbitControls({
+          keyboard: { ...keyboardControls, smooth: true },
+          mode: 'fly'
+        } as Partial<TypeGpuOrbitCameraController>)
+      })
+    );
+    canvas.dispatch<KeyboardEvent>('keydown', {
+      key: 'w',
+      code: 'KeyW',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+    canvas.dispatch<KeyboardEvent>('keydown', {
+      key: 'ArrowLeft',
+      code: 'ArrowLeft',
+      preventDefault: vi.fn()
+    } as Partial<KeyboardEvent>);
+    frames.runFrame();
+
+    expect(renderer.setCamera).toHaveBeenCalledOnce();
+    const nextCamera = renderer.setCamera.mock.calls[0][0] as TypeGpuCameraSettings;
+    expect(nextCamera.position[0]).toBeGreaterThan(0);
+    expect(nextCamera.position[2]).toBeLessThan(5);
+    expect(nextCamera.target[0]).toBeGreaterThan(nextCamera.position[0]);
   });
 
   it('honors disabled direct orbit rotation while keeping wheel zoom active', () => {

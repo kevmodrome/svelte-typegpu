@@ -103,7 +103,7 @@ function readPointerControls(node: TypeGpuNode): TypeGpuPointerControls {
   };
 }
 
-function readKeyboardControls(node: TypeGpuNode): TypeGpuKeyboardControls {
+export function readKeyboardControls(node: TypeGpuNode): TypeGpuKeyboardControls {
   return {
     rotateLeft: stringArg(node.attributes.rotateLeft, DEFAULT_KEYBOARD_CONTROLS.rotateLeft),
     rotateRight: stringArg(node.attributes.rotateRight, DEFAULT_KEYBOARD_CONTROLS.rotateRight),

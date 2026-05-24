@@ -281,16 +281,24 @@ describe('TypeGPU renderer core', () => {
     const scene = createElement('scene');
     const camera = createElement('perspectiveCamera');
     const controls = createElement('orbitControls');
+    const keyboard = createElement('keyboardControls');
 
     setAttribute(controls, 'camera', 'main');
+    setAttribute(controls, 'mode', 'fly');
     setAttribute(controls, 'target', [1, 2, 3]);
     setAttribute(controls, 'minDistance', 4);
     setAttribute(controls, 'maxDistance', 20);
+    setAttribute(controls, 'invert', true);
     setAttribute(controls, 'enablePan', false);
     setAttribute(controls, 'enableZoom', true);
     setAttribute(controls, 'enableRotate', false);
     setAttribute(controls, 'rotateSpeed', 1.5);
     setAttribute(controls, 'zoomSpeed', 0.75);
+    setAttribute(keyboard, 'rotateLeft', 'KeyJ');
+    setAttribute(keyboard, 'moveForward', 'KeyI');
+    setAttribute(keyboard, 'step', 0.12);
+    setAttribute(keyboard, 'moveStep', 0.6);
+    insert(controls, keyboard, null);
     insert(scene, camera, null);
     insert(scene, controls, null);
     insert(root, scene, null);
@@ -299,14 +307,33 @@ describe('TypeGPU renderer core', () => {
       kind: 'orbit',
       camera: 'main',
       enabled: true,
+      mode: 'fly',
       target: [1, 2, 3],
       minDistance: 4,
       maxDistance: 20,
+      invert: true,
       enablePan: false,
       enableZoom: true,
       enableRotate: false,
       rotateSpeed: 1.5,
-      zoomSpeed: 0.75
+      zoomSpeed: 0.75,
+      keyboard: {
+        rotateLeft: 'KeyJ',
+        rotateRight: 'ArrowRight',
+        rotateUp: 'ArrowUp',
+        rotateDown: 'ArrowDown',
+        zoomIn: '+',
+        zoomOut: '-',
+        moveForward: 'KeyI',
+        moveBackward: 'KeyS',
+        moveLeft: 'KeyA',
+        moveRight: 'KeyD',
+        moveUp: 'Space',
+        moveDown: 'KeyC',
+        step: 0.12,
+        moveStep: 0.6,
+        smooth: false
+      }
     });
   });
 
@@ -1018,6 +1045,38 @@ describe('TypeGPU renderer core', () => {
       expect(hasDirty(dirtyMask, Dirty.DrawBatches)).toBe(false);
       expect(hasDirty(dirtyMask, Dirty.Lights)).toBe(false);
     }
+  });
+
+  it('does not invalidate for unchanged attribute references or equivalent numeric tuples', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const instancedMesh = createElement('instancedMesh');
+    const mesh = createElement('mesh');
+    const instances = [{ id: 1 }, { id: 2 }];
+    const scheduleSync = vi.fn();
+
+    insert(scene, instancedMesh, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+    root.runtime = { scheduleSync };
+
+    setAttribute(instancedMesh, 'instances', instances);
+    const instanceRevision = instancedMesh.revision;
+    scheduleSync.mockClear();
+
+    setAttribute(instancedMesh, 'instances', instances);
+
+    expect(scheduleSync).not.toHaveBeenCalled();
+    expect(instancedMesh.revision).toBe(instanceRevision);
+
+    setAttribute(mesh, 'position', [1, 2, 3]);
+    const meshRevision = mesh.revision;
+    scheduleSync.mockClear();
+
+    setAttribute(mesh, 'position', [1, 2, 3]);
+
+    expect(scheduleSync).not.toHaveBeenCalled();
+    expect(mesh.revision).toBe(meshRevision);
   });
 
   it('keeps structural camera-control insertions out of draw-batch and light dirtiness', () => {

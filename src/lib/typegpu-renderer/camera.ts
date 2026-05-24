@@ -1,6 +1,6 @@
 import { clampedNumberArg, numberArg, vectorTuple } from './attributes';
 import { findFirst, type TypeGpuNode } from './core';
-import { readLegacyPerspectiveCameraControllerState } from './legacy-camera';
+import { readKeyboardControls, readLegacyPerspectiveCameraControllerState } from './legacy-camera';
 import {
   add3,
   cross3,
@@ -196,6 +196,7 @@ function readCameraSettings(node: TypeGpuNode): TypeGpuNormalizedCameraSettings 
 }
 
 function readOrbitController(node: TypeGpuNode): TypeGpuCameraController {
+  const keyboard = firstChildNamed(node, 'keyboardControls');
   const minDistance = clampedNumberArg(
     node.attributes.minDistance,
     DEFAULT_MIN_DISTANCE,
@@ -212,14 +213,17 @@ function readOrbitController(node: TypeGpuNode): TypeGpuCameraController {
     kind: 'orbit',
     camera: stringOrNull(node.attributes.camera),
     enabled: node.attributes.enabled !== false,
+    mode: stringOption(node.attributes.mode, ['orbit', 'fly'], 'orbit'),
     target: vectorTuple(node.attributes.target, DEFAULT_CAMERA.target),
     minDistance: minDistance <= maxDistance ? minDistance : DEFAULT_MIN_DISTANCE,
     maxDistance: minDistance <= maxDistance ? maxDistance : DEFAULT_MAX_DISTANCE,
+    invert: node.attributes.invert === true,
     enablePan: node.attributes.enablePan !== false,
     enableZoom: node.attributes.enableZoom !== false,
     enableRotate: node.attributes.enableRotate !== false,
     rotateSpeed: clampedNumberArg(node.attributes.rotateSpeed, 1, 0, 100),
-    zoomSpeed: clampedNumberArg(node.attributes.zoomSpeed, 1, 0, 100)
+    zoomSpeed: clampedNumberArg(node.attributes.zoomSpeed, 1, 0, 100),
+    keyboard: keyboard ? readKeyboardControls(keyboard) : null
   };
 
   return controller;
@@ -267,4 +271,12 @@ function normalizeClipPlanes(near: number, far: number): [number, number] {
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function stringOption<const T extends string>(
+  value: unknown,
+  options: readonly T[],
+  fallback: T
+): T {
+  return typeof value === 'string' && options.includes(value as T) ? (value as T) : fallback;
 }

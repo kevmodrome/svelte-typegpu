@@ -96,14 +96,17 @@ export interface TypeGpuOrbitCameraController {
   kind: 'orbit';
   camera: string | null;
   enabled: boolean;
+  mode: TypeGpuControlsMode;
   target: Vector3Tuple;
   minDistance: number;
   maxDistance: number;
+  invert: boolean;
   enablePan: boolean;
   enableZoom: boolean;
   enableRotate: boolean;
   rotateSpeed: number;
   zoomSpeed: number;
+  keyboard: TypeGpuKeyboardControls | null;
 }
 
 export type TypeGpuCameraController = TypeGpuControlsController | TypeGpuOrbitCameraController;
