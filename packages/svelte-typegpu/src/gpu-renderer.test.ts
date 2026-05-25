@@ -1,10 +1,17 @@
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { loadMaterialTextureImageSource, SCENE_UNIFORM_FLOATS } from './gpu-renderer';
-import { MESH_INSTANCE_FLOATS, MESH_ROTATION_OFFSET } from './instance-data';
+import {
+  createDirectionalShadowViewProjection,
+  drawTypeGpuShadowBatch,
+  loadMaterialTextureImageSource,
+  SCENE_UNIFORM_FLOATS,
+  shadowBoundsForDrawBatches,
+  shadowDepthForPoint
+} from './gpu-renderer';
+import { MESH_INSTANCE_FLOATS, MESH_ROTATION_OFFSET, MESH_VERTEX_FLOATS } from './instance-data';
 import { TextureResourceCache } from './resource-caches';
-import type { TypeGpuTextureSource } from './types';
+import type { TypeGpuDrawBatch, TypeGpuLight, TypeGpuTextureSource } from './types';
 
 describe('TypeGPU GPU renderer', () => {
   const rendererSource = readFileSync(new URL('./gpu-renderer.ts', import.meta.url), 'utf8');
@@ -345,7 +352,9 @@ describe('TypeGPU GPU renderer', () => {
 
   it('uses declarative shadow resources without raw WebGPU resource creation', () => {
     expect(layoutsSource).toContain('shadowBindGroupLayout');
+    expect(layoutsSource).toContain('shadowPassBindGroupLayout');
     expect(rendererSource).toContain('root.createBindGroup(shadowBindGroupLayout');
+    expect(rendererSource).toContain('root.createBindGroup(shadowPassBindGroupLayout');
     expect(rendererSource).toContain('root.createBuffer(typegpuShadowSchema)');
     expect(rendererSource).toContain('root.createComparisonSampler');
     expect(rendererSource).toContain(".$usage('render', 'sampled')");
@@ -358,6 +367,40 @@ describe('TypeGPU GPU renderer', () => {
     expect(source).not.toContain('device.createRenderPipeline');
   });
 
+  it('binds only the shadow-pass uniform group while drawing the shadow depth pass', () => {
+    const { pipeline, calls } = createRecordingPipeline();
+    const pass = { kind: 'shadow-pass' };
+    const sceneBindGroup = { kind: 'scene-bind-group' };
+    const shadowPassBindGroup = { kind: 'shadow-pass-uniform-bind-group' };
+    const sampledShadowBindGroup = { kind: 'shadow-sampled-bind-group' };
+
+    drawTypeGpuShadowBatch({
+      pipeline: pipeline as never,
+      pass: pass as never,
+      sceneBindGroup: sceneBindGroup as never,
+      shadowPassBindGroup: shadowPassBindGroup as never,
+      geometryResource: {
+        key: 'box',
+        vertexBuffer: { buffer: { kind: 'vertices' } },
+        vertexCount: 3
+      } as never,
+      instanceResource: {
+        key: 'instances',
+        buffer: { buffer: { kind: 'instances' } },
+        byteLength: MESH_INSTANCE_FLOATS * Float32Array.BYTES_PER_ELEMENT,
+        instanceCount: 1
+      } as never,
+      batch: drawBatchFixture()
+    });
+
+    expect(calls.map((call) => call[0])).toContain(pass);
+    expect(calls.map((call) => call[0])).toContain(sceneBindGroup);
+    expect(calls.map((call) => call[0])).toContain(shadowPassBindGroup);
+    expect(calls.map((call) => call[0])).not.toContain(sampledShadowBindGroup);
+    expect(calls).not.toContainEqual([undefined]);
+    expect(pipeline.draw).toHaveBeenCalledWith(3, 1);
+  });
+
   it('renders the shadow pass before the main material pass and filters non-casters', () => {
     const shadowPassIndex = rendererSource.indexOf('beginTypeGpuShadowPass');
     const mainPassIndex = rendererSource.indexOf('beginTypeGpuRenderPass');
@@ -366,6 +409,7 @@ describe('TypeGPU GPU renderer', () => {
     expect(mainPassIndex).toBeGreaterThan(shadowPassIndex);
     expect(rendererSource).toContain('if (!batch.castShadow) continue;');
     expect(rendererSource).toContain('drawTypeGpuShadowBatch');
+    expect(rendererSource).toContain('shadowPassBindGroup: this.#shadowPassBindGroup');
   });
 
   it('recreates and destroys the shadow map texture when the declarative map size changes', () => {
@@ -373,6 +417,39 @@ describe('TypeGPU GPU renderer', () => {
     expect(rendererSource).toContain('this.#shadowTexture?.destroy()');
     expect(rendererSource).toMatch(/size:\s*\[mapSize,\s*mapSize\]/);
     expect(rendererSource).toContain('this.#shadowTexture?.destroy();');
+  });
+
+  it('computes WebGPU 0..1 shadow depths consistently for caster and receiver points', () => {
+    const matrix = createDirectionalShadowViewProjection(
+      lightFixture({ direction: [0, -1, 0] }),
+      [drawBatchFixture()],
+      1
+    );
+    const casterDepth = shadowDepthForPoint(matrix, [0, 1, 0]);
+    const receiverDepth = shadowDepthForPoint(matrix, [0, 0, 0]);
+    const occludedDepth = shadowDepthForPoint(matrix, [0, -1, 0]);
+
+    expect(casterDepth).toBeGreaterThanOrEqual(0);
+    expect(occludedDepth).toBeLessThanOrEqual(1);
+    expect(casterDepth).toBeLessThan(receiverDepth);
+    expect(receiverDepth).toBeLessThan(occludedDepth);
+    expect(shadowDepthForPoint(matrix, [0, 0, 0])).toBeCloseTo(receiverDepth);
+  });
+
+  it('uses conservative shadow bounds that include scene scale and rotations', () => {
+    const batch = drawBatchFixture({
+      geometryBounds: {
+        min: [-5, -0.25, -0.25],
+        max: [5, 0.25, 0.25]
+      },
+      rotation: [0, Math.PI / 2, 0]
+    });
+
+    const bounds = shadowBoundsForDrawBatches([batch], 3);
+
+    expect(bounds).not.toBeNull();
+    expect(bounds!.min[2]).toBeLessThanOrEqual(-15);
+    expect(bounds!.max[2]).toBeGreaterThanOrEqual(15);
   });
 
   it('seeds initial scene state with empty camera metadata', () => {
@@ -434,6 +511,112 @@ function urlTexture(src: string): TypeGpuTextureSource {
     kind: 'url',
     key: `url:${src}`,
     src
+  };
+}
+
+function createRecordingPipeline() {
+  const calls: unknown[][] = [];
+  const pipeline = {
+    with: vi.fn((...args: unknown[]) => {
+      calls.push(args);
+      return pipeline;
+    }),
+    withIndexBuffer: vi.fn((...args: unknown[]) => {
+      calls.push(args);
+      return pipeline;
+    }),
+    draw: vi.fn(),
+    drawIndexed: vi.fn()
+  };
+
+  return { pipeline, calls };
+}
+
+function lightFixture(overrides: Partial<TypeGpuLight> = {}): TypeGpuLight {
+  return {
+    id: 1,
+    revision: 1,
+    kind: 'directional',
+    color: [1, 1, 1],
+    intensity: 1,
+    position: [0, 2, 0],
+    direction: [0, -1, 0],
+    range: 0,
+    decay: 2,
+    angle: Math.PI / 6,
+    penumbra: 0,
+    groundColor: [0, 0, 0],
+    castsShadow: true,
+    shadowIndex: 0,
+    shadowMapSize: 1024,
+    shadowBias: 0.0005,
+    shadowSlopeBias: 1.5,
+    ...overrides
+  };
+}
+
+function drawBatchFixture({
+  geometryBounds = { min: [-1, -1, -1], max: [1, 1, 1] },
+  position = [0, 0, 0],
+  scale = [1, 1, 1],
+  rotation = [0, 0, 0],
+  material = {}
+}: {
+  geometryBounds?: { min: [number, number, number]; max: [number, number, number] };
+  position?: [number, number, number];
+  scale?: [number, number, number];
+  rotation?: [number, number, number];
+  material?: Partial<TypeGpuDrawBatch['material']>;
+} = {}): TypeGpuDrawBatch {
+  const instances = new Float32Array(MESH_INSTANCE_FLOATS);
+  instances[0] = position[0];
+  instances[1] = position[1];
+  instances[2] = position[2];
+  instances[8] = scale[0];
+  instances[9] = scale[1];
+  instances[10] = scale[2];
+  instances[13] = rotation[0];
+  instances[14] = rotation[1];
+  instances[15] = rotation[2];
+
+  return {
+    key: 'pass:main|pipeline:standard:opaque|material:standard:white|bind:solid|box|order:0|shadow:cast',
+    passKey: 'pass:main',
+    pipelineKey: 'pipeline:standard:opaque',
+    materialKey: 'material:standard:white',
+    bindGroupKey: 'bind:solid',
+    geometryKey: 'box',
+    geometry: {
+      key: 'box',
+      vertexData: new Float32Array(MESH_VERTEX_FLOATS * 3),
+      vertexCount: 3,
+      vertexFloats: MESH_VERTEX_FLOATS,
+      bounds: geometryBounds
+    },
+    material: {
+      kind: 'standard',
+      color: [1, 1, 1, 1],
+      roughness: 0.45,
+      metalness: 0.05,
+      opacity: 1,
+      textureKey: 'solid:white',
+      samplerKey: 'sampler:default',
+      transparent: false,
+      depthWrite: true,
+      depthTest: true,
+      cullMode: 'back',
+      blendMode: 'opaque',
+      map: null,
+      ...material
+    },
+    castShadow: true,
+    floatsPerInstance: MESH_INSTANCE_FLOATS,
+    instances,
+    instanceIds: ['a'],
+    instanceCount: 1,
+    instancesChanged: true,
+    dirtyRanges: [{ start: 0, count: 1 }],
+    sortKey: 0
   };
 }
 

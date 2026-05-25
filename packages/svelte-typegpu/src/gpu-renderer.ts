@@ -22,7 +22,6 @@ import {
   lookAtMatrix,
   multiply4,
   normalize3,
-  orthographicMatrix,
   scale3
 } from './math3d';
 import { DEPTH_FORMAT } from './render-constants';
@@ -48,6 +47,7 @@ import {
   meshVertexLayout,
   sceneBindGroupLayout,
   shadowBindGroupLayout,
+  shadowPassBindGroupLayout,
   TYPEGPU_SCENE_UNIFORM_FLOATS,
   typegpuLightingSchema,
   typegpuShadowSchema,
@@ -176,6 +176,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #shadowBindGroup: TgpuBindGroup<typeof shadowBindGroupLayout.entries>;
   #shadowBuffer: TypeGpuShadowUniformBuffer;
   #shadowMapSize = 0;
+  #shadowPassBindGroup: TgpuBindGroup<typeof shadowPassBindGroupLayout.entries>;
   #shadowPipeline: TypeGpuShadowPipeline | null = null;
   #shadowPipelineKey = '';
   #shadowSampler: TgpuFixedComparisonSampler;
@@ -229,6 +230,9 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     });
     this.#shadowTexture = this.#createShadowTexture(1);
     this.#shadowBindGroup = this.#createShadowBindGroup(this.#shadowTexture);
+    this.#shadowPassBindGroup = root.createBindGroup(shadowPassBindGroupLayout, {
+      shadow: this.#shadowBuffer
+    });
     this.#geometryResources = new GeometryResourceCache(root);
     this.#instanceBuffers = new InstanceBufferCache(root);
     this.#textureResources = new TextureResourceCache(root, () => this.invalidate());
@@ -383,7 +387,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
               pipeline: shadowPipeline,
               pass,
               sceneBindGroup: this.#sceneBindGroup,
-              shadowBindGroup: this.#shadowBindGroup,
+              shadowPassBindGroup: this.#shadowPassBindGroup,
               geometryResource,
               instanceResource,
               batch
@@ -506,7 +510,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
     return {
       light,
-      viewProjection: createDirectionalShadowViewProjection(light, this.#drawBatches)
+      viewProjection: createDirectionalShadowViewProjection(light, this.#drawBatches, this.#scale)
     };
   }
 
@@ -782,11 +786,11 @@ function drawTypeGpuMaterialBatch({
   materialPipeline.draw(batch.geometry.vertexCount, instanceResource.instanceCount);
 }
 
-function drawTypeGpuShadowBatch({
+export function drawTypeGpuShadowBatch({
   pipeline,
   pass,
   sceneBindGroup,
-  shadowBindGroup,
+  shadowPassBindGroup,
   geometryResource,
   instanceResource,
   batch
@@ -794,7 +798,7 @@ function drawTypeGpuShadowBatch({
   pipeline: TypeGpuShadowPipeline;
   pass: GPURenderPassEncoder;
   sceneBindGroup: TgpuBindGroup<typeof sceneBindGroupLayout.entries>;
-  shadowBindGroup: TgpuBindGroup<typeof shadowBindGroupLayout.entries>;
+  shadowPassBindGroup: TgpuBindGroup<typeof shadowPassBindGroupLayout.entries>;
   geometryResource: TypeGpuVertexBufferResource;
   instanceResource: TypeGpuInstanceBufferResource;
   batch: TypeGpuDrawBatch;
@@ -804,7 +808,7 @@ function drawTypeGpuShadowBatch({
   const shadowPipeline = pipeline
     .with(pass)
     .with(sceneBindGroup)
-    .with(shadowBindGroup)
+    .with(shadowPassBindGroup)
     .with(meshVertexLayout, geometryResource.vertexBuffer.buffer)
     .with(meshInstanceLayout, instanceResource.buffer.buffer);
 
@@ -830,11 +834,12 @@ function packShadowState(activeShadow: TypeGpuActiveShadow | null): ArrayBuffer 
   return arrayBufferFor(data);
 }
 
-function createDirectionalShadowViewProjection(
+export function createDirectionalShadowViewProjection(
   light: TypeGpuLight,
-  drawBatches: TypeGpuDrawBatch[]
+  drawBatches: TypeGpuDrawBatch[],
+  sceneScale = 1
 ): Float32Array {
-  const bounds = shadowBoundsForDrawBatches(drawBatches);
+  const bounds = shadowBoundsForDrawBatches(drawBatches, sceneScale);
   const center = bounds
     ? ([
         (bounds.min[0] + bounds.max[0]) / 2,
@@ -847,13 +852,14 @@ function createDirectionalShadowViewProjection(
   const eye = add3(center, scale3(direction, -radius * 2));
   const up: Vector3Tuple = Math.abs(direction[1]) > 0.95 ? [0, 0, 1] : [0, 1, 0];
   const view = lookAtMatrix(eye, center, up);
-  const projection = orthographicMatrix(-radius, radius, -radius, radius, 0.1, radius * 4);
+  const projection = orthographicDepthZeroToOneMatrix(-radius, radius, -radius, radius, 0.1, radius * 4);
 
   return multiply4(projection, view);
 }
 
-function shadowBoundsForDrawBatches(
-  drawBatches: TypeGpuDrawBatch[]
+export function shadowBoundsForDrawBatches(
+  drawBatches: TypeGpuDrawBatch[],
+  sceneScale = 1
 ): { min: Vector3Tuple; max: Vector3Tuple } | null {
   let min: Vector3Tuple | null = null;
   let max: Vector3Tuple | null = null;
@@ -876,7 +882,12 @@ function shadowBoundsForDrawBatches(
         batch.instances[offset + 9],
         batch.instances[offset + 10]
       ];
-      const instanceBounds = transformAabbByScaleAndPosition(localBounds, scale, position);
+      const instanceBounds = conservativeShadowBoundsForInstance(
+        localBounds,
+        scale,
+        position,
+        sceneScale
+      );
 
       if (!min || !max) {
         min = [...instanceBounds.min] as Vector3Tuple;
@@ -900,22 +911,33 @@ function shadowBoundsForDrawBatches(
   return min && max ? { min, max } : null;
 }
 
-function transformAabbByScaleAndPosition(
+function conservativeShadowBoundsForInstance(
   bounds: { min: Vector3Tuple; max: Vector3Tuple },
   scale: Vector3Tuple,
-  position: Vector3Tuple
+  position: Vector3Tuple,
+  sceneScale: number
 ): { min: Vector3Tuple; max: Vector3Tuple } {
-  const min: Vector3Tuple = [0, 0, 0];
-  const max: Vector3Tuple = [0, 0, 0];
+  let radius = 0;
 
-  for (let axis = 0; axis < 3; axis += 1) {
-    const a = bounds.min[axis] * scale[axis];
-    const b = bounds.max[axis] * scale[axis];
-    min[axis] = position[axis] + Math.min(a, b);
-    max[axis] = position[axis] + Math.max(a, b);
+  for (const x of [bounds.min[0], bounds.max[0]]) {
+    for (const y of [bounds.min[1], bounds.max[1]]) {
+      for (const z of [bounds.min[2], bounds.max[2]]) {
+        radius = Math.max(
+          radius,
+          Math.hypot(
+            x * scale[0] * sceneScale,
+            y * scale[1] * sceneScale,
+            z * scale[2] * sceneScale
+          )
+        );
+      }
+    }
   }
 
-  return { min, max };
+  return {
+    min: [position[0] - radius, position[1] - radius, position[2] - radius],
+    max: [position[0] + radius, position[1] + radius, position[2] + radius]
+  };
 }
 
 function shadowRadiusForBounds(bounds: { min: Vector3Tuple; max: Vector3Tuple }): number {
@@ -925,6 +947,40 @@ function shadowRadiusForBounds(bounds: { min: Vector3Tuple; max: Vector3Tuple })
   const radius = Math.hypot(width, height, depth) / 2;
 
   return Math.max(1, radius);
+}
+
+export function shadowDepthForPoint(matrix: Float32Array, point: Vector3Tuple): number {
+  const x = point[0];
+  const y = point[1];
+  const z = point[2];
+  const w = matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15];
+
+  if (!Number.isFinite(w) || Math.abs(w) <= 1e-12) {
+    throw new Error('Cannot compute shadow depth for a point with invalid clip-space w.');
+  }
+
+  return (matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14]) / w;
+}
+
+function orthographicDepthZeroToOneMatrix(
+  left: number,
+  right: number,
+  bottom: number,
+  top: number,
+  near: number,
+  far: number
+): Float32Array {
+  const matrix = new Float32Array(16);
+
+  matrix[0] = 2 / (right - left);
+  matrix[5] = 2 / (top - bottom);
+  matrix[10] = -1 / (far - near);
+  matrix[12] = -(right + left) / (right - left);
+  matrix[13] = -(top + bottom) / (top - bottom);
+  matrix[14] = -near / (far - near);
+  matrix[15] = 1;
+
+  return matrix;
 }
 
 function identityMatrix4(): Float32Array {

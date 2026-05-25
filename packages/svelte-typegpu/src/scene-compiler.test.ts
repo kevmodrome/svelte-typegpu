@@ -213,6 +213,35 @@ describe('TypeGPU scene compiler', () => {
     expect(state.drawBatches[0].floatsPerInstance).toBe(MESH_INSTANCE_FLOATS);
   });
 
+  it('does not cast declarative shadows from transparent or non-depth-writing surfaces', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const transparentMesh = createElement('mesh');
+    const transparentGeometry = createElement('boxGeometry');
+    const transparentMaterial = createElement('standardMaterial');
+    const depthlessMesh = createElement('mesh');
+    const depthlessGeometry = createElement('boxGeometry');
+    const depthlessMaterial = createElement('standardMaterial');
+
+    setAttribute(transparentMesh, 'castShadow', true);
+    setAttribute(transparentMaterial, 'opacity', 0.5);
+    setAttribute(depthlessMesh, 'castShadow', true);
+    setAttribute(depthlessMesh, 'position', [3, 0, 0]);
+    setAttribute(depthlessMaterial, 'depthWrite', false);
+    insert(transparentMesh, transparentGeometry, null);
+    insert(transparentMesh, transparentMaterial, null);
+    insert(depthlessMesh, depthlessGeometry, null);
+    insert(depthlessMesh, depthlessMaterial, null);
+    insert(scene, transparentMesh, null);
+    insert(scene, depthlessMesh, null);
+    insert(root, scene, null);
+
+    const state = createSceneState(root, createTypeGpuSceneCache(), { dirty: Dirty.All });
+
+    expect(state.drawBatches.every((batch) => !batch.castShadow)).toBe(true);
+    expect(state.drawBatches.every((batch) => !batch.key.includes('shadow:cast'))).toBe(true);
+  });
+
   it('resolves geometry and material string references through scene resources', () => {
     const root = createFragment();
     const scene = createElement('scene');

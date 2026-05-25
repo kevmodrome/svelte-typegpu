@@ -106,3 +106,10 @@ export const shadowBindGroupLayout = tgpu
   })
   .$idx(3)
   .$name('TypeGPU shadow map bind group layout');
+
+export const shadowPassBindGroupLayout = tgpu
+  .bindGroupLayout({
+    shadow: { uniform: typegpuShadowSchema, visibility: ['vertex'] }
+  })
+  .$idx(1)
+  .$name('TypeGPU shadow pass bind group layout');

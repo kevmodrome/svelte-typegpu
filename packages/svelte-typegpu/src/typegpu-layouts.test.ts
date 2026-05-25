@@ -5,6 +5,7 @@ import {
   materialBindGroupLayout,
   MAX_TYPEGPU_LIGHTS,
   shadowBindGroupLayout,
+  shadowPassBindGroupLayout,
   TYPEGPU_LIGHT_RECORD_BYTES,
   TYPEGPU_LIGHTING_BYTES,
   TYPEGPU_SHADOW_UNIFORM_BYTES,
@@ -160,5 +161,12 @@ describe('TypeGPU layout schemas', () => {
     expect(shadowBindGroupLayout.entries.shadow?.uniform).toBe(typegpuShadowSchema);
     expect(shadowBindGroupLayout.entries.shadowMap?.texture.type).toBe('texture_depth_2d');
     expect(shadowBindGroupLayout.entries.shadowSampler?.sampler).toBe('comparison');
+  });
+
+  it('describes a separate contiguous shadow-pass uniform bind group', () => {
+    expect(shadowPassBindGroupLayout.index).toBe(1);
+    expect(shadowPassBindGroupLayout.entries.shadow?.uniform).toBe(typegpuShadowSchema);
+    expect('shadowMap' in shadowPassBindGroupLayout.entries).toBe(false);
+    expect('shadowSampler' in shadowPassBindGroupLayout.entries).toBe(false);
   });
 });

@@ -36,6 +36,17 @@ describe('TypeGPU draw batch cache', () => {
     expect(new Set(batches.map((batch) => batch.key)).size).toBe(6);
   });
 
+  it('separates shadow casters from visually identical non-casters', () => {
+    const batches = createDrawBatchCache().read([
+      drawItem({ id: 'plain' }),
+      drawItem({ id: 'caster', castShadow: true })
+    ]);
+
+    expect(batches).toHaveLength(2);
+    expect(batches.map((batch) => batch.castShadow)).toEqual([false, true]);
+    expect(batches[1].key).toContain('shadow:cast');
+  });
+
   it('reuses instance buffers when instance ids and revisions match', () => {
     const cache = createDrawBatchCache();
     const first = cache.read([drawItem({ id: 'a', revision: 1 })]);
@@ -90,7 +101,8 @@ function drawItem({
   materialKey = 'material:standard:white',
   pipelineKey = 'pipeline:standard:opaque',
   bindGroupKey = 'bind:solid',
-  renderOrder = 0
+  renderOrder = 0,
+  castShadow = false
 }: {
   id: string;
   revision?: number;
@@ -99,6 +111,7 @@ function drawItem({
   pipelineKey?: string;
   bindGroupKey?: string;
   renderOrder?: number;
+  castShadow?: boolean;
 }): TypeGpuMeshDrawItem {
   return {
     id,
@@ -118,7 +131,7 @@ function drawItem({
     renderOrder,
     hitTest: 'bounds',
     pointerEvents: 'auto',
-    castShadow: false,
+    castShadow,
     receiveShadow: false
   };
 }

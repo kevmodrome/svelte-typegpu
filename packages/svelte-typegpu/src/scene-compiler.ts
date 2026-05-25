@@ -226,6 +226,7 @@ function readMeshDrawItem(
     material.node
   );
   const localBounds = geometry.value.bounds ?? defaultBounds();
+  const color = rgbaArg(mesh.attributes.color, effectiveMaterial.color);
 
   items.push({
     id: mesh.uid,
@@ -235,14 +236,14 @@ function readMeshDrawItem(
     material: effectiveMaterial,
     transform,
     bounds: transformBounds(localBounds, transform),
-    color: rgbaArg(mesh.attributes.color, effectiveMaterial.color),
+    color,
     phase: numberArg(mesh.attributes.phase, 0),
     spinSpeed: numberArg(mesh.attributes.spinSpeed, 0),
     renderOrder: numberArg(mesh.attributes.renderOrder, 0),
     hitTest: hitTestMode(mesh.attributes.hitTest),
     pointerEvents: mesh.attributes.pointerEvents === 'none' ? 'none' : 'auto',
     drag: stringAttribute(mesh.attributes.drag),
-    castShadow: mesh.attributes.castShadow === true,
+    castShadow: castsDeclarativeShadow(mesh.attributes.castShadow, effectiveMaterial, color),
     receiveShadow: mesh.attributes.receiveShadow === true
   });
 
@@ -347,7 +348,7 @@ function readInstancedMeshDrawItems(
       hitTest: hitTestMode(instancedMesh.attributes.hitTest),
       pointerEvents: instancedMesh.attributes.pointerEvents === 'none' ? 'none' : 'auto',
       drag: stringAttribute(instancedMesh.attributes.drag),
-      castShadow: instancedMesh.attributes.castShadow === true,
+      castShadow: castsDeclarativeShadow(instancedMesh.attributes.castShadow, effectiveMaterial, color),
       receiveShadow: instancedMesh.attributes.receiveShadow === true
     });
   });
@@ -379,6 +380,7 @@ function readModelDrawItems(
     const geometry = mesh.geometry;
     const effectiveMaterial = materialForGeometry(material.value, geometry);
     const localBounds = geometry.bounds ?? defaultBounds();
+    const color = rgbaArg(modelNode.attributes.color, effectiveMaterial.color);
 
     items.push({
       id: `model:${modelNode.uid}:primitive:${index}`,
@@ -391,14 +393,14 @@ function readModelDrawItems(
       material: effectiveMaterial,
       transform,
       bounds: transformBounds(localBounds, transform),
-      color: rgbaArg(modelNode.attributes.color, effectiveMaterial.color),
+      color,
       phase: numberArg(modelNode.attributes.phase, 0),
       spinSpeed: numberArg(modelNode.attributes.spinSpeed, 0),
       renderOrder: numberArg(modelNode.attributes.renderOrder, 0),
       hitTest: hitTestMode(modelNode.attributes.hitTest),
       pointerEvents: modelNode.attributes.pointerEvents === 'none' ? 'none' : 'auto',
       drag: stringAttribute(modelNode.attributes.drag),
-      castShadow: modelNode.attributes.castShadow === true,
+      castShadow: castsDeclarativeShadow(modelNode.attributes.castShadow, effectiveMaterial, color),
       receiveShadow: modelNode.attributes.receiveShadow === true
     });
   });
@@ -539,6 +541,18 @@ function shouldRecomputeInteraction(dirty: Dirty): boolean {
 
 function stringAttribute(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function castsDeclarativeShadow(
+  requested: unknown,
+  material: TypeGpuMaterialDescriptor,
+  color: RgbaTuple
+): boolean {
+  if (requested !== true) return false;
+  if (material.depthWrite === false) return false;
+  if (material.transparent || material.blendMode !== 'opaque') return false;
+  if (material.opacity < 1 || material.color[3] < 1 || color[3] < 1) return false;
+  return true;
 }
 
 function defaultMaterial(): TypeGpuMaterialDescriptor {

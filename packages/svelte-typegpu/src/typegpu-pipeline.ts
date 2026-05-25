@@ -6,7 +6,8 @@ import {
   meshInstanceLayout,
   meshVertexLayout,
   sceneBindGroupLayout,
-  shadowBindGroupLayout
+  shadowBindGroupLayout,
+  shadowPassBindGroupLayout
 } from './typegpu-layouts';
 import type { TypeGpuMaterialDescriptor } from './types';
 
@@ -143,7 +144,7 @@ export const shadowVertexMain = tgpu
     let world_position = rotated_position + instance_position;
     var output: Out;
 
-    output.position = shadowBindGroupLayout.$.shadow.view_projection * vec4(world_position, 1.0);
+    output.position = shadowPassBindGroupLayout.$.shadow.view_projection * vec4(world_position, 1.0);
 
     return output;
   }`
@@ -152,7 +153,7 @@ export const shadowVertexMain = tgpu
     rotate_y: rotateY,
     rotate_z: rotateZ,
     sceneBindGroupLayout,
-    shadowBindGroupLayout
+    shadowPassBindGroupLayout
   })
   .$name('shadowVertexMain');
 
@@ -190,13 +191,13 @@ const evaluateShadow = tgpu
     if (
       ndc.x < -1.0 || ndc.x > 1.0 ||
       ndc.y < -1.0 || ndc.y > 1.0 ||
-      ndc.z < -1.0 || ndc.z > 1.0
+      ndc.z < 0.0 || ndc.z > 1.0
     ) {
       return 1.0;
     }
 
     let coords = ndc.xy * vec2(0.5, -0.5) + vec2(0.5, 0.5);
-    let depth = ndc.z * 0.5 + 0.5;
+    let depth = ndc.z;
     let bias = max(lightingBindGroupLayout_light.params.z, shadowBindGroupLayout.$.shadow.params.x);
     let surface_facing = max(dot(normal, normalize(-lightingBindGroupLayout_light.direction_angle.xyz)), 0.0);
     let normal_bias = bias * (1.0 + (1.0 - surface_facing));
