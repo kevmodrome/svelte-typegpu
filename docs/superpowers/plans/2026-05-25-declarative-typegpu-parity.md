@@ -59,7 +59,7 @@ Expected: PASS.
 - Test: `packages/svelte-typegpu/src/camera-interaction.test.ts`
 - Test: `packages/svelte-typegpu/src/scene-compiler.test.ts`
 
-- [ ] **Step 1: Add failing tests**
+- [x] **Step 1: Add failing tests**
 
 Add tests for `<mesh ondragmove={handler} drag="rotate">` so the renderer dispatches drag deltas to the mesh hit target while orbit controls keep normal camera dragging.
 
@@ -67,7 +67,7 @@ Run: `pnpm --filter svelte-typegpu --fail-if-no-match test -- camera-interaction
 
 Expected: FAIL because mesh drag listeners are not tracked.
 
-- [ ] **Step 2: Implement drag events**
+- [x] **Step 2: Implement drag events**
 
 Track `dragstart`, `dragmove`, and `dragend` as pointer events. When a pointerdown hits an interaction target with drag handlers, capture the pointer and dispatch deltas to that node instead of camera controls until release.
 
