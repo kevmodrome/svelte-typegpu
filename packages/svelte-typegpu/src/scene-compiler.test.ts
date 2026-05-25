@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import tgpu, { d } from 'typegpu';
 import { addEventListener, createElement, createFragment, insert, setAttribute } from './core';
 import { Dirty, hasDirty } from './dirty';
 import type { TypeGpuLoadedModel } from './glb-loader';
@@ -186,8 +187,8 @@ describe('TypeGPU scene compiler', () => {
     const scene = createElement('scene');
     const later = createElement('shaderPass');
     const earlier = createElement('shader-pass');
-    const laterFragment = () => null;
-    const earlierFragment = () => null;
+    const laterFragment = shaderPassFragmentFixture('laterFragment');
+    const earlierFragment = shaderPassFragmentFixture('earlierFragment');
 
     setAttribute(later, 'fragment', laterFragment);
     setAttribute(later, 'uniforms', { time: 'time' });
@@ -227,8 +228,8 @@ describe('TypeGPU scene compiler', () => {
     const inactive = createElement('shaderPass');
     const cache = createTypeGpuSceneCache();
 
-    setAttribute(active, 'fragment', () => null);
-    setAttribute(inactive, 'fragment', () => null);
+    setAttribute(active, 'fragment', shaderPassFragmentFixture('activeFragment'));
+    setAttribute(inactive, 'fragment', shaderPassFragmentFixture('inactiveFragment'));
     setAttribute(inactive, 'active', false);
     insert(scene, active, null);
     insert(scene, inactive, null);
@@ -241,6 +242,25 @@ describe('TypeGPU scene compiler', () => {
     expect(first.shaderPasses[0].node).toBe(active);
     expect(second.shaderPasses).toBe(first.shaderPasses);
     expect(second.shaderPassesChanged).toBe(false);
+  });
+
+  it('ignores shaderPass nodes without a valid fullscreen TypeGPU fragment', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const arbitrary = createElement('shaderPass');
+    const wrongSignature = createElement('shaderPass');
+
+    setAttribute(arbitrary, 'fragment', () => null);
+    setAttribute(wrongSignature, 'fragment', tgpu.fragmentFn({ out: d.vec4f })/* wgsl */ `{
+      return vec4f(1.0);
+    }`);
+    insert(scene, arbitrary, null);
+    insert(scene, wrongSignature, null);
+    insert(root, scene, null);
+
+    const state = createSceneState(root, createTypeGpuSceneCache(), { dirty: Dirty.All });
+
+    expect(state.shaderPasses).toHaveLength(0);
   });
 
   it('compiles model and instancedMesh castShadow attributes into shadow batches', async () => {
@@ -869,4 +889,15 @@ function loadedModelFixture(key: string): TypeGpuLoadedModel {
       }
     ]
   };
+}
+
+function shaderPassFragmentFixture(name: string) {
+  return tgpu
+    .fragmentFn({
+      in: { uv: d.vec2f },
+      out: d.vec4f
+    })/* wgsl */ `{
+      return vec4f(in.uv.x, in.uv.y, 0.0, 1.0);
+    }`
+    .$name(name);
 }

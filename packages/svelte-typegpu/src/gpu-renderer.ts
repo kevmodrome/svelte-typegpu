@@ -46,8 +46,8 @@ import {
   createShadowPipeline
 } from './typegpu-pipeline';
 import {
-  packShaderPassUniforms,
-  shaderPassPipelineResourceKey
+  shaderPassPipelineResourceKey,
+  writeShaderPassFrameUniforms
 } from './shader-pass';
 import {
   lightingBindGroupLayout,
@@ -108,6 +108,27 @@ type TypeGpuShadowTexture = TgpuTexture & RenderFlag & SampledFlag;
 type TypeGpuMeshPipeline = ReturnType<typeof createMeshPipeline>;
 type TypeGpuShadowPipeline = ReturnType<typeof createShadowPipeline>;
 type TypeGpuShaderPassPipeline = ReturnType<typeof createShaderPassPipeline>;
+
+export type TypeGpuRenderQueueItem =
+  | {
+      kind: 'mesh';
+      renderOrder: number;
+      sortKey: number;
+      sourceIndex: number;
+      batch: TypeGpuDrawBatch;
+    }
+  | {
+      kind: 'shaderPass';
+      renderOrder: number;
+      sortKey: number;
+      sourceIndex: number;
+      shaderPass: TypeGpuShaderPass;
+    };
+
+export interface TypeGpuRenderQueueHandlers {
+  drawMesh(batch: TypeGpuDrawBatch): void;
+  drawShaderPass(shaderPass: TypeGpuShaderPass): void;
+}
 
 interface TypeGpuActiveShadow {
   light: TypeGpuLight;
@@ -363,7 +384,6 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
           .map((batch) => pipelineResourceKeyFor(batch, scene.renderSettings.depth))
       )
     );
-    this.#pruneShaderPassPipelines(scene.shaderPasses);
     this.#instanceBuffers.prune(new Set(scene.drawBatches.map((batch) => batch.key)));
     this.invalidate();
   }
@@ -432,34 +452,35 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       clearColor: this.#renderSettings.clearColor,
       depthTexture: this.#renderSettings.depth ? this.#depthTexture : null,
       draw: (pass) => {
-        for (const batch of this.#drawBatches) {
-          const geometryResource = this.#geometryResources.getOrCreate(batch);
-          const instanceResource = this.#instanceBuffers.getOrCreate(batch);
-          const materialResource = this.#materialResources.getOrCreate(batch.material);
-          const pipeline = this.#pipelineForBatch(batch, this.#renderSettings.depth);
+        drawTypeGpuRenderQueue(createTypeGpuRenderQueue(this.#drawBatches, this.#shaderPasses), {
+          drawMesh: (batch) => {
+            const geometryResource = this.#geometryResources.getOrCreate(batch);
+            const instanceResource = this.#instanceBuffers.getOrCreate(batch);
+            const materialResource = this.#materialResources.getOrCreate(batch.material);
+            const pipeline = this.#pipelineForBatch(batch, this.#renderSettings.depth);
 
-          if (!instanceResource.buffer || instanceResource.instanceCount === 0) continue;
+            if (!instanceResource.buffer || instanceResource.instanceCount === 0) return;
 
-          drawTypeGpuMaterialBatch({
-            pipeline,
-            pass,
-            sceneBindGroup: this.#sceneBindGroup,
-            lightingBindGroup: this.#lightingBindGroup,
-            shadowBindGroup: this.#shadowBindGroup,
-            geometryResource,
-            instanceResource,
-            materialResource,
-            batch
-          });
-        }
-
-        for (const shaderPass of this.#shaderPasses) {
-          drawTypeGpuShaderPass({
-            pipeline: this.#shaderPassPipelineFor(shaderPass),
-            pass,
-            shaderPassBindGroup: this.#shaderPassBindGroup
-          });
-        }
+            drawTypeGpuMaterialBatch({
+              pipeline,
+              pass,
+              sceneBindGroup: this.#sceneBindGroup,
+              lightingBindGroup: this.#lightingBindGroup,
+              shadowBindGroup: this.#shadowBindGroup,
+              geometryResource,
+              instanceResource,
+              materialResource,
+              batch
+            });
+          },
+          drawShaderPass: (shaderPass) => {
+            drawTypeGpuShaderPass({
+              pipeline: this.#shaderPassPipelineFor(shaderPass),
+              pass,
+              shaderPassBindGroup: this.#shaderPassBindGroup
+            });
+          }
+        });
       }
     });
 
@@ -631,19 +652,6 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     return pipeline;
   }
 
-  #pruneShaderPassPipelines(shaderPasses: TypeGpuShaderPass[]): void {
-    const liveKeys = new Set(
-      shaderPasses.flatMap((shaderPass) => [
-        shaderPassPipelineResourceKey(shaderPass, true),
-        shaderPassPipelineResourceKey(shaderPass, false)
-      ])
-    );
-
-    for (const key of this.#shaderPassPipelines.keys()) {
-      if (!liveKeys.has(key)) this.#shaderPassPipelines.delete(key);
-    }
-  }
-
   #setAnimationSpeed(nextSpeed: number): void {
     if (this.#animationSpeed === nextSpeed) return;
 
@@ -721,14 +729,64 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   }
 
   #writeShaderPassUniforms(): void {
-    this.#shaderPassUniformBuffer.write(
-      packShaderPassUniforms({
-        time: this.#time,
-        width: this.#renderSize.width,
-        height: this.#renderSize.height
-      })
-    );
+    writeShaderPassFrameUniforms(this.#shaderPassUniformBuffer, {
+      time: this.#time,
+      renderSize: this.#renderSize
+    });
   }
+}
+
+export function createTypeGpuRenderQueue(
+  drawBatches: TypeGpuDrawBatch[],
+  shaderPasses: TypeGpuShaderPass[]
+): TypeGpuRenderQueueItem[] {
+  const queue: TypeGpuRenderQueueItem[] = [
+    ...drawBatches.map((batch, sourceIndex) => ({
+      kind: 'mesh' as const,
+      renderOrder: batch.renderOrder,
+      sortKey: batch.sortKey,
+      sourceIndex,
+      batch
+    })),
+    ...shaderPasses.map((shaderPass, sourceIndex) => ({
+      kind: 'shaderPass' as const,
+      renderOrder: shaderPass.renderOrder,
+      sortKey: shaderPass.sortKey,
+      sourceIndex,
+      shaderPass
+    }))
+  ];
+
+  return queue.sort(compareRenderQueueItems);
+}
+
+export function drawTypeGpuRenderQueue(
+  queue: TypeGpuRenderQueueItem[],
+  handlers: TypeGpuRenderQueueHandlers
+): void {
+  for (const item of queue) {
+    if (item.kind === 'mesh') {
+      handlers.drawMesh(item.batch);
+    } else {
+      handlers.drawShaderPass(item.shaderPass);
+    }
+  }
+}
+
+function compareRenderQueueItems(
+  left: TypeGpuRenderQueueItem,
+  right: TypeGpuRenderQueueItem
+): number {
+  return (
+    left.renderOrder - right.renderOrder ||
+    renderQueueKindRank(left.kind) - renderQueueKindRank(right.kind) ||
+    left.sortKey - right.sortKey ||
+    left.sourceIndex - right.sourceIndex
+  );
+}
+
+function renderQueueKindRank(kind: TypeGpuRenderQueueItem['kind']): number {
+  return kind === 'mesh' ? 0 : 1;
 }
 
 function beginTypeGpuRenderPass({

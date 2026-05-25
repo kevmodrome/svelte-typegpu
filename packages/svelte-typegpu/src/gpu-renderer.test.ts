@@ -2,7 +2,9 @@ import { readFileSync } from 'node:fs';
 import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  createTypeGpuRenderQueue,
   createDirectionalShadowViewProjection,
+  drawTypeGpuRenderQueue,
   drawTypeGpuShaderPass,
   drawTypeGpuShadowBatch,
   loadMaterialTextureImageSource,
@@ -12,8 +14,18 @@ import {
 } from './gpu-renderer';
 import { MESH_INSTANCE_FLOATS, MESH_ROTATION_OFFSET, MESH_VERTEX_FLOATS } from './instance-data';
 import { TextureResourceCache } from './resource-caches';
-import { packShaderPassUniforms } from './shader-pass';
-import type { TypeGpuDrawBatch, TypeGpuLight, TypeGpuTextureSource } from './types';
+import {
+  normalizeShaderPassUniforms,
+  packShaderPassUniforms,
+  shaderPassPipelineResourceKey,
+  writeShaderPassFrameUniforms
+} from './shader-pass';
+import type {
+  TypeGpuDrawBatch,
+  TypeGpuLight,
+  TypeGpuShaderPass,
+  TypeGpuTextureSource
+} from './types';
 
 describe('TypeGPU GPU renderer', () => {
   const rendererSource = readFileSync(new URL('./gpu-renderer.ts', import.meta.url), 'utf8');
@@ -381,6 +393,21 @@ describe('TypeGPU GPU renderer', () => {
     expect(Array.from(data)).toEqual([1.25, 0, 640, 360]);
   });
 
+  it('normalizes only the supported shader pass built-in uniforms', () => {
+    expect(
+      normalizeShaderPassUniforms({
+        time: 'time',
+        resolution: 'resolution',
+        customTime: 'time',
+        timeAlias: 'resolution',
+        ignored: 'custom'
+      })
+    ).toEqual({
+      time: 'time',
+      resolution: 'resolution'
+    });
+  });
+
   it('draws fullscreen shader passes through a TypeGPU full-screen triangle pipeline', () => {
     const { pipeline, calls } = createRecordingPipeline();
     const pass = { kind: 'main-render-pass' };
@@ -396,16 +423,91 @@ describe('TypeGPU GPU renderer', () => {
     expect(pipeline.draw).toHaveBeenCalledWith(3);
   });
 
-  it('renders fullscreen shader passes after mesh batches in shader-pass renderOrder', () => {
-    const materialIndex = rendererSource.indexOf('drawTypeGpuMaterialBatch');
-    const shaderIndex = rendererSource.indexOf('drawTypeGpuShaderPass');
+  it('builds and draws a unified render queue ordered across meshes and shader passes', () => {
+    const beforePass = shaderPassFixture({ key: 'before', renderOrder: -1 });
+    const middleMesh = drawBatchFixture({ renderOrder: 0 });
+    const afterPass = shaderPassFixture({ key: 'after', renderOrder: 3 });
+    const queue = createTypeGpuRenderQueue([middleMesh], [afterPass, beforePass]);
+    const calls: string[] = [];
 
-    expect(rendererSource).toContain('#shaderPasses');
-    expect(rendererSource).toContain('scene.shaderPasses');
-    expect(rendererSource).toMatch(/this\.\#shaderPassUniformBuffer\.write\(\s*packShaderPassUniforms/);
-    expect(rendererSource).toContain('this.#shaderPassPipelineFor(shaderPass)');
-    expect(materialIndex).toBeGreaterThanOrEqual(0);
-    expect(shaderIndex).toBeGreaterThan(materialIndex);
+    drawTypeGpuRenderQueue(queue, {
+      drawMesh(batch) {
+        calls.push(`mesh:${batch.renderOrder}`);
+      },
+      drawShaderPass(shaderPass) {
+        calls.push(`shader:${shaderPass.key}`);
+      }
+    });
+
+    expect(queue.map((item) => item.kind)).toEqual(['shaderPass', 'mesh', 'shaderPass']);
+    expect(calls).toEqual(['shader:before', 'mesh:0', 'shader:after']);
+  });
+
+  it('uses deterministic tie-breakers when mesh batches and shader passes share renderOrder', () => {
+    const firstMesh = drawBatchFixture({ renderOrder: 1, sortKey: 1 });
+    const secondMesh = drawBatchFixture({ renderOrder: 1, sortKey: 0 });
+    const thirdMesh = drawBatchFixture({ renderOrder: 1, sortKey: 1 });
+    const firstPass = shaderPassFixture({ key: 'first-pass', renderOrder: 1, sortKey: 1 });
+    const secondPass = shaderPassFixture({ key: 'second-pass', renderOrder: 1, sortKey: 0 });
+    const thirdPass = shaderPassFixture({ key: 'third-pass', renderOrder: 1, sortKey: 1 });
+    const queue = createTypeGpuRenderQueue(
+      [firstMesh, secondMesh, thirdMesh],
+      [firstPass, secondPass, thirdPass]
+    );
+
+    expect(queue.map((item) => item.kind === 'mesh' ? `mesh:${item.sourceIndex}` : item.shaderPass.key))
+      .toEqual(['mesh:1', 'mesh:0', 'mesh:2', 'second-pass', 'first-pass', 'third-pass']);
+  });
+
+  it('keeps shader pass pipeline keys stable across non-shader node changes', () => {
+    const fragment = shaderPassFixture({ key: 'base' }).fragment;
+    const base = shaderPassFixture({
+      key: 'base',
+      fragment,
+      renderOrder: 0,
+      revision: 1
+    });
+    const reordered = {
+      ...base,
+      renderOrder: 9,
+      revision: 2
+    };
+    const inactive = {
+      ...base,
+      active: false,
+      revision: 3
+    };
+    const changedFragment = shaderPassFixture({
+      key: 'base',
+      fragment: shaderPassFixture({ key: 'other' }).fragment
+    });
+
+    expect(shaderPassPipelineResourceKey(base, true)).toBe(
+      shaderPassPipelineResourceKey(reordered, true)
+    );
+    expect(shaderPassPipelineResourceKey(base, true)).toBe(
+      shaderPassPipelineResourceKey(inactive, true)
+    );
+    expect(shaderPassPipelineResourceKey(base, true)).not.toBe(
+      shaderPassPipelineResourceKey(changedFragment, true)
+    );
+  });
+
+  it('writes updated shader pass resolution uniforms for each render size', () => {
+    const writes: number[][] = [];
+    const buffer = {
+      write(data: ArrayBuffer) {
+        writes.push(Array.from(new Float32Array(data)));
+      }
+    };
+
+    writeShaderPassFrameUniforms(buffer, { time: 0.5, renderSize: { width: 320, height: 180 } });
+    writeShaderPassFrameUniforms(buffer, { time: 0.75, renderSize: { width: 640, height: 360 } });
+
+    expect(writes).toEqual([
+      [0.5, 0, 320, 180],
+      [0.75, 0, 640, 360]
+    ]);
   });
 
   it('binds only the shadow-pass uniform group while drawing the shadow depth pass', () => {
@@ -600,17 +702,37 @@ function lightFixture(overrides: Partial<TypeGpuLight> = {}): TypeGpuLight {
   };
 }
 
+function shaderPassFixture(overrides: Partial<TypeGpuShaderPass> = {}): TypeGpuShaderPass {
+  const fragment = {} as TypeGpuShaderPass['fragment'];
+
+  return {
+    key: 'shader-pass',
+    node: {} as never,
+    revision: 1,
+    fragment,
+    uniforms: { time: 'time', resolution: 'resolution' },
+    active: true,
+    renderOrder: 0,
+    sortKey: 0,
+    ...overrides
+  };
+}
+
 function drawBatchFixture({
   geometryBounds = { min: [-1, -1, -1], max: [1, 1, 1] },
   position = [0, 0, 0],
   scale = [1, 1, 1],
   rotation = [0, 0, 0],
+  renderOrder = 0,
+  sortKey = 0,
   material = {}
 }: {
   geometryBounds?: { min: [number, number, number]; max: [number, number, number] };
   position?: [number, number, number];
   scale?: [number, number, number];
   rotation?: [number, number, number];
+  renderOrder?: number;
+  sortKey?: number;
   material?: Partial<TypeGpuDrawBatch['material']>;
 } = {}): TypeGpuDrawBatch {
   const instances = new Float32Array(MESH_INSTANCE_FLOATS);
@@ -655,13 +777,14 @@ function drawBatchFixture({
       ...material
     },
     castShadow: true,
+    renderOrder,
     floatsPerInstance: MESH_INSTANCE_FLOATS,
     instances,
     instanceIds: ['a'],
     instanceCount: 1,
     instancesChanged: true,
     dirtyRanges: [{ start: 0, count: 1 }],
-    sortKey: 0
+    sortKey
   };
 }
 

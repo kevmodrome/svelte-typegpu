@@ -22,7 +22,7 @@ import {
   samplerKeyFor,
   textureKeyFor
 } from './material-descriptors';
-import { normalizeShaderPassUniforms } from './shader-pass';
+import { isShaderPassFragment, normalizeShaderPassUniforms } from './shader-pass';
 import { composeTransforms, IDENTITY_TRANSFORM, readLocalTransform } from './transform';
 import type {
   RgbaTuple,
@@ -220,13 +220,13 @@ function readShaderPass(node: TypeGpuNode, sortKey: number): TypeGpuShaderPass |
   if (node.attributes.active === false) return null;
 
   const fragment = node.attributes.fragment;
-  if (!fragment) return null;
+  if (!isShaderPassFragment(fragment)) return null;
 
   return {
     key: stringAttribute(node.attributes.id) ?? `shader-pass:${node.uid}`,
     node,
     revision: node.revision,
-    fragment: fragment as TypeGpuShaderPass['fragment'],
+    fragment,
     uniforms: normalizeShaderPassUniforms(node.attributes.uniforms),
     active: true,
     renderOrder: numberArg(node.attributes.renderOrder, 0),

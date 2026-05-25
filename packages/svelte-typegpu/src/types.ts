@@ -1,4 +1,4 @@
-import type { TgpuFragmentFn } from 'typegpu';
+import type { d, TgpuFragmentFn } from 'typegpu';
 import type { TypeGpuNode } from './core';
 import { Dirty } from './dirty';
 
@@ -321,6 +321,7 @@ export interface TypeGpuDrawBatch {
   geometry: TypeGpuGeometryData;
   material: TypeGpuMaterialDescriptor;
   castShadow: boolean;
+  renderOrder: number;
   floatsPerInstance: number;
   instances: Float32Array;
   instanceIds: TypeGpuInstanceId[];
@@ -331,8 +332,11 @@ export interface TypeGpuDrawBatch {
 }
 
 export type TypeGpuShaderPassUniformBuiltIn = 'time' | 'resolution';
-export type TypeGpuShaderPassUniformMap = Record<string, TypeGpuShaderPassUniformBuiltIn>;
-export type TypeGpuShaderPassFragment = TgpuFragmentFn<any, any>;
+export interface TypeGpuShaderPassUniformMap {
+  time?: 'time';
+  resolution?: 'resolution';
+}
+export type TypeGpuShaderPassFragment = TgpuFragmentFn<{ uv: d.Vec2f }, d.Vec4f>;
 
 export interface TypeGpuShaderPass {
   key: string;

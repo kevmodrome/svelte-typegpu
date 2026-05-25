@@ -147,6 +147,7 @@ function batchBase(
     geometry: item.geometry,
     material: item.material,
     castShadow: group.keys.castShadow,
+    renderOrder: group.keys.renderOrder,
     floatsPerInstance: MESH_INSTANCE_FLOATS,
     sortKey
   };
