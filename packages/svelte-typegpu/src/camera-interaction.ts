@@ -51,6 +51,7 @@ export interface TypeGpuCameraInteractionOptions {
   canvas: HTMLCanvasElement;
   renderer: TypeGpuCameraRenderer;
   windowTarget?: ListenerTarget;
+  shouldIgnorePointerDragStart?: (event: MouseEvent) => boolean;
   requestFrame?: RequestFrame;
   cancelFrame?: CancelFrame;
 }
@@ -65,6 +66,7 @@ export function createCameraInteractionController({
   canvas,
   renderer,
   windowTarget = globalThis.window as ListenerTarget,
+  shouldIgnorePointerDragStart = () => false,
   requestFrame = defaultRequestFrame,
   cancelFrame = defaultCancelFrame
 }: TypeGpuCameraInteractionOptions): TypeGpuCameraInteractionController {
@@ -255,7 +257,9 @@ export function createCameraInteractionController({
       !activePointerControls ||
       !orbit ||
       activePointerControls.rotateSpeed <= 0 ||
-      mouseEvent.button !== buttonNumber(activePointerControls.dragButton)
+      mouseEvent.button !== buttonNumber(activePointerControls.dragButton) ||
+      mouseEvent.defaultPrevented ||
+      shouldIgnorePointerDragStart(mouseEvent)
     ) {
       return;
     }

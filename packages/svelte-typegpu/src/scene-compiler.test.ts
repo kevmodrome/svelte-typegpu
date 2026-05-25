@@ -74,6 +74,37 @@ describe('TypeGPU scene compiler', () => {
     expect(hasDirty(state.dirty, Dirty.DrawBatches)).toBe(true);
   });
 
+  it('indexes declarative drag handlers and drag mode as interaction targets', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const mesh = createElement('mesh');
+    const geometry = createElement('boxGeometry');
+
+    setAttribute(mesh, 'drag', 'rotate');
+    addEventListener(mesh, 'dragstart', () => {});
+    addEventListener(mesh, 'dragmove', () => {});
+    addEventListener(mesh, 'dragend', () => {});
+    insert(mesh, geometry, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+
+    const state = createSceneState(root, createTypeGpuSceneCache(), { dirty: Dirty.All });
+
+    expect(state.interaction.targets).toHaveLength(1);
+    expect(state.interaction.targets[0]).toMatchObject({
+      node: mesh,
+      drawItemId: mesh.uid,
+      drag: 'rotate',
+      pointerEvents: 'auto',
+      hitTest: 'bounds'
+    });
+    expect([...state.interaction.targets[0].handlers].sort()).toEqual([
+      'dragend',
+      'dragmove',
+      'dragstart'
+    ]);
+  });
+
   it('resolves geometry and material string references through scene resources', () => {
     const root = createFragment();
     const scene = createElement('scene');

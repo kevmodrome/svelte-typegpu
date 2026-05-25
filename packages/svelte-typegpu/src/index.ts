@@ -8,6 +8,7 @@ export type {
   RgbaTuple,
   TypeGpuCameraSettings,
   TypeGpuControlsMode,
+  TypeGpuDragEventDetail,
   TypeGpuGeometryKind,
   TypeGpuInstanceId,
   TypeGpuMaterialKind,

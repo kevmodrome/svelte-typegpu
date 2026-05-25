@@ -8,6 +8,8 @@ import { Dirty, hasDirty } from './dirty';
 class FakeCanvas {
   clientWidth = 800;
   clientHeight = 600;
+  setPointerCapture = vi.fn();
+  releasePointerCapture = vi.fn();
   #listeners = new Map<string, Set<EventListenerOrEventListenerObject>>();
 
   addEventListener(type: string, listener: EventListenerOrEventListenerObject | null): void {
@@ -231,6 +233,196 @@ describe('TypeGPU Svelte renderer runtime', () => {
 
     expect(onFarMove).not.toHaveBeenCalled();
     expect(onNearMove).toHaveBeenCalledOnce();
+  });
+
+  it('dispatches drag events to the captured mesh instead of orbit controls', async () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const camera = createElement('perspectiveCamera');
+    const controls = createElement('controls');
+    const pointer = createElement('pointerControls');
+    const mesh = createElement('mesh');
+    const geometry = createElement('boxGeometry');
+    const dragEvents: unknown[] = [];
+    const canvas = new FakeCanvas();
+    const windowTarget = new FakeCanvas();
+    const renderer = fakeRenderer();
+    const runtime = createTypeGpuRuntimeForTest(
+      root,
+      canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget as unknown as Window
+    );
+
+    canvas.clientWidth = 100;
+    canvas.clientHeight = 100;
+    setAttribute(camera, 'position', [0, 0, 10]);
+    setAttribute(camera, 'target', [0, 0, 0]);
+    setAttribute(mesh, 'drag', 'rotate');
+    addEventListener(mesh, 'dragstart', (event) => dragEvents.push(event));
+    addEventListener(mesh, 'dragmove', (event) => dragEvents.push(event));
+    addEventListener(mesh, 'dragend', (event) => dragEvents.push(event));
+    insert(controls, pointer, null);
+    insert(camera, controls, null);
+    insert(mesh, geometry, null);
+    insert(scene, camera, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+
+    runtime.scheduleSync(root, scene, Dirty.All);
+    await Promise.resolve();
+    canvas.dispatch<PointerEvent>('pointerdown', {
+      pointerId: 7,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 50,
+      clientY: 50,
+      offsetX: 50,
+      offsetY: 50
+    } as Partial<PointerEvent>);
+    canvas.dispatch<MouseEvent>('mousedown', { button: 0, clientX: 50, clientY: 50 } as Partial<
+      MouseEvent
+    >);
+    canvas.dispatch<PointerEvent>('pointermove', {
+      pointerId: 7,
+      pointerType: 'mouse',
+      buttons: 1,
+      clientX: 65,
+      clientY: 55,
+      offsetX: 65,
+      offsetY: 55
+    } as Partial<PointerEvent>);
+    windowTarget.dispatch<MouseEvent>('mousemove', {
+      buttons: 1,
+      clientX: 110,
+      clientY: 20
+    } as Partial<MouseEvent>);
+    canvas.dispatch<PointerEvent>('pointerup', {
+      pointerId: 7,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 0,
+      clientX: 70,
+      clientY: 60,
+      offsetX: 70,
+      offsetY: 60
+    } as Partial<PointerEvent>);
+
+    expect(dragEvents.map((event) => (event as { type: string }).type)).toEqual([
+      'dragstart',
+      'dragmove',
+      'dragend'
+    ]);
+    expect(dragEvents).toEqual([
+      expect.objectContaining({
+        target: mesh,
+        detail: expect.objectContaining({
+          mode: 'rotate',
+          instanceId: mesh.uid,
+          pointerId: 7,
+          pointerType: 'mouse',
+          deltaX: 0,
+          deltaY: 0,
+          totalDeltaX: 0,
+          totalDeltaY: 0
+        })
+      }),
+      expect.objectContaining({
+        target: mesh,
+        detail: expect.objectContaining({
+          mode: 'rotate',
+          instanceId: mesh.uid,
+          pointerId: 7,
+          pointerType: 'mouse',
+          deltaX: 15,
+          deltaY: 5,
+          totalDeltaX: 15,
+          totalDeltaY: 5
+        })
+      }),
+      expect.objectContaining({
+        target: mesh,
+        detail: expect.objectContaining({
+          mode: 'rotate',
+          instanceId: mesh.uid,
+          pointerId: 7,
+          pointerType: 'mouse',
+          deltaX: 5,
+          deltaY: 5,
+          totalDeltaX: 20,
+          totalDeltaY: 10
+        })
+      })
+    ]);
+    expect(canvas.setPointerCapture).toHaveBeenCalledWith(7);
+    expect(canvas.releasePointerCapture).toHaveBeenCalledWith(7);
+    expect(renderer.setCamera).not.toHaveBeenCalled();
+  });
+
+  it('keeps orbit controls active when pointerdown misses draggable objects', async () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const camera = createElement('perspectiveCamera');
+    const controls = createElement('controls');
+    const pointer = createElement('pointerControls');
+    const mesh = createElement('mesh');
+    const geometry = createElement('boxGeometry');
+    const canvas = new FakeCanvas();
+    const windowTarget = new FakeCanvas();
+    const renderer = fakeRenderer();
+    const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
+    const runtime = createTypeGpuRuntimeForTest(
+      root,
+      canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget as unknown as Window
+    );
+
+    canvas.clientWidth = 100;
+    canvas.clientHeight = 100;
+    setAttribute(camera, 'position', [0, 0, 10]);
+    setAttribute(camera, 'target', [0, 0, 0]);
+    setAttribute(mesh, 'drag', 'rotate');
+    addEventListener(mesh, 'dragmove', () => {});
+    insert(controls, pointer, null);
+    insert(camera, controls, null);
+    insert(mesh, geometry, null);
+    insert(scene, camera, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+
+    runtime.scheduleSync(root, scene, Dirty.All);
+    await Promise.resolve();
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      callback(100);
+      return 42;
+    }) as typeof requestAnimationFrame;
+
+    try {
+      canvas.dispatch<PointerEvent>('pointerdown', {
+        pointerId: 8,
+        pointerType: 'mouse',
+        button: 0,
+        buttons: 1,
+        clientX: 5,
+        clientY: 5,
+        offsetX: 5,
+        offsetY: 5
+      } as Partial<PointerEvent>);
+      canvas.dispatch<MouseEvent>('mousedown', { button: 0, clientX: 5, clientY: 5 } as Partial<
+        MouseEvent
+      >);
+      windowTarget.dispatch<MouseEvent>('mousemove', {
+        buttons: 1,
+        clientX: 55,
+        clientY: 5
+      } as Partial<MouseEvent>);
+
+      expect(renderer.setCamera).toHaveBeenCalledOnce();
+    } finally {
+      globalThis.requestAnimationFrame = previousRequestAnimationFrame;
+    }
   });
 
   it('dispatches leave and enter before pointermove when the picked target changes', async () => {

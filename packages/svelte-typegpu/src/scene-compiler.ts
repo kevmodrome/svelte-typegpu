@@ -75,7 +75,10 @@ const POINTER_EVENT_TYPES = new Set([
   'pointerenter',
   'pointerleave',
   'pointerdown',
-  'pointerup'
+  'pointerup',
+  'dragstart',
+  'dragmove',
+  'dragend'
 ]);
 
 export function createTypeGpuSceneCache(
@@ -237,7 +240,8 @@ function readMeshDrawItem(
     spinSpeed: numberArg(mesh.attributes.spinSpeed, 0),
     renderOrder: numberArg(mesh.attributes.renderOrder, 0),
     hitTest: hitTestMode(mesh.attributes.hitTest),
-    pointerEvents: mesh.attributes.pointerEvents === 'none' ? 'none' : 'auto'
+    pointerEvents: mesh.attributes.pointerEvents === 'none' ? 'none' : 'auto',
+    drag: stringAttribute(mesh.attributes.drag)
   });
 
   return { transform, revision: meshRevision };
@@ -339,7 +343,8 @@ function readInstancedMeshDrawItems(
       spinSpeed,
       renderOrder: numberArg(instancedMesh.attributes.renderOrder, 0),
       hitTest: hitTestMode(instancedMesh.attributes.hitTest),
-      pointerEvents: instancedMesh.attributes.pointerEvents === 'none' ? 'none' : 'auto'
+      pointerEvents: instancedMesh.attributes.pointerEvents === 'none' ? 'none' : 'auto',
+      drag: stringAttribute(instancedMesh.attributes.drag)
     });
   });
 
@@ -387,7 +392,8 @@ function readModelDrawItems(
       spinSpeed: numberArg(modelNode.attributes.spinSpeed, 0),
       renderOrder: numberArg(modelNode.attributes.renderOrder, 0),
       hitTest: hitTestMode(modelNode.attributes.hitTest),
-      pointerEvents: modelNode.attributes.pointerEvents === 'none' ? 'none' : 'auto'
+      pointerEvents: modelNode.attributes.pointerEvents === 'none' ? 'none' : 'auto',
+      drag: stringAttribute(modelNode.attributes.drag)
     });
   });
 
@@ -483,7 +489,8 @@ function interactionTargetFor(item: TypeGpuMeshDrawItem): TypeGpuInteractionTarg
       hitTest: item.hitTest,
       pointerEvents: item.pointerEvents,
       handlers,
-      renderOrder: item.renderOrder
+      renderOrder: item.renderOrder,
+      drag: item.drag
     }
   ];
 }
@@ -522,6 +529,10 @@ function shouldRecomputeInteraction(dirty: Dirty): boolean {
     hasDirty(dirty, Dirty.Geometry) ||
     hasDirty(dirty, Dirty.Tree)
   );
+}
+
+function stringAttribute(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 function defaultMaterial(): TypeGpuMaterialDescriptor {

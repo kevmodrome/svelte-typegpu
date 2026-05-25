@@ -921,6 +921,34 @@ describe('TypeGPU camera interaction controller', () => {
     expect(renderer.setCamera).not.toHaveBeenCalled();
   });
 
+  it('does not start orbit dragging while a scene object has captured pointer drag', () => {
+    const canvas = fakeCanvas();
+    const windowTarget = new FakeEventTarget();
+    const renderer = fakeRenderer();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget: windowTarget as unknown as Window,
+      shouldIgnorePointerDragStart: () => true,
+      requestFrame: (callback: FrameRequestCallback) => {
+        callback(100);
+        return 42;
+      }
+    });
+
+    controller.reconcile(sceneState({ pointer: true }));
+    canvas.dispatch<MouseEvent>('mousedown', { button: 0, clientX: 10, clientY: 20 } as Partial<
+      MouseEvent
+    >);
+    windowTarget.dispatch<MouseEvent>('mousemove', {
+      buttons: 1,
+      clientX: 110,
+      clientY: 20
+    } as Partial<MouseEvent>);
+
+    expect(renderer.setCamera).not.toHaveBeenCalled();
+  });
+
   it('suppresses the next click after mouse drag movement', () => {
     const canvas = fakeCanvas();
     const windowTarget = new FakeEventTarget();

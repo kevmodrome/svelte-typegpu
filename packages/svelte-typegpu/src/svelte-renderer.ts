@@ -30,7 +30,13 @@ import {
 import { Dirty } from './dirty';
 import { createSceneState, createTypeGpuSceneCache } from './scene-state';
 import { createModelCache, type TypeGpuModelCacheOptions } from './model-cache';
-import type { TypeGpuInteractionHit, TypeGpuInteractionTarget, TypeGpuSceneState } from './types';
+import type {
+  TypeGpuDragEventDetail,
+  TypeGpuInteractionHit,
+  TypeGpuInteractionTarget,
+  TypeGpuSceneState,
+  Vector3Tuple
+} from './types';
 
 export interface TypeGpuRootOptions
   extends Pick<
@@ -57,6 +63,23 @@ interface RuntimeOptions {
   loadUrl?: TypeGpuModelCacheOptions['loadUrl'];
   loadData?: TypeGpuModelCacheOptions['loadData'];
 }
+
+interface ActiveObjectDrag {
+  target: TypeGpuInteractionTarget;
+  node: TypeGpuNode;
+  instanceId: TypeGpuInteractionHit['instanceId'];
+  point: Vector3Tuple;
+  pointerId: number;
+  pointerType: string;
+  button: number;
+  startCanvas: { x: number; y: number };
+  previousCanvas: { x: number; y: number };
+  startClient: { x: number; y: number };
+  previousClient: { x: number; y: number };
+  moved: boolean;
+}
+
+const DRAG_EVENT_TYPES = ['dragstart', 'dragmove', 'dragend'] as const;
 
 const renderer = createRenderer({
   createFragment,
@@ -140,10 +163,13 @@ function createRuntime(
         })
       : undefined
   });
+  let activeDrag: ActiveObjectDrag | null = null;
+  let suppressNextDragClick = false;
   const cameraInteraction = createCameraInteractionController({
     canvas,
     renderer: gpu,
-    windowTarget: options.windowTarget
+    windowTarget: options.windowTarget,
+    shouldIgnorePointerDragStart: () => activeDrag !== null
   });
   let currentScene: TypeGpuSceneState | null = null;
   let hoveredTarget: TypeGpuInteractionTarget | null = null;
@@ -173,6 +199,11 @@ function createRuntime(
   }
 
   function dispatchCanvasClick(event: MouseEvent) {
+    if (suppressNextDragClick) {
+      suppressNextDragClick = false;
+      return;
+    }
+
     if (cameraInteraction.consumeSuppressedClick()) return;
 
     const hit = pickCanvasTarget(event, 'click');
@@ -187,7 +218,32 @@ function createRuntime(
     });
   }
 
+  function dispatchCanvasPointerDown(event: PointerEvent) {
+    const pointerHit = pickCanvasTarget(event, 'pointerdown');
+    if (pointerHit) {
+      dispatchNodeEvent(pointerHit.node, 'pointerdown', {
+        originalEvent: event,
+        detail: {
+          instanceId: pointerHit.instanceId,
+          point: pointerHit.point
+        }
+      });
+    }
+
+    if (activeDrag) return;
+
+    const hit = pickCanvasTarget(event);
+    if (!hit || !hasDragHandler(hit.target)) return;
+
+    event.preventDefault();
+    activeDrag = createActiveDrag(hit, event);
+    capturePointer(canvas, activeDrag.pointerId);
+    dispatchDragEvent('dragstart', event);
+  }
+
   function dispatchCanvasPointerMove(event: PointerEvent) {
+    if (dispatchActiveDragMove(event)) return;
+
     const hit = pickCanvasTarget(event);
     updateHoveredTarget(hit, event);
 
@@ -200,6 +256,25 @@ function createRuntime(
         }
       });
     }
+  }
+
+  function dispatchCanvasPointerUp(event: PointerEvent) {
+    if (finishActiveDrag(event, false)) return;
+
+    const hit = pickCanvasTarget(event, 'pointerup');
+    if (!hit) return;
+
+    dispatchNodeEvent(hit.node, 'pointerup', {
+      originalEvent: event,
+      detail: {
+        instanceId: hit.instanceId,
+        point: hit.point
+      }
+    });
+  }
+
+  function dispatchCanvasPointerCancel(event: PointerEvent) {
+    finishActiveDrag(event, true);
   }
 
   function updateHoveredTarget(hit: TypeGpuInteractionHit | null, event: PointerEvent) {
@@ -230,6 +305,7 @@ function createRuntime(
   }
 
   function dispatchCanvasPointerExit(event: PointerEvent) {
+    if (activeDrag) return;
     if (!hoveredTarget) return;
 
     dispatchNodeEvent(hoveredTarget.node, 'pointerleave', {
@@ -239,6 +315,72 @@ function createRuntime(
       }
     });
     hoveredTarget = null;
+  }
+
+  function createActiveDrag(hit: TypeGpuInteractionHit, event: PointerEvent): ActiveObjectDrag {
+    const canvasPoint = canvasPointFromEvent(canvas, event);
+    const clientPoint = clientPointFromEvent(event);
+
+    return {
+      target: hit.target,
+      node: hit.node,
+      instanceId: hit.instanceId,
+      point: hit.point,
+      pointerId: pointerIdFromEvent(event),
+      pointerType: pointerTypeFromEvent(event),
+      button: finiteNumber(event.button, 0),
+      startCanvas: canvasPoint,
+      previousCanvas: canvasPoint,
+      startClient: clientPoint,
+      previousClient: clientPoint,
+      moved: false
+    };
+  }
+
+  function dispatchActiveDragMove(event: PointerEvent): boolean {
+    if (!activeDrag || !samePointer(event, activeDrag)) return false;
+
+    event.preventDefault();
+    const nextCanvas = canvasPointFromEvent(canvas, event);
+    if (
+      nextCanvas.x !== activeDrag.previousCanvas.x ||
+      nextCanvas.y !== activeDrag.previousCanvas.y
+    ) {
+      activeDrag.moved = true;
+    }
+    dispatchDragEvent('dragmove', event);
+    activeDrag.previousCanvas = nextCanvas;
+    activeDrag.previousClient = clientPointFromEvent(event);
+    return true;
+  }
+
+  function finishActiveDrag(event: PointerEvent, cancelled: boolean): boolean {
+    if (!activeDrag || !samePointer(event, activeDrag)) return false;
+
+    event.preventDefault();
+    const endCanvas = canvasPointFromEvent(canvas, event);
+    const moved =
+      activeDrag.moved ||
+      endCanvas.x !== activeDrag.startCanvas.x ||
+      endCanvas.y !== activeDrag.startCanvas.y;
+    suppressNextDragClick = suppressNextDragClick || moved;
+    dispatchDragEvent('dragend', event, cancelled);
+    releasePointer(canvas, activeDrag.pointerId);
+    activeDrag = null;
+    return true;
+  }
+
+  function dispatchDragEvent(
+    type: (typeof DRAG_EVENT_TYPES)[number],
+    event: PointerEvent,
+    cancelled = false
+  ) {
+    if (!activeDrag || !activeDrag.target.handlers.has(type)) return;
+
+    dispatchNodeEvent(activeDrag.node, type, {
+      originalEvent: event,
+      detail: dragEventDetail(canvas, activeDrag, event, cancelled)
+    });
   }
 
   function pickCanvasTarget(event: MouseEvent, type?: string): TypeGpuInteractionHit | null {
@@ -256,7 +398,10 @@ function createRuntime(
   }
 
   canvas.addEventListener('click', dispatchCanvasClick);
+  canvas.addEventListener('pointerdown', dispatchCanvasPointerDown);
   canvas.addEventListener('pointermove', dispatchCanvasPointerMove);
+  canvas.addEventListener('pointerup', dispatchCanvasPointerUp);
+  canvas.addEventListener('pointercancel', dispatchCanvasPointerCancel);
   canvas.addEventListener('pointerleave', dispatchCanvasPointerExit);
   canvas.addEventListener('pointerout', dispatchCanvasPointerExit);
 
@@ -265,7 +410,10 @@ function createRuntime(
     dispose() {
       cameraInteraction.dispose();
       canvas.removeEventListener('click', dispatchCanvasClick);
+      canvas.removeEventListener('pointerdown', dispatchCanvasPointerDown);
       canvas.removeEventListener('pointermove', dispatchCanvasPointerMove);
+      canvas.removeEventListener('pointerup', dispatchCanvasPointerUp);
+      canvas.removeEventListener('pointercancel', dispatchCanvasPointerCancel);
       canvas.removeEventListener('pointerleave', dispatchCanvasPointerExit);
       canvas.removeEventListener('pointerout', dispatchCanvasPointerExit);
       gpu.dispose();
@@ -296,8 +444,60 @@ function canvasViewport(canvas: HTMLCanvasElement): { width: number; height: num
   };
 }
 
+function clientPointFromEvent(event: PointerEvent): { x: number; y: number } {
+  return {
+    x: finiteNumber(event.clientX, 0),
+    y: finiteNumber(event.clientY, 0)
+  };
+}
+
+function dragEventDetail(
+  canvas: HTMLCanvasElement,
+  activeDrag: ActiveObjectDrag,
+  event: PointerEvent,
+  cancelled: boolean
+): TypeGpuDragEventDetail {
+  const canvasPoint = canvasPointFromEvent(canvas, event);
+  const clientPoint = clientPointFromEvent(event);
+  const deltaX = canvasPoint.x - activeDrag.previousCanvas.x;
+  const deltaY = canvasPoint.y - activeDrag.previousCanvas.y;
+
+  return {
+    mode: activeDrag.target.drag,
+    instanceId: activeDrag.instanceId,
+    point: activeDrag.point,
+    pointerId: activeDrag.pointerId,
+    pointerType: pointerTypeFromEvent(event, activeDrag.pointerType),
+    button: finiteNumber(event.button, activeDrag.button),
+    buttons: finiteNumber(event.buttons, 0),
+    x: canvasPoint.x,
+    y: canvasPoint.y,
+    startX: activeDrag.startCanvas.x,
+    startY: activeDrag.startCanvas.y,
+    previousX: activeDrag.previousCanvas.x,
+    previousY: activeDrag.previousCanvas.y,
+    clientX: clientPoint.x,
+    clientY: clientPoint.y,
+    startClientX: activeDrag.startClient.x,
+    startClientY: activeDrag.startClient.y,
+    previousClientX: activeDrag.previousClient.x,
+    previousClientY: activeDrag.previousClient.y,
+    deltaX,
+    deltaY,
+    movementX: deltaX,
+    movementY: deltaY,
+    totalDeltaX: canvasPoint.x - activeDrag.startCanvas.x,
+    totalDeltaY: canvasPoint.y - activeDrag.startCanvas.y,
+    cancelled
+  };
+}
+
 function positiveSize(value: number): number | null {
   return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function finiteNumber(value: number | undefined, fallback: number): number {
+  return Number.isFinite(value) ? value! : fallback;
 }
 
 function sameInteractionTarget(
@@ -305,6 +505,40 @@ function sameInteractionTarget(
   next: TypeGpuInteractionTarget | null
 ): boolean {
   return previous?.node === next?.node && previous?.instanceId === next?.instanceId;
+}
+
+function hasDragHandler(target: TypeGpuInteractionTarget): boolean {
+  return DRAG_EVENT_TYPES.some((type) => target.handlers.has(type));
+}
+
+function samePointer(event: PointerEvent, activeDrag: ActiveObjectDrag): boolean {
+  return pointerIdFromEvent(event) === activeDrag.pointerId;
+}
+
+function pointerIdFromEvent(event: PointerEvent): number {
+  return finiteNumber(event.pointerId, 1);
+}
+
+function pointerTypeFromEvent(event: PointerEvent, fallback = 'mouse'): string {
+  return typeof event.pointerType === 'string' && event.pointerType.length > 0
+    ? event.pointerType
+    : fallback;
+}
+
+function capturePointer(canvas: HTMLCanvasElement, pointerId: number): void {
+  try {
+    canvas.setPointerCapture?.(pointerId);
+  } catch {
+    // Browser implementations can reject stale pointer ids; drag dispatch still works on-canvas.
+  }
+}
+
+function releasePointer(canvas: HTMLCanvasElement, pointerId: number): void {
+  try {
+    canvas.releasePointerCapture?.(pointerId);
+  } catch {
+    // Ignore stale pointer releases for parity with pointer capture best effort.
+  }
 }
 
 export function createTypeGpuRuntimeForTest(

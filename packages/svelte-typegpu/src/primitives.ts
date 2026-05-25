@@ -128,7 +128,10 @@ const pointerEvents = new Set([
   'pointerenter',
   'pointerleave',
   'pointerdown',
-  'pointerup'
+  'pointerup',
+  'dragstart',
+  'dragmove',
+  'dragend'
 ]);
 const MAX_STABLE_TUPLE_LENGTH = 32;
 
@@ -240,7 +243,9 @@ export function dirtyForAttribute(
       return mergeDirty(Dirty.DrawBatches, Dirty.Interaction);
     }
     if (instanceDataAttributes.has(attribute)) return mergeDirty(Dirty.InstanceData, Dirty.Interaction);
-    if (attribute === 'pointerEvents' || attribute === 'hitTest') return Dirty.Interaction;
+    if (attribute === 'pointerEvents' || attribute === 'hitTest' || attribute === 'drag') {
+      return Dirty.Interaction;
+    }
   }
 
   return Dirty.None;

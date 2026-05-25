@@ -274,6 +274,7 @@ export interface TypeGpuMeshDrawItem {
   renderOrder: number;
   hitTest: 'none' | 'bounds' | 'mesh';
   pointerEvents: 'auto' | 'none';
+  drag?: string;
 }
 
 export interface TypeGpuLight {
@@ -321,6 +322,7 @@ export interface TypeGpuInteractionTarget {
   pointerEvents?: 'auto' | 'none';
   handlers: Set<string>;
   renderOrder?: number;
+  drag?: string;
 }
 
 export interface TypeGpuInteractionHit {
@@ -342,6 +344,35 @@ export interface TypeGpuInteractionPickInput {
 export interface TypeGpuInteractionIndex {
   targets: TypeGpuInteractionTarget[];
   pick(input: TypeGpuInteractionPickInput): TypeGpuInteractionHit | null;
+}
+
+export interface TypeGpuDragEventDetail {
+  mode?: string;
+  instanceId: TypeGpuInstanceId;
+  point: Vector3Tuple;
+  pointerId: number;
+  pointerType: string;
+  button: number;
+  buttons: number;
+  x: number;
+  y: number;
+  startX: number;
+  startY: number;
+  previousX: number;
+  previousY: number;
+  clientX: number;
+  clientY: number;
+  startClientX: number;
+  startClientY: number;
+  previousClientX: number;
+  previousClientY: number;
+  deltaX: number;
+  deltaY: number;
+  movementX: number;
+  movementY: number;
+  totalDeltaX: number;
+  totalDeltaY: number;
+  cancelled: boolean;
 }
 
 export interface TypeGpuSceneState {
