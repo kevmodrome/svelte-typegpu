@@ -561,10 +561,19 @@ function mergeModelMaterial(
     merged.samplerKey = override.samplerKey;
   }
   if (attrs.transparent !== undefined) merged.transparent = override.transparent;
-  if (attrs.depthWrite !== undefined) merged.depthWrite = override.depthWrite;
-  if (attrs.depthTest !== undefined) merged.depthTest = override.depthTest;
+  if (attrs.depthWrite !== undefined) {
+    merged.depthWrite = override.depthWrite;
+    merged.explicitDepthWrite = override.explicitDepthWrite;
+  }
+  if (attrs.depthTest !== undefined) {
+    merged.depthTest = override.depthTest;
+    merged.explicitDepthTest = override.explicitDepthTest;
+  }
   if (attrs.cullMode !== undefined) merged.cullMode = override.cullMode;
-  if (attrs.blendMode !== undefined) merged.blendMode = override.blendMode;
+  if (attrs.blendMode !== undefined) {
+    merged.blendMode = override.blendMode;
+    merged.explicitBlendMode = override.explicitBlendMode;
+  }
 
   return recomputeMaterialKeys(merged);
 }

@@ -544,6 +544,41 @@ describe('TypeGPU scene compiler', () => {
       map: { kind: 'url', src: '/textures/albedo.png' }
     });
   });
+
+  it('keeps explicit model material blend and depth overrides with geometry vertex alpha', async () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const model = createElement('model');
+    const material = createElement('standardMaterial');
+    const loaded = loadedModelFixture('url:/models/vertex-alpha.glb');
+
+    loaded.meshes[0].geometry.hasVertexAlpha = true;
+    const cache = createTypeGpuSceneCache({
+      modelCache: createModelCache({
+        loadUrl: async () => loaded,
+        loadData: async () => loaded
+      })
+    });
+
+    setAttribute(model, 'src', '/models/vertex-alpha.glb');
+    setAttribute(material, 'blendMode', 'opaque');
+    setAttribute(material, 'depthWrite', true);
+    insert(model, material, null);
+    insert(scene, model, null);
+    insert(root, scene, null);
+
+    createSceneState(root, cache, { dirty: Dirty.All });
+    await Promise.resolve();
+    const state = createSceneState(root, cache, { dirty: Dirty.All });
+
+    expect(state.drawBatches[0].material).toMatchObject({
+      transparent: true,
+      blendMode: 'opaque',
+      depthWrite: true
+    });
+    expect(state.drawBatches[0].pipelineKey).toContain('blend:opaque');
+    expect(state.drawBatches[0].pipelineKey).toContain('depthWrite:true');
+  });
 });
 
 async function compileLoadedModelWithMaterialChild(materialName: string) {

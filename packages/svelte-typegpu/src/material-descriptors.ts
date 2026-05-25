@@ -57,7 +57,15 @@ export function createMaterialDescriptor(
   const color = colorTuple(input.color);
   const opacity = numberArg(input.opacity, color[3]);
   const transparent = Boolean(input.transparent) || opacity < 1 || color[3] < 1;
-  const blendMode = blendModeFor(input.blendMode, transparent);
+  const inputBlendMode = input.blendMode;
+  const explicitBlendMode = isBlendMode(inputBlendMode);
+  const explicitDepthWrite = typeof input.depthWrite === 'boolean';
+  const explicitDepthTest = typeof input.depthTest === 'boolean';
+  const blendMode: TypeGpuMaterialDescriptor['blendMode'] = explicitBlendMode
+    ? inputBlendMode
+    : transparent
+      ? 'alpha'
+      : 'opaque';
   const descriptor: TypeGpuMaterialDescriptor = {
     key: '',
     pipelineKey: '',
@@ -76,9 +84,9 @@ export function createMaterialDescriptor(
     depthTest: booleanArg(input.depthTest, true),
     cullMode: cullModeFor(input.cullMode),
     blendMode,
-    explicitBlendMode: hasOwn(input, 'blendMode'),
-    explicitDepthWrite: hasOwn(input, 'depthWrite'),
-    explicitDepthTest: hasOwn(input, 'depthTest'),
+    explicitBlendMode,
+    explicitDepthWrite,
+    explicitDepthTest,
     map: texture
   };
 
@@ -246,17 +254,12 @@ function booleanArg(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
 
-function blendModeFor(value: unknown, transparent: boolean): 'opaque' | 'alpha' | 'additive' {
-  if (value === 'alpha' || value === 'additive' || value === 'opaque') return value;
-  return transparent ? 'alpha' : 'opaque';
+function isBlendMode(value: unknown): value is 'opaque' | 'alpha' | 'additive' {
+  return value === 'alpha' || value === 'additive' || value === 'opaque';
 }
 
 function cullModeFor(value: unknown): GPUCullMode {
   return value === 'none' || value === 'front' || value === 'back' ? value : 'back';
-}
-
-function hasOwn(object: object, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(object, key);
 }
 
 function filterMode(value: unknown, fallback: GPUFilterMode): GPUFilterMode {
