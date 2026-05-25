@@ -8,6 +8,7 @@ import {
   drawTypeGpuShaderPass,
   drawTypeGpuShadowBatch,
   loadMaterialTextureImageSource,
+  pruneShaderPassPipelineCache,
   SCENE_UNIFORM_FLOATS,
   shadowBoundsForDrawBatches,
   shadowDepthForPoint
@@ -490,6 +491,35 @@ describe('TypeGPU GPU renderer', () => {
     );
     expect(shaderPassPipelineResourceKey(base, true)).not.toBe(
       shaderPassPipelineResourceKey(changedFragment, true)
+    );
+  });
+
+  it('prunes shader pass pipeline cache entries that are no longer live', () => {
+    const fragment = shaderPassFixture({ key: 'live' }).fragment;
+    const live = shaderPassFixture({ key: 'live', fragment, renderOrder: 0, revision: 1 });
+    const reordered = { ...live, renderOrder: 9, revision: 2 };
+    const stale = shaderPassFixture({
+      key: 'stale',
+      fragment: shaderPassFixture({ key: 'stale-fragment' }).fragment
+    });
+    const liveKey = shaderPassPipelineResourceKey(live, true);
+    const staleKey = shaderPassPipelineResourceKey(stale, true);
+    const otherDepthKey = shaderPassPipelineResourceKey(live, false);
+    const livePipeline = { kind: 'live-pipeline' };
+    const cache = new Map<string, unknown>([
+      [liveKey, livePipeline],
+      [staleKey, { kind: 'stale-pipeline' }],
+      [otherDepthKey, { kind: 'other-depth-pipeline' }]
+    ]);
+
+    pruneShaderPassPipelineCache(cache, [reordered], true);
+
+    expect([...cache.entries()]).toEqual([[liveKey, livePipeline]]);
+  });
+
+  it('clears shader pass pipeline cache on renderer disposal', () => {
+    expect(rendererSource).toMatch(
+      /dispose\(\): void \{[\s\S]*this\.\#shaderPassPipelines\.clear\(\);/s
     );
   });
 

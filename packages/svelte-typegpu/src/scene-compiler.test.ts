@@ -249,13 +249,25 @@ describe('TypeGPU scene compiler', () => {
     const scene = createElement('scene');
     const arbitrary = createElement('shaderPass');
     const wrongSignature = createElement('shaderPass');
+    const extraInput = createElement('shaderPass');
 
     setAttribute(arbitrary, 'fragment', () => null);
     setAttribute(wrongSignature, 'fragment', tgpu.fragmentFn({ out: d.vec4f })/* wgsl */ `{
       return vec4f(1.0);
     }`);
+    setAttribute(
+      extraInput,
+      'fragment',
+      tgpu.fragmentFn({
+        in: { uv: d.vec2f, color: d.vec4f },
+        out: d.vec4f
+      })/* wgsl */ `{
+        return vec4f(in.uv, in.color.z, 1.0);
+      }`
+    );
     insert(scene, arbitrary, null);
     insert(scene, wrongSignature, null);
+    insert(scene, extraInput, null);
     insert(root, scene, null);
 
     const state = createSceneState(root, createTypeGpuSceneCache(), { dirty: Dirty.All });

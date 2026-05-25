@@ -39,10 +39,18 @@ export function normalizeShaderPassUniforms(value: unknown): TypeGpuShaderPassUn
 export function isShaderPassFragment(value: unknown): value is TypeGpuShaderPass['fragment'] {
   if (!isTgpuFragmentFn(value)) return false;
 
-  const input = value.shell.in as { uv?: { type?: string } } | undefined;
+  const input = value.shell.in as Record<string, { type?: string }> | undefined;
   const output = value.shell.out as { type?: string } | undefined;
+  if (!input) return false;
 
-  return input?.uv?.type === 'vec2f' && output?.type === 'vec4f';
+  const inputKeys = Object.keys(input);
+
+  return (
+    inputKeys.length === 1 &&
+    inputKeys[0] === 'uv' &&
+    input.uv?.type === 'vec2f' &&
+    output?.type === 'vec4f'
+  );
 }
 
 export function shaderPassUniformsKey(uniforms: TypeGpuShaderPassUniformMap): string {

@@ -384,6 +384,11 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
           .map((batch) => pipelineResourceKeyFor(batch, scene.renderSettings.depth))
       )
     );
+    pruneShaderPassPipelineCache(
+      this.#shaderPassPipelines,
+      scene.shaderPasses,
+      scene.renderSettings.depth
+    );
     this.#instanceBuffers.prune(new Set(scene.drawBatches.map((batch) => batch.key)));
     this.invalidate();
   }
@@ -508,6 +513,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#instanceBuffers.dispose();
     this.#materialResources.dispose();
     this.#textureResources.dispose();
+    this.#shaderPassPipelines.clear();
     this.#lightingBuffer.destroy();
     this.#shaderPassUniformBuffer.destroy();
     this.#shadowBuffer.destroy();
@@ -770,6 +776,20 @@ export function drawTypeGpuRenderQueue(
     } else {
       handlers.drawShaderPass(item.shaderPass);
     }
+  }
+}
+
+export function pruneShaderPassPipelineCache<T>(
+  cache: Map<string, T>,
+  shaderPasses: TypeGpuShaderPass[],
+  depth: boolean
+): void {
+  const liveKeys = new Set(
+    shaderPasses.map((shaderPass) => shaderPassPipelineResourceKey(shaderPass, depth))
+  );
+
+  for (const key of cache.keys()) {
+    if (!liveKeys.has(key)) cache.delete(key);
   }
 }
 
