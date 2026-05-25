@@ -53,6 +53,11 @@ describe('TypeGPU layout schemas', () => {
           shaderLocation: 2,
           offset: 6 * Float32Array.BYTES_PER_ELEMENT,
           format: 'float32x2'
+        },
+        {
+          shaderLocation: 3,
+          offset: 8 * Float32Array.BYTES_PER_ELEMENT,
+          format: 'float32x4'
         }
       ]
     });
@@ -68,18 +73,18 @@ describe('TypeGPU layout schemas', () => {
       arrayStride: MESH_INSTANCE_FLOATS * Float32Array.BYTES_PER_ELEMENT,
       stepMode: 'instance',
       attributes: [
-        { shaderLocation: 3, offset: 0, format: 'float32x3' },
-        { shaderLocation: 4, offset: 3 * Float32Array.BYTES_PER_ELEMENT, format: 'float32' },
-        { shaderLocation: 5, offset: 4 * Float32Array.BYTES_PER_ELEMENT, format: 'float32x4' },
-        { shaderLocation: 6, offset: 8 * Float32Array.BYTES_PER_ELEMENT, format: 'float32x4' },
-        { shaderLocation: 7, offset: 12 * Float32Array.BYTES_PER_ELEMENT, format: 'float32' },
+        { shaderLocation: 4, offset: 0, format: 'float32x3' },
+        { shaderLocation: 5, offset: 3 * Float32Array.BYTES_PER_ELEMENT, format: 'float32' },
+        { shaderLocation: 6, offset: 4 * Float32Array.BYTES_PER_ELEMENT, format: 'float32x4' },
+        { shaderLocation: 7, offset: 8 * Float32Array.BYTES_PER_ELEMENT, format: 'float32x4' },
+        { shaderLocation: 8, offset: 12 * Float32Array.BYTES_PER_ELEMENT, format: 'float32' },
         {
-          shaderLocation: 8,
+          shaderLocation: 9,
           offset: MESH_ROTATION_OFFSET * Float32Array.BYTES_PER_ELEMENT,
           format: 'float32x3'
         },
         {
-          shaderLocation: 9,
+          shaderLocation: 10,
           offset: MESH_ROUGHNESS_OFFSET * Float32Array.BYTES_PER_ELEMENT,
           format: 'float32x4'
         }

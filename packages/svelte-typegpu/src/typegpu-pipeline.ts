@@ -59,6 +59,7 @@ const meshVertexMain = tgpu
       position: d.vec3f,
       normal: d.vec3f,
       uv: d.vec2f,
+      vertex_color: d.vec4f,
       instance_position: d.vec3f,
       phase: d.f32,
       color: d.vec4f,
@@ -73,7 +74,8 @@ const meshVertexMain = tgpu
       normal: d.location(1, d.vec3f),
       material: d.location(2, d.vec4f),
       world_position: d.location(3, d.vec3f),
-      uv: d.location(4, d.vec2f)
+      uv: d.location(4, d.vec2f),
+      vertex_color: d.location(5, d.vec4f)
     }
   })/* wgsl */ `{
     let spin = (
@@ -103,6 +105,7 @@ const meshVertexMain = tgpu
     output.material = material;
     output.world_position = world_position;
     output.uv = uv;
+    output.vertex_color = vertex_color;
 
     return output;
   }`
@@ -234,7 +237,8 @@ export const meshFragmentMain = tgpu
       normal: d.location(1, d.vec3f),
       material: d.location(2, d.vec4f),
       world_position: d.location(3, d.vec3f),
-      uv: d.location(4, d.vec2f)
+      uv: d.location(4, d.vec2f),
+      vertex_color: d.location(5, d.vec4f)
     },
     out: d.vec4f
   })/* wgsl */ `{
@@ -246,7 +250,7 @@ export const meshFragmentMain = tgpu
       in.uv
     );
     let shifted_color = rotate_hue(
-      (texel * in.color).rgb,
+      (texel * in.color * in.vertex_color).rgb,
       sceneBindGroupLayout.$.scene.color_transform.x
     );
     let lit_color = evaluate_lighting(
@@ -257,7 +261,7 @@ export const meshFragmentMain = tgpu
       metalness
     );
 
-    return vec4(lit_color, texel.a * in.color.a * in.material.z);
+    return vec4(lit_color, texel.a * in.color.a * in.vertex_color.a * in.material.z);
   }`
   .$uses({
     evaluate_lighting: evaluateLighting,
@@ -285,6 +289,7 @@ export function createMeshPipeline(
       position: meshVertexLayout.attrib.position,
       normal: meshVertexLayout.attrib.normal,
       uv: meshVertexLayout.attrib.uv,
+      vertex_color: meshVertexLayout.attrib.color,
       instance_position: meshInstanceLayout.attrib.position,
       phase: meshInstanceLayout.attrib.phase,
       color: meshInstanceLayout.attrib.color,

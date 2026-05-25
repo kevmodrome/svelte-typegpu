@@ -294,7 +294,7 @@ function readPrimitive(
       vertexFloats: MESH_VERTEX_FLOATS,
       bounds: boundsForVertexData(vertexData),
       topology: 'triangle-list',
-      layoutKey: 'pnu8'
+      layoutKey: 'position:normal:uv:color'
     },
     material: readMaterial(container, modelKey, primitive.material),
     transform: IDENTITY_TRANSFORM
@@ -663,7 +663,11 @@ function buildVertexData(
         normal[1] ?? 0,
         normal[2] ?? 1,
         uv[0] ?? 0,
-        uv[1] ?? 0
+        uv[1] ?? 0,
+        1,
+        1,
+        1,
+        1
       );
     }
   }

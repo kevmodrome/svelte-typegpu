@@ -138,10 +138,12 @@ describe('GLB loader', () => {
       vertexFloats: MESH_VERTEX_FLOATS,
       bounds: { min: [0, 0, 0], max: [1, 1, 0] },
       topology: 'triangle-list',
-      layoutKey: 'pnu8'
+      layoutKey: 'position:normal:uv:color'
     });
     expect(Array.from(model.meshes[0].geometry.vertexData)).toEqual([
-      0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1
+      0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1,
+      1, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1,
+      0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1
     ]);
   });
 

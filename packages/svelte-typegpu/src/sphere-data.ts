@@ -51,5 +51,5 @@ function pushSphereVertex(data: number[], theta: number, phi: number, u: number,
   const y = Math.cos(theta);
   const z = sinTheta * Math.sin(phi);
 
-  data.push(x * 0.5, y * 0.5, z * 0.5, x, y, z, u, v);
+  data.push(x * 0.5, y * 0.5, z * 0.5, x, y, z, u, v, 1, 1, 1, 1);
 }

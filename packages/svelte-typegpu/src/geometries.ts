@@ -8,7 +8,7 @@ import type {
   TypeGpuPrimitiveTopology
 } from './types';
 
-const LAYOUT_KEY = 'position:normal:uv';
+const LAYOUT_KEY = 'position:normal:uv:color';
 
 export function createBoxGeometryData(
   width: number,
@@ -131,7 +131,7 @@ export function createBufferGeometryData(input: {
 }
 
 function pushPlaneVertex(data: number[], x: number, z: number, u: number, v: number): void {
-  data.push(x, 0, z, 0, 1, 0, u, v);
+  data.push(x, 0, z, 0, 1, 0, u, v, 1, 1, 1, 1);
 }
 
 function scalePositions(vertexData: Float32Array, scale: [number, number, number]): Float32Array {

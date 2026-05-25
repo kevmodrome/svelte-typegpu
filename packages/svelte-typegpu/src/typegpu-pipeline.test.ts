@@ -8,6 +8,7 @@ describe('TypeGPU mesh pipeline shader functions', () => {
 
     expect(wgsl).toContain('@fragment fn meshFragmentMain(in:');
     expect(wgsl).toContain('in.color');
+    expect(wgsl).toContain('in.vertex_color');
     expect(wgsl).toContain('in.normal');
     expect(wgsl).toContain('in.material');
     expect(wgsl).toContain('color_transform');
@@ -32,5 +33,6 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     expect(wgsl).toContain('baseColorSampler');
     expect(wgsl).toContain('textureSample');
     expect(wgsl).toContain('in.uv');
+    expect(wgsl).toContain('texel * in.color * in.vertex_color');
   });
 });

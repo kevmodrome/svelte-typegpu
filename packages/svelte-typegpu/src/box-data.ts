@@ -94,7 +94,7 @@ export function createBoxVertexData(): Float32Array {
       [c, uvC],
       [d, uvD]
     ] as const) {
-      data.push(...vertex, ...face.normal, ...uv);
+      data.push(...vertex, ...face.normal, ...uv, 1, 1, 1, 1);
     }
   }
 

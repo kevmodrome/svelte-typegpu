@@ -23,10 +23,11 @@ describe('TypeGPU resource descriptors', () => {
       kind: 'box',
       bounds: { min: [-1, -2, -3], max: [1, 2, 3] },
       topology: 'triangle-list',
-      layoutKey: 'position:normal:uv'
+      layoutKey: 'position:normal:uv:color'
     });
-    expect(geometry?.vertexFloats).toBe(8);
+    expect(geometry?.vertexFloats).toBe(12);
     expect(geometry?.vertexCount).toBe(36);
+    expect(Array.from(geometry?.vertexData.slice(8, 12) ?? [])).toEqual([1, 1, 1, 1]);
   });
 
   it('reads inline plane geometry with segment defaults', () => {
@@ -41,17 +42,18 @@ describe('TypeGPU resource descriptors', () => {
       kind: 'plane',
       bounds: { min: [-4, 0, -5], max: [4, 0, 5] },
       topology: 'triangle-list',
-      layoutKey: 'position:normal:uv'
+      layoutKey: 'position:normal:uv:color'
     });
-    expect(geometry?.vertexFloats).toBe(8);
+    expect(geometry?.vertexFloats).toBe(12);
     expect(geometry?.vertexCount).toBe(6);
+    expect(Array.from(geometry?.vertexData.slice(8, 12) ?? [])).toEqual([1, 1, 1, 1]);
   });
 
   it('reads inline buffer geometry with explicit vertex data and bounds', () => {
     const vertices = new Float32Array([
-      -1, 0, -1, 0, 1, 0, 0, 0,
-      1, 0, -1, 0, 1, 0, 1, 0,
-      0, 0, 1, 0, 1, 0, 0.5, 1
+      -1, 0, -1, 0, 1, 0, 0, 0, 1, 0, 0, 1,
+      1, 0, -1, 0, 1, 0, 1, 0, 0, 1, 0, 1,
+      0, 0, 1, 0, 1, 0, 0.5, 1, 0, 0, 1, 1
     ]);
     const bounds = { min: [-1, 0, -1], max: [1, 0, 1] };
     const node = createElement('bufferGeometry');
@@ -66,7 +68,8 @@ describe('TypeGPU resource descriptors', () => {
       kind: 'buffer',
       bounds,
       vertexCount: 3,
-      vertexFloats: 8
+      vertexFloats: 12,
+      layoutKey: 'position:normal:uv:color'
     });
     expect(geometry?.vertexData).not.toBe(vertices);
     expect(Array.from(geometry?.vertexData ?? [])).toEqual(Array.from(vertices));
@@ -80,9 +83,9 @@ describe('TypeGPU resource descriptors', () => {
 
   it('reads inline indexed buffer geometry without mutating caller arrays', () => {
     const vertices = new Float32Array([
-      -1, 0, -1, 0, 1, 0, 0, 0,
-      1, 0, -1, 0, 1, 0, 1, 0,
-      0, 0, 1, 0, 1, 0, 0.5, 1
+      -1, 0, -1, 0, 1, 0, 0, 0, 1, 0, 0, 1,
+      1, 0, -1, 0, 1, 0, 1, 0, 0, 1, 0, 1,
+      0, 0, 1, 0, 1, 0, 0.5, 1, 0, 0, 1, 1
     ]);
     const indices = new Uint16Array([0, 1, 2]);
     const node = createElement('bufferGeometry');
@@ -262,9 +265,9 @@ describe('TypeGPU resource descriptors', () => {
       geometry,
       'vertices',
       new Float32Array([
-        0, 0, 0, 0, 1, 0, 0, 0,
-        1, 0, 0, 0, 1, 0, 1, 0,
-        0, 1, 0, 0, 1, 0, 0, 1
+        0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1,
+        1, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1,
+        0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1
       ])
     );
     insert(scene, texture, null);
@@ -277,9 +280,9 @@ describe('TypeGPU resource descriptors', () => {
       geometry,
       'vertices',
       new Float32Array([
-        0, 0, 0, 0, 1, 0, 0, 0,
-        2, 0, 0, 0, 1, 0, 1, 0,
-        0, 2, 0, 0, 1, 0, 0, 1
+        0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1,
+        2, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1,
+        0, 2, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1
       ])
     );
     const second = collectSceneResources(root);
