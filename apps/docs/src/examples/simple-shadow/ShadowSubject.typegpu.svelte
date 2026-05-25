@@ -1,19 +1,9 @@
-<script lang="ts">
-  import type { Vector3Tuple } from 'svelte-typegpu';
-
-  interface Props {
-    position: Vector3Tuple;
-    scale: Vector3Tuple;
-    material: string;
-  }
-
-  let { position, scale, material }: Props = $props();
-</script>
-
 <mesh
-  geometry="box"
-  {material}
-  {position}
-  {scale}
-  rotation={[0, 0.24, 0]}
+  geometry="cuboid"
+  material="cuboid-material"
+  position={[0, 0.5, 0]}
+  rotation={[0, 0, 0]}
+  scale={[1, 1, 1]}
+  castShadow={true}
+  receiveShadow={true}
 ></mesh>

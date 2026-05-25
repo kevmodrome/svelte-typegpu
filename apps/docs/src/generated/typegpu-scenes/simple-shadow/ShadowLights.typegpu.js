@@ -5,40 +5,26 @@ import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
 
-var root = $.from_tree(
-	[
-		['ambientLight'],
-		' ',
-		['directionalLight'],
-		' ',
-		['spotLight']
-	],
-	1
-);
+var root = $.from_tree([['ambientLight'], ' ', ['directionalLight']], 1);
 
 export default function ShadowLights_typegpu($$anchor) {
 	var $$pop_renderer = $.push_renderer($renderer);
 	var fragment = root();
 	var ambientLight = $.first_child(fragment);
 
-	$.set_attribute(ambientLight, 'color', [0.92, 0.96, 1]);
-	$.set_attribute(ambientLight, 'intensity', 0.18);
+	$.set_attribute(ambientLight, 'color', [1, 1, 1]);
+	$.set_attribute(ambientLight, 'intensity', 0.1);
 
 	var directionalLight = $.sibling(ambientLight, 2);
 
-	$.set_attribute(directionalLight, 'rotation', [-0.92, 0.46, 0]);
-	$.set_attribute(directionalLight, 'color', [1, 0.95, 0.84]);
-	$.set_attribute(directionalLight, 'intensity', 1.55);
-
-	var spotLight = $.sibling(directionalLight, 2);
-
-	$.set_attribute(spotLight, 'position', [-2.1, 2.6, 2.2]);
-	$.set_attribute(spotLight, 'lookAt', [0, -0.32, 0]);
-	$.set_attribute(spotLight, 'color', [1, 0.8, 0.48]);
-	$.set_attribute(spotLight, 'intensity', 4.2);
-	$.set_attribute(spotLight, 'range', 9);
-	$.set_attribute(spotLight, 'angle', 0.66);
-	$.set_attribute(spotLight, 'penumbra', 0.34);
+	$.set_attribute(directionalLight, 'position', [0, 4, 4]);
+	$.set_attribute(directionalLight, 'lookAt', [0, 0, 0]);
+	$.set_attribute(directionalLight, 'color', [1, 1, 1]);
+	$.set_attribute(directionalLight, 'intensity', 1.25);
+	$.set_attribute(directionalLight, 'castShadow', true);
+	$.set_attribute(directionalLight, 'shadowMapSize', 2048);
+	$.set_attribute(directionalLight, 'shadowBias', 1);
+	$.set_attribute(directionalLight, 'shadowSlopeBias', 4);
 	$.append($$anchor, fragment);
 	$$pop_renderer();
 }

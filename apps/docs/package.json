@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "generate:typegpu": "bun scripts/compile-typegpu-scenes.ts",
-    "predev": "bun run generate:typegpu",
+    "generate:typegpu": "vite-node scripts/compile-typegpu-scenes.ts",
+    "predev": "pnpm run generate:typegpu",
     "dev": "MODE=development bun src/index.ts",
-    "prebuild": "bun run generate:typegpu",
+    "prebuild": "pnpm run generate:typegpu",
     "build": "mochi-framework build --routes ./src/routes.ts",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -23,6 +23,7 @@
     "@webgpu/types": "^0.1.70",
     "shiki": "^4.1.0",
     "typescript": "^5.9.3",
+    "vite-node": "2.1.9",
     "vitest": "^4.0.14"
   }
 }

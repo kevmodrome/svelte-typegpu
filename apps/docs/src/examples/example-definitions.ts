@@ -3,9 +3,9 @@ export const exampleDefinitions = [
     slug: 'two-boxes',
     title: 'Two Boxes',
     category: 'rendering',
-    tags: ['3d', 'rasterization', 'scene graph'],
+    tags: ['3d', 'rasterization', 'vertex colors', 'interaction'],
     description:
-      'A compact scene that turns the imperative TypeGPU two-boxes setup into declarative Svelte scene markup.',
+      'The official TypeGPU two-boxes scene expressed as vertex-colored geometry, orbit controls, and object drag.',
     typeGpuSourceUrl:
       'https://github.com/software-mansion/TypeGPU/tree/main/apps/typegpu-docs/src/examples/rendering/two-boxes',
     notes: 'Adapted from the official TypeGPU Two Boxes example for the svelte-typegpu custom renderer.',
@@ -13,7 +13,8 @@ export const exampleDefinitions = [
     sourceUrl: new URL('./two-boxes/TwoBoxes.typegpu.svelte', import.meta.url),
     sourceFiles: [
       new URL('./two-boxes/TwoBoxes.typegpu.svelte', import.meta.url),
-      new URL('./two-boxes/SceneBox.typegpu.svelte', import.meta.url)
+      new URL('./two-boxes/SceneBox.typegpu.svelte', import.meta.url),
+      new URL('./two-boxes/box-geometry.ts', import.meta.url)
     ],
     typeGpuSourceFiles: [{ path: 'index.ts', loc: 417 }]
   },
@@ -23,17 +24,16 @@ export const exampleDefinitions = [
     category: 'rendering',
     tags: ['3d', 'lighting', 'materials'],
     description:
-      'A lighting study that highlights Phong-style material response through Svelte material and light nodes.',
+      'The official Phong teapot model loaded through the declarative model primitive and renderer lights.',
     typeGpuSourceUrl:
       'https://github.com/software-mansion/TypeGPU/tree/main/apps/typegpu-docs/src/examples/rendering/phong-reflection',
     notes:
-      'Adapted from the official TypeGPU Phong Reflection Model example using renderer-supported materials and primitives.',
+      'Adapted from the official TypeGPU Phong Reflection Model example using declarative OBJ loading and renderer-supported Phong material controls.',
     exportName: 'PhongReflection',
     sourceUrl: new URL('./phong-reflection/PhongReflection.typegpu.svelte', import.meta.url),
     sourceFiles: [
       new URL('./phong-reflection/PhongReflection.typegpu.svelte', import.meta.url),
-      new URL('./phong-reflection/PhongLights.typegpu.svelte', import.meta.url),
-      new URL('./phong-reflection/PhongOrb.typegpu.svelte', import.meta.url)
+      new URL('./phong-reflection/PhongLights.typegpu.svelte', import.meta.url)
     ],
     typeGpuSourceFiles: [
       { path: 'index.ts', loc: 163 },
@@ -46,13 +46,13 @@ export const exampleDefinitions = [
     slug: 'simple-shadow',
     title: 'Simple shadow',
     category: 'rendering',
-    tags: ['3d', 'depth', 'composition'],
+    tags: ['3d', 'depth', 'shadows'],
     description:
-      'A floor-and-subject composition that mirrors the original shadow example with renderer features available today.',
+      'The official simple shadow composition rebuilt with declarative shadow-casting lights and receivers.',
     typeGpuSourceUrl:
       'https://github.com/software-mansion/TypeGPU/tree/main/apps/typegpu-docs/src/examples/rendering/simple-shadow',
     notes:
-      'Adapted from the official TypeGPU Simple shadow example; full shadow-map parity is outside this first docs release.',
+      'Adapted from the official TypeGPU Simple shadow example with the renderer directional shadow-map primitive.',
     exportName: 'SimpleShadow',
     sourceUrl: new URL('./simple-shadow/SimpleShadow.typegpu.svelte', import.meta.url),
     sourceFiles: [
@@ -68,15 +68,15 @@ export const exampleDefinitions = [
   },
   {
     slug: 'interactive-orbit-field',
-    title: 'Interactive Orbit Field',
-    category: 'interaction',
-    tags: ['animation', 'interaction', 'instancing'],
+    title: 'Disco Shader Pass',
+    category: 'rendering',
+    tags: ['animation', 'shader', 'fullscreen'],
     description:
-      'A rotating field of instanced cubes with orbit controls, showing how a Svelte scene can stay declarative while the preview remains hands-on.',
+      'The official TypeGPU Disco fullscreen fragment shader expressed as a declarative shader pass.',
     typeGpuSourceUrl:
       'https://github.com/software-mansion/TypeGPU/tree/main/apps/typegpu-docs/src/examples/rendering/disco',
     notes:
-      'Adapted from the motion-first official TypeGPU Disco example, using svelte-typegpu instanced meshes and pointer camera controls.',
+      'Adapted from the motion-first official TypeGPU Disco example using a renderer shaderPass with time and resolution uniforms.',
     exportName: 'InteractiveOrbitField',
     sourceUrl: new URL(
       './interactive-orbit-field/InteractiveOrbitField.typegpu.svelte',
@@ -84,9 +84,7 @@ export const exampleDefinitions = [
     ),
     sourceFiles: [
       new URL('./interactive-orbit-field/InteractiveOrbitField.typegpu.svelte', import.meta.url),
-      new URL('./interactive-orbit-field/OrbitLights.typegpu.svelte', import.meta.url),
-      new URL('./interactive-orbit-field/OrbitSatellites.typegpu.svelte', import.meta.url),
-      new URL('./interactive-orbit-field/orbit-data.ts', import.meta.url)
+      new URL('./interactive-orbit-field/disco-fragment.ts', import.meta.url)
     ],
     typeGpuSourceFiles: [
       { path: 'index.ts', loc: 86 },

@@ -1,60 +1,104 @@
 <script lang="ts">
   import SceneBox from './SceneBox.typegpu.svelte';
-  import type { RgbaTuple, Vector3Tuple } from 'svelte-typegpu';
+  import {
+    boxBounds,
+    floorBounds,
+    floorVertices,
+    leftBoxVertices,
+    rightBoxVertices
+  } from './box-geometry';
+  import type { TypeGpuDragEventDetail, Vector3Tuple } from 'svelte-typegpu';
 
   const boxes: {
     id: string;
+    geometry: string;
     position: Vector3Tuple;
-    rotation: Vector3Tuple;
-    scale: Vector3Tuple;
-    color: RgbaTuple;
-    spinSpeed: number;
   }[] = [
     {
       id: 'left-box',
-      position: [-1.08, 0, 0],
-      rotation: [-0.18, 0.42, 0],
-      scale: [0.92, 0.92, 0.92],
-      color: [0.38, 0.92, 0.84, 1],
-      spinSpeed: 0.24
+      geometry: 'left-box-geometry',
+      position: [-2, 0, 0]
     },
     {
       id: 'right-box',
-      position: [1.08, 0.08, 0.18],
-      rotation: [0.24, -0.36, 0.08],
-      scale: [0.74, 1.12, 0.74],
-      color: [1, 0.63, 0.32, 1],
-      spinSpeed: -0.18
+      geometry: 'right-box-geometry',
+      position: [2, 0, 0]
     }
   ];
+
+  let boxRotation = $state<Vector3Tuple>([0, 0, 0]);
+
+  function rotateBothBoxes(event: CustomEvent<TypeGpuDragEventDetail>) {
+    if (event.detail.button !== 2) return;
+
+    boxRotation = [
+      boxRotation[0] - event.detail.deltaY * 0.003,
+      boxRotation[1] - event.detail.deltaX * 0.003,
+      boxRotation[2]
+    ];
+  }
 </script>
 
-<scene clearColor={[0.045, 0.055, 0.07, 1]} animationSpeed={0.42}>
-  <perspectiveCamera id="main" active={true} position={[3.2, 2.2, 4.6]} target={[0.08, 0.04, 0]} fov={42} near={0.1} far={100}>
-    <controls mode="orbit" minDistance={2.4} maxDistance={9}>
-      <pointerControls rotateSpeed={0.72} wheel="zoom" zoomSpeed={0.7} touch="orbit-pinch"></pointerControls>
+<scene clearColor={[0.02, 0.02, 0.025, 1]}>
+  <perspectiveCamera
+    id="main"
+    active={true}
+    position={[12, 5, 12]}
+    target={[0, 0, 0]}
+    fov={45}
+    near={0.1}
+    far={1000}
+  >
+    <controls mode="orbit" minDistance={1} maxDistance={40}>
+      <pointerControls
+        dragButton="primary"
+        rotateSpeed={1}
+        wheel="zoom"
+        zoomSpeed={0.9}
+        touch="orbit-pinch"
+      ></pointerControls>
     </controls>
   </perspectiveCamera>
+
   <resources>
-    <boxGeometry id="box" width={1} height={1} depth={1}></boxGeometry>
-    <planeGeometry id="floor" width={4.8} height={4.8}></planeGeometry>
-    <standardMaterial id="floor-material" color={[0.16, 0.18, 0.18, 1]} roughness={0.82} metalness={0}></standardMaterial>
-    {#each boxes as box (box.id)}
-      <standardMaterial id={`${box.id}-material`} color={box.color} roughness={0.34} metalness={0.1}></standardMaterial>
-    {/each}
+    <bufferGeometry
+      id="left-box-geometry"
+      key="two-boxes:left"
+      vertices={leftBoxVertices}
+      bounds={boxBounds}
+      layoutKey="position:normal:uv:color"
+    ></bufferGeometry>
+    <bufferGeometry
+      id="right-box-geometry"
+      key="two-boxes:right"
+      vertices={rightBoxVertices}
+      bounds={boxBounds}
+      layoutKey="position:normal:uv:color"
+    ></bufferGeometry>
+    <bufferGeometry
+      id="floor-geometry"
+      key="two-boxes:floor"
+      vertices={floorVertices}
+      bounds={floorBounds}
+      layoutKey="position:normal:uv:color"
+    ></bufferGeometry>
+    <basicMaterial id="vertex-colors" color={[1, 1, 1, 1]} cullMode="none"></basicMaterial>
   </resources>
-  <ambientLight color={[1, 1, 1]} intensity={0.24}></ambientLight>
-  <directionalLight rotation={[-0.8, 0.34, 0]} color={[1, 0.96, 0.88]} intensity={1.6}></directionalLight>
-  <pointLight position={[1.8, 1.1, 1.4]} color={[0.65, 0.96, 1]} intensity={2.8} range={10}></pointLight>
-  <mesh geometry="floor" material="floor-material" position={[0, -1.08, 0]}></mesh>
+
+  <mesh
+    geometry="floor-geometry"
+    material="vertex-colors"
+    position={[0, -2, 0]}
+    scale={[5, 1, 5]}
+  ></mesh>
+
   {#each boxes as box (box.id)}
     <SceneBox
-      geometry="box"
-      material={`${box.id}-material`}
+      geometry={box.geometry}
+      material="vertex-colors"
       position={box.position}
-      rotation={box.rotation}
-      scale={box.scale}
-      spinSpeed={box.spinSpeed}
+      rotation={boxRotation}
+      onDragMove={rotateBothBoxes}
     />
   {/each}
 </scene>

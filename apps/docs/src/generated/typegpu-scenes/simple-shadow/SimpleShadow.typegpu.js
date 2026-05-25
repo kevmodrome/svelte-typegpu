@@ -17,24 +17,27 @@ var root = $.from_tree([
 			[
 				'controls',
 				{ mode: 'orbit' },
-				['pointerControls', { wheel: 'zoom', touch: 'orbit-pinch' }]
+				[
+					'pointerControls',
+					{ dragButton: 'primary', wheel: 'zoom', touch: 'orbit-pinch' }
+				]
 			]
 		],
 		' ',
 		[
 			'resources',
 			null,
-			['boxGeometry', { id: 'box' }],
+			['boxGeometry', { id: 'cuboid' }],
 			' ',
 			['planeGeometry', { id: 'floor' }],
 			' ',
-			['standardMaterial', { id: 'floorMaterial' }],
+			['phongMaterial', { id: 'cuboid-material' }],
 			' ',
-			['standardMaterial', { id: 'subjectMaterial' }]
+			['phongMaterial', { id: 'floor-material' }]
 		],
 		' ',,
 		' ',
-		['mesh', { geometry: 'floor', material: 'floorMaterial' }],
+		['mesh', { geometry: 'floor', material: 'floor-material' }],
 		' ',,
 	]
 ]);
@@ -43,27 +46,26 @@ export default function SimpleShadow_typegpu($$anchor) {
 	var $$pop_renderer = $.push_renderer($renderer);
 	var scene = root();
 
-	$.set_attribute(scene, 'clearColor', [0.05, 0.055, 0.055, 1]);
-	$.set_attribute(scene, 'animationSpeed', 0.18);
+	$.set_attribute(scene, 'clearColor', [0.1, 0.1, 0.1, 1]);
 
 	var perspectiveCamera = $.child(scene);
 
 	$.set_attribute(perspectiveCamera, 'active', true);
-	$.set_attribute(perspectiveCamera, 'position', [3.4, 2.6, 4.4]);
-	$.set_attribute(perspectiveCamera, 'target', [0, 0.02, 0]);
-	$.set_attribute(perspectiveCamera, 'fov', 40);
+	$.set_attribute(perspectiveCamera, 'position', [0, 2, 5]);
+	$.set_attribute(perspectiveCamera, 'target', [0, 0, 0]);
+	$.set_attribute(perspectiveCamera, 'fov', 45);
 	$.set_attribute(perspectiveCamera, 'near', 0.1);
 	$.set_attribute(perspectiveCamera, 'far', 100);
 
 	var controls = $.child(perspectiveCamera);
 
-	$.set_attribute(controls, 'minDistance', 2.8);
-	$.set_attribute(controls, 'maxDistance', 8.5);
+	$.set_attribute(controls, 'minDistance', 2);
+	$.set_attribute(controls, 'maxDistance', 12);
 
 	var pointerControls = $.child(controls);
 
-	$.set_attribute(pointerControls, 'rotateSpeed', 0.68);
-	$.set_attribute(pointerControls, 'zoomSpeed', 0.65);
+	$.set_attribute(pointerControls, 'rotateSpeed', 0.7);
+	$.set_attribute(pointerControls, 'zoomSpeed', 0.7);
 	$.reset(controls);
 	$.reset(perspectiveCamera);
 
@@ -72,24 +74,24 @@ export default function SimpleShadow_typegpu($$anchor) {
 
 	$.set_attribute(boxGeometry, 'width', 1);
 	$.set_attribute(boxGeometry, 'height', 1);
-	$.set_attribute(boxGeometry, 'depth', 1);
+	$.set_attribute(boxGeometry, 'depth', 0.3);
 
 	var planeGeometry = $.sibling(boxGeometry, 2);
 
 	$.set_attribute(planeGeometry, 'width', 5);
 	$.set_attribute(planeGeometry, 'height', 5);
 
-	var standardMaterial = $.sibling(planeGeometry, 2);
+	var phongMaterial = $.sibling(planeGeometry, 2);
 
-	$.set_attribute(standardMaterial, 'color', [0.22, 0.18, 0.3, 1]);
-	$.set_attribute(standardMaterial, 'roughness', 0.82);
-	$.set_attribute(standardMaterial, 'metalness', 0);
+	$.set_attribute(phongMaterial, 'color', [0.8, 0.7, 0.7, 1]);
+	$.set_attribute(phongMaterial, 'roughness', 0.38);
+	$.set_attribute(phongMaterial, 'metalness', 0);
 
-	var standardMaterial_1 = $.sibling(standardMaterial, 2);
+	var phongMaterial_1 = $.sibling(phongMaterial, 2);
 
-	$.set_attribute(standardMaterial_1, 'color', [0.85, 0.78, 0.68, 1]);
-	$.set_attribute(standardMaterial_1, 'roughness', 0.42);
-	$.set_attribute(standardMaterial_1, 'metalness', 0.08);
+	$.set_attribute(phongMaterial_1, 'color', [0.5, 0.4, 0.7, 1]);
+	$.set_attribute(phongMaterial_1, 'roughness', 0.68);
+	$.set_attribute(phongMaterial_1, 'metalness', 0);
 	$.reset(resources);
 
 	var node = $.sibling(resources, 2);
@@ -98,16 +100,12 @@ export default function SimpleShadow_typegpu($$anchor) {
 
 	var mesh = $.sibling(node, 2);
 
-	$.set_attribute(mesh, 'position', [0, -0.72, 0]);
+	$.set_attribute(mesh, 'position', [0, 0, 0]);
+	$.set_attribute(mesh, 'receiveShadow', true);
 
 	var node_1 = $.sibling(mesh, 2);
 
-	$.without_renderer(() => ShadowSubject(node_1, {
-		material: 'subjectMaterial',
-		position: [0, -0.1, 0],
-		scale: [1, 1, 0.3]
-	}));
-
+	$.without_renderer(() => ShadowSubject(node_1, {}));
 	$.reset(scene);
 	$.append($$anchor, scene);
 	$$pop_renderer();

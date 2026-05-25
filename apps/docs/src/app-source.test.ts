@@ -43,6 +43,8 @@ describe('docs app source wiring', () => {
 
     expect(source).toContain("import { compile } from 'svelte/compiler'");
     expect(source).toContain("import.meta.resolve('svelte-typegpu/svelte-renderer')");
+    expect(source).toContain("node_modules/svelte-typegpu/src/svelte-renderer.ts");
+    expect(source).toContain('resolveRendererPath');
     expect(source).toContain('customRenderer: rendererPath');
     expect(source).toContain("import { codeToTokens } from 'shiki'");
     expect(source).toContain('highlightedExampleCode');
@@ -58,10 +60,10 @@ describe('docs app source wiring', () => {
     );
 
     expect(twoBoxes).toContain("from './SceneBox.typegpu.js'");
-    expect(orbitField).toContain("from './OrbitSatellites.typegpu.js'");
-    expect(orbitField).toContain("from './orbit-data.js'");
+    expect(twoBoxes).toContain("from './box-geometry.js'");
+    expect(orbitField).toContain("from './disco-fragment.js'");
     expect(twoBoxes).not.toMatch(/from ['"].*\.typegpu\.svelte['"]/);
-    expect(orbitField).not.toMatch(/from ['"]\.\/orbit-data['"]/);
+    expect(orbitField).not.toMatch(/from ['"]\.\/disco-fragment['"]/);
   });
 
   it('hydrates the live preview but keeps the code panel static on the examples route', () => {

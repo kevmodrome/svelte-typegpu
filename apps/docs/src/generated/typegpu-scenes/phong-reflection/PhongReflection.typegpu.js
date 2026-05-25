@@ -5,9 +5,6 @@ import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
 import PhongLights from './PhongLights.typegpu.js';
-import PhongOrb from './PhongOrb.typegpu.js';
-
-var root_1 = $.from_tree([['phongMaterial']]);
 
 var root = $.from_tree([
 	[
@@ -19,149 +16,65 @@ var root = $.from_tree([
 			[
 				'controls',
 				{ mode: 'orbit' },
-				['pointerControls', { wheel: 'zoom', touch: 'orbit-pinch' }]
+				[
+					'pointerControls',
+					{ dragButton: 'primary', wheel: 'zoom', touch: 'orbit-pinch' }
+				]
 			]
 		],
+		' ',,
 		' ',
 		[
-			'resources',
-			null,
-			['sphereGeometry', { id: 'orb' }],
-			' ',
-			['planeGeometry', { id: 'floor' }],
-			' ',
-			['phongMaterial', { id: 'floorMaterial' }],
-			' ',,
-		],
-		' ',,
-		' ',
-		['mesh', { geometry: 'floor', material: 'floorMaterial' }],
-		' ',,
+			'model',
+			{ src: '/assets/phong/teapot.obj', hitTest: 'bounds' },
+			['phongMaterial']
+		]
 	]
 ]);
 
 export default function PhongReflection_typegpu($$anchor) {
 	var $$pop_renderer = $.push_renderer($renderer);
-
-	const orbs = [
-		{
-			id: 'matte',
-			position: [-1.2, 0.06, 0],
-			scale: [0.78, 0.78, 0.78],
-			color: [0.28, 0.78, 0.95, 1],
-			metalness: 0.04,
-			roughness: 0.72
-		},
-
-		{
-			id: 'polished',
-			position: [0, 0.18, 0.08],
-			scale: [0.96, 0.96, 0.96],
-			color: [0.95, 0.92, 0.82, 1],
-			metalness: 0.22,
-			roughness: 0.22
-		},
-
-		{
-			id: 'warm',
-			position: [1.26, -0.02, -0.04],
-			scale: [0.72, 0.72, 0.72],
-			color: [1, 0.55, 0.28, 1],
-			metalness: 0.12,
-			roughness: 0.38
-		}
-	];
-
 	var scene = root();
 
-	$.set_attribute(scene, 'clearColor', [0.052, 0.047, 0.058, 1]);
-	$.set_attribute(scene, 'animationSpeed', 0.28);
+	$.set_attribute(scene, 'clearColor', [28 / 255, 28 / 255, 28 / 255, 1]);
 
 	var perspectiveCamera = $.child(scene);
 
 	$.set_attribute(perspectiveCamera, 'active', true);
-	$.set_attribute(perspectiveCamera, 'position', [3.8, 2.15, 4.9]);
-	$.set_attribute(perspectiveCamera, 'target', [0, 0.1, 0]);
-	$.set_attribute(perspectiveCamera, 'fov', 38);
+	$.set_attribute(perspectiveCamera, 'position', [-10, 4, -8]);
+	$.set_attribute(perspectiveCamera, 'target', [0, 1, 0]);
+	$.set_attribute(perspectiveCamera, 'fov', 45);
 	$.set_attribute(perspectiveCamera, 'near', 0.1);
 	$.set_attribute(perspectiveCamera, 'far', 100);
 
 	var controls = $.child(perspectiveCamera);
 
-	$.set_attribute(controls, 'minDistance', 3.2);
-	$.set_attribute(controls, 'maxDistance', 10);
+	$.set_attribute(controls, 'minDistance', 8);
+	$.set_attribute(controls, 'maxDistance', 40);
 
 	var pointerControls = $.child(controls);
 
-	$.set_attribute(pointerControls, 'rotateSpeed', 0.62);
-	$.set_attribute(pointerControls, 'zoomSpeed', 0.68);
+	$.set_attribute(pointerControls, 'rotateSpeed', 0.72);
+	$.set_attribute(pointerControls, 'zoomSpeed', 0.7);
 	$.reset(controls);
 	$.reset(perspectiveCamera);
 
-	var resources = $.sibling(perspectiveCamera, 2);
-	var sphereGeometry = $.child(resources);
+	var node = $.sibling(perspectiveCamera, 2);
 
-	$.set_attribute(sphereGeometry, 'radius', 1);
-	$.set_attribute(sphereGeometry, 'widthSegments', 32);
-	$.set_attribute(sphereGeometry, 'heightSegments', 18);
+	$.without_renderer(() => PhongLights(node, {}));
 
-	var planeGeometry = $.sibling(sphereGeometry, 2);
+	var model = $.sibling(node, 2);
 
-	$.set_attribute(planeGeometry, 'width', 5.2);
-	$.set_attribute(planeGeometry, 'height', 3.4);
+	$.set_attribute(model, 'position', [0, 0, 0]);
+	$.set_attribute(model, 'rotation', [0, Math.PI, 0]);
+	$.set_attribute(model, 'scale', [1, 1, 1]);
 
-	var phongMaterial = $.sibling(planeGeometry, 2);
+	var phongMaterial = $.child(model);
 
-	$.set_attribute(phongMaterial, 'color', [0.16, 0.18, 0.2, 1]);
-	$.set_attribute(phongMaterial, 'roughness', 0.5);
-
-	var node = $.sibling(phongMaterial, 2);
-
-	$.each(node, 17, () => orbs, (orb) => orb.id, ($$anchor, orb) => {
-		var phongMaterial_1 = root_1();
-
-		$.template_effect(() => {
-			$.set_attribute(phongMaterial_1, 'id', `${$.get(orb).id}-material`);
-			$.set_attribute(phongMaterial_1, 'color', $.get(orb).color);
-			$.set_attribute(phongMaterial_1, 'metalness', $.get(orb).metalness);
-			$.set_attribute(phongMaterial_1, 'roughness', $.get(orb).roughness);
-		});
-
-		$.append($$anchor, phongMaterial_1);
-	});
-
-	$.reset(resources);
-
-	var node_1 = $.sibling(resources, 2);
-
-	$.without_renderer(() => PhongLights(node_1, {}));
-
-	var mesh = $.sibling(node_1, 2);
-
-	$.set_attribute(mesh, 'position', [0, -0.8, 0]);
-
-	var node_2 = $.sibling(mesh, 2);
-
-	$.each(node_2, 17, () => orbs, (orb) => orb.id, ($$anchor, orb) => {
-		{
-			let $0 = $.derived(() => `${$.get(orb).id}-material`);
-
-			$.without_renderer(() => PhongOrb($$anchor, {
-				get material() {
-					return $.get($0);
-				},
-
-				get position() {
-					return $.get(orb).position;
-				},
-
-				get scale() {
-					return $.get(orb).scale;
-				}
-			}));
-		}
-	});
-
+	$.set_attribute(phongMaterial, 'color', [1, 0.7, 0, 1]);
+	$.set_attribute(phongMaterial, 'roughness', 0.2);
+	$.set_attribute(phongMaterial, 'metalness', 0);
+	$.reset(model);
 	$.reset(scene);
 	$.append($$anchor, scene);
 	$$pop_renderer();

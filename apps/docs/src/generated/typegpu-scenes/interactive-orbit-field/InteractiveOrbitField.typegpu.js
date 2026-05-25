@@ -4,165 +4,41 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
-import OrbitLights from './OrbitLights.typegpu.js';
-import OrbitSatellites from './OrbitSatellites.typegpu.js';
-
-import {
-	createOrbitItems,
-	getOrbitItemColor,
-	getOrbitItemKey,
-	getOrbitItemSpinSpeed,
-	getOrbitItemTransform
-} from './orbit-data.js';
+import { discoFragment } from './disco-fragment.js';
 
 var root = $.from_tree([
 	[
 		'scene',
 		null,
-		[
-			'perspectiveCamera',
-			{ id: 'main' },
-			[
-				'controls',
-				{ mode: 'orbit' },
-				['pointerControls', { wheel: 'zoom', touch: 'orbit-pinch' }]
-			]
-		],
+		['perspectiveCamera', { id: 'main' }],
 		' ',
-		[
-			'resources',
-			null,
-			['boxGeometry', { id: 'satellite' }],
-			' ',
-			['sphereGeometry', { id: 'core' }],
-			' ',
-			['planeGeometry', { id: 'deck' }],
-			' ',
-			['standardMaterial', { id: 'orbitMaterial' }],
-			' ',
-			['standardMaterial', { id: 'coreMaterial' }],
-			' ',
-			['standardMaterial', { id: 'deckMaterial' }]
-		],
-		' ',,
-		' ',
-		['mesh', { geometry: 'deck', material: 'deckMaterial' }],
-		' ',
-		['mesh', { geometry: 'core', material: 'coreMaterial' }],
-		' ',,
+		['shaderPass']
 	]
 ]);
 
-export default function InteractiveOrbitField_typegpu($$anchor, $$props) {
+export default function InteractiveOrbitField_typegpu($$anchor) {
 	var $$pop_renderer = $.push_renderer($renderer);
-
-	$.push($$props, true);
-
-	const orbitItems = createOrbitItems();
 	var scene = root();
 
-	$.set_attribute(scene, 'clearColor', [0.035, 0.044, 0.048, 1]);
-	$.set_attribute(scene, 'animationSpeed', 0.92);
-	$.set_attribute(scene, 'colorShift', 28);
+	$.set_attribute(scene, 'clearColor', [0, 0, 0, 1]);
+	$.set_attribute(scene, 'animationSpeed', 1);
 
 	var perspectiveCamera = $.child(scene);
 
 	$.set_attribute(perspectiveCamera, 'active', true);
-	$.set_attribute(perspectiveCamera, 'position', [3.7, 2.35, 5.1]);
+	$.set_attribute(perspectiveCamera, 'position', [0, 0, 1]);
 	$.set_attribute(perspectiveCamera, 'target', [0, 0, 0]);
-	$.set_attribute(perspectiveCamera, 'fov', 42);
+	$.set_attribute(perspectiveCamera, 'fov', 45);
 	$.set_attribute(perspectiveCamera, 'near', 0.1);
-	$.set_attribute(perspectiveCamera, 'far', 100);
+	$.set_attribute(perspectiveCamera, 'far', 10);
 
-	var controls = $.child(perspectiveCamera);
+	var shaderPass = $.sibling(perspectiveCamera, 2);
 
-	$.set_attribute(controls, 'minDistance', 2.4);
-	$.set_attribute(controls, 'maxDistance', 8.2);
-
-	var pointerControls = $.child(controls);
-
-	$.set_attribute(pointerControls, 'rotateSpeed', 0.78);
-	$.set_attribute(pointerControls, 'zoomSpeed', 0.72);
-	$.reset(controls);
-	$.reset(perspectiveCamera);
-
-	var resources = $.sibling(perspectiveCamera, 2);
-	var boxGeometry = $.child(resources);
-
-	$.set_attribute(boxGeometry, 'width', 1);
-	$.set_attribute(boxGeometry, 'height', 1);
-	$.set_attribute(boxGeometry, 'depth', 1);
-
-	var sphereGeometry = $.sibling(boxGeometry, 2);
-
-	$.set_attribute(sphereGeometry, 'radius', 1);
-	$.set_attribute(sphereGeometry, 'widthSegments', 32);
-	$.set_attribute(sphereGeometry, 'heightSegments', 18);
-
-	var planeGeometry = $.sibling(sphereGeometry, 2);
-
-	$.set_attribute(planeGeometry, 'width', 4.8);
-	$.set_attribute(planeGeometry, 'height', 4.8);
-
-	var standardMaterial = $.sibling(planeGeometry, 2);
-
-	$.set_attribute(standardMaterial, 'color', [1, 1, 1, 1]);
-	$.set_attribute(standardMaterial, 'roughness', 0.26);
-	$.set_attribute(standardMaterial, 'metalness', 0.12);
-
-	var standardMaterial_1 = $.sibling(standardMaterial, 2);
-
-	$.set_attribute(standardMaterial_1, 'color', [0.92, 0.96, 0.86, 1]);
-	$.set_attribute(standardMaterial_1, 'roughness', 0.18);
-	$.set_attribute(standardMaterial_1, 'metalness', 0.24);
-
-	var standardMaterial_2 = $.sibling(standardMaterial_1, 2);
-
-	$.set_attribute(standardMaterial_2, 'color', [0.12, 0.15, 0.145, 1]);
-	$.set_attribute(standardMaterial_2, 'roughness', 0.88);
-	$.set_attribute(standardMaterial_2, 'metalness', 0.02);
-	$.reset(resources);
-
-	var node = $.sibling(resources, 2);
-
-	$.without_renderer(() => OrbitLights(node, {}));
-
-	var mesh = $.sibling(node, 2);
-
-	$.set_attribute(mesh, 'position', [0, -0.76, 0]);
-
-	var mesh_1 = $.sibling(mesh, 2);
-
-	$.set_attribute(mesh_1, 'scale', [0.42, 0.42, 0.42]);
-	$.set_attribute(mesh_1, 'phase', 0.35);
-	$.set_attribute(mesh_1, 'spinSpeed', 0.22);
-
-	var node_1 = $.sibling(mesh_1, 2);
-
-	$.without_renderer(() => OrbitSatellites(node_1, {
-		get items() {
-			return orbitItems;
-		},
-
-		get getKey() {
-			return getOrbitItemKey;
-		},
-
-		get getTransform() {
-			return getOrbitItemTransform;
-		},
-
-		get getColor() {
-			return getOrbitItemColor;
-		},
-
-		get getSpinSpeed() {
-			return getOrbitItemSpinSpeed;
-		}
-	}));
-
+	$.set_attribute(shaderPass, 'uniforms', { time: 'time', resolution: 'resolution' });
+	$.set_attribute(shaderPass, 'active', true);
+	$.set_attribute(shaderPass, 'renderOrder', 0);
 	$.reset(scene);
+	$.template_effect(() => $.set_attribute(shaderPass, 'fragment', discoFragment));
 	$.append($$anchor, scene);
-	$.pop();
 	$$pop_renderer();
 }

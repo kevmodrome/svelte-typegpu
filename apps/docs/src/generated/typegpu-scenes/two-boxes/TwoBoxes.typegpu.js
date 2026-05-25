@@ -6,7 +6,13 @@ import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
 import SceneBox from './SceneBox.typegpu.js';
 
-var root_1 = $.from_tree([['standardMaterial']]);
+import {
+	boxBounds,
+	floorBounds,
+	floorVertices,
+	leftBoxVertices,
+	rightBoxVertices
+} from './box-geometry.js';
 
 var root = $.from_tree([
 	[
@@ -18,28 +24,50 @@ var root = $.from_tree([
 			[
 				'controls',
 				{ mode: 'orbit' },
-				['pointerControls', { wheel: 'zoom', touch: 'orbit-pinch' }]
+				[
+					'pointerControls',
+					{ dragButton: 'primary', wheel: 'zoom', touch: 'orbit-pinch' }
+				]
 			]
 		],
 		' ',
 		[
 			'resources',
 			null,
-			['boxGeometry', { id: 'box' }],
+			[
+				'bufferGeometry',
+				{
+					id: 'left-box-geometry',
+					key: 'two-boxes:left',
+					layoutKey: 'position:normal:uv:color'
+				}
+			],
 			' ',
-			['planeGeometry', { id: 'floor' }],
+			[
+				'bufferGeometry',
+				{
+					id: 'right-box-geometry',
+					key: 'two-boxes:right',
+					layoutKey: 'position:normal:uv:color'
+				}
+			],
 			' ',
-			['standardMaterial', { id: 'floor-material' }],
-			' ',,
+			[
+				'bufferGeometry',
+				{
+					id: 'floor-geometry',
+					key: 'two-boxes:floor',
+					layoutKey: 'position:normal:uv:color'
+				}
+			],
+			' ',
+			['basicMaterial', { id: 'vertex-colors', cullMode: 'none' }]
 		],
 		' ',
-		['ambientLight'],
-		' ',
-		['directionalLight'],
-		' ',
-		['pointLight'],
-		' ',
-		['mesh', { geometry: 'floor', material: 'floor-material' }],
+		[
+			'mesh',
+			{ geometry: 'floor-geometry', material: 'vertex-colors' }
+		],
 		' ',,
 	]
 ]);
@@ -50,139 +78,102 @@ export default function TwoBoxes_typegpu($$anchor) {
 	const boxes = [
 		{
 			id: 'left-box',
-			position: [-1.08, 0, 0],
-			rotation: [-0.18, 0.42, 0],
-			scale: [0.92, 0.92, 0.92],
-			color: [0.38, 0.92, 0.84, 1],
-			spinSpeed: 0.24
+			geometry: 'left-box-geometry',
+			position: [-2, 0, 0]
 		},
 
 		{
 			id: 'right-box',
-			position: [1.08, 0.08, 0.18],
-			rotation: [0.24, -0.36, 0.08],
-			scale: [0.74, 1.12, 0.74],
-			color: [1, 0.63, 0.32, 1],
-			spinSpeed: -0.18
+			geometry: 'right-box-geometry',
+			position: [2, 0, 0]
 		}
 	];
 
+	let boxRotation = $.state($.proxy([0, 0, 0]));
+
+	function rotateBothBoxes(event) {
+		if (event.detail.button !== 2) return;
+
+		$.set(
+			boxRotation,
+			[
+				$.get(boxRotation)[0] - event.detail.deltaY * 0.003,
+				$.get(boxRotation)[1] - event.detail.deltaX * 0.003,
+				$.get(boxRotation)[2]
+			],
+			true
+		);
+	}
+
 	var scene = root();
 
-	$.set_attribute(scene, 'clearColor', [0.045, 0.055, 0.07, 1]);
-	$.set_attribute(scene, 'animationSpeed', 0.42);
+	$.set_attribute(scene, 'clearColor', [0.02, 0.02, 0.025, 1]);
 
 	var perspectiveCamera = $.child(scene);
 
 	$.set_attribute(perspectiveCamera, 'active', true);
-	$.set_attribute(perspectiveCamera, 'position', [3.2, 2.2, 4.6]);
-	$.set_attribute(perspectiveCamera, 'target', [0.08, 0.04, 0]);
-	$.set_attribute(perspectiveCamera, 'fov', 42);
+	$.set_attribute(perspectiveCamera, 'position', [12, 5, 12]);
+	$.set_attribute(perspectiveCamera, 'target', [0, 0, 0]);
+	$.set_attribute(perspectiveCamera, 'fov', 45);
 	$.set_attribute(perspectiveCamera, 'near', 0.1);
-	$.set_attribute(perspectiveCamera, 'far', 100);
+	$.set_attribute(perspectiveCamera, 'far', 1000);
 
 	var controls = $.child(perspectiveCamera);
 
-	$.set_attribute(controls, 'minDistance', 2.4);
-	$.set_attribute(controls, 'maxDistance', 9);
+	$.set_attribute(controls, 'minDistance', 1);
+	$.set_attribute(controls, 'maxDistance', 40);
 
 	var pointerControls = $.child(controls);
 
-	$.set_attribute(pointerControls, 'rotateSpeed', 0.72);
-	$.set_attribute(pointerControls, 'zoomSpeed', 0.7);
+	$.set_attribute(pointerControls, 'rotateSpeed', 1);
+	$.set_attribute(pointerControls, 'zoomSpeed', 0.9);
 	$.reset(controls);
 	$.reset(perspectiveCamera);
 
 	var resources = $.sibling(perspectiveCamera, 2);
-	var boxGeometry = $.child(resources);
+	var bufferGeometry = $.child(resources);
+	var bufferGeometry_1 = $.sibling(bufferGeometry, 2);
+	var bufferGeometry_2 = $.sibling(bufferGeometry_1, 2);
+	var basicMaterial = $.sibling(bufferGeometry_2, 2);
 
-	$.set_attribute(boxGeometry, 'width', 1);
-	$.set_attribute(boxGeometry, 'height', 1);
-	$.set_attribute(boxGeometry, 'depth', 1);
-
-	var planeGeometry = $.sibling(boxGeometry, 2);
-
-	$.set_attribute(planeGeometry, 'width', 4.8);
-	$.set_attribute(planeGeometry, 'height', 4.8);
-
-	var standardMaterial = $.sibling(planeGeometry, 2);
-
-	$.set_attribute(standardMaterial, 'color', [0.16, 0.18, 0.18, 1]);
-	$.set_attribute(standardMaterial, 'roughness', 0.82);
-	$.set_attribute(standardMaterial, 'metalness', 0);
-
-	var node = $.sibling(standardMaterial, 2);
-
-	$.each(node, 17, () => boxes, (box) => box.id, ($$anchor, box) => {
-		var standardMaterial_1 = root_1();
-
-		$.set_attribute(standardMaterial_1, 'roughness', 0.34);
-		$.set_attribute(standardMaterial_1, 'metalness', 0.1);
-
-		$.template_effect(() => {
-			$.set_attribute(standardMaterial_1, 'id', `${$.get(box).id}-material`);
-			$.set_attribute(standardMaterial_1, 'color', $.get(box).color);
-		});
-
-		$.append($$anchor, standardMaterial_1);
-	});
-
+	$.set_attribute(basicMaterial, 'color', [1, 1, 1, 1]);
 	$.reset(resources);
 
-	var ambientLight = $.sibling(resources, 2);
+	var mesh = $.sibling(resources, 2);
 
-	$.set_attribute(ambientLight, 'color', [1, 1, 1]);
-	$.set_attribute(ambientLight, 'intensity', 0.24);
+	$.set_attribute(mesh, 'position', [0, -2, 0]);
+	$.set_attribute(mesh, 'scale', [5, 1, 5]);
 
-	var directionalLight = $.sibling(ambientLight, 2);
+	var node = $.sibling(mesh, 2);
 
-	$.set_attribute(directionalLight, 'rotation', [-0.8, 0.34, 0]);
-	$.set_attribute(directionalLight, 'color', [1, 0.96, 0.88]);
-	$.set_attribute(directionalLight, 'intensity', 1.6);
+	$.each(node, 17, () => boxes, (box) => box.id, ($$anchor, box) => {
+		$.without_renderer(() => SceneBox($$anchor, {
+			get geometry() {
+				return $.get(box).geometry;
+			},
+			material: 'vertex-colors',
+			get position() {
+				return $.get(box).position;
+			},
 
-	var pointLight = $.sibling(directionalLight, 2);
-
-	$.set_attribute(pointLight, 'position', [1.8, 1.1, 1.4]);
-	$.set_attribute(pointLight, 'color', [0.65, 0.96, 1]);
-	$.set_attribute(pointLight, 'intensity', 2.8);
-	$.set_attribute(pointLight, 'range', 10);
-
-	var mesh = $.sibling(pointLight, 2);
-
-	$.set_attribute(mesh, 'position', [0, -1.08, 0]);
-
-	var node_1 = $.sibling(mesh, 2);
-
-	$.each(node_1, 17, () => boxes, (box) => box.id, ($$anchor, box) => {
-		{
-			let $0 = $.derived(() => `${$.get(box).id}-material`);
-
-			$.without_renderer(() => SceneBox($$anchor, {
-				geometry: 'box',
-				get material() {
-					return $.get($0);
-				},
-
-				get position() {
-					return $.get(box).position;
-				},
-
-				get rotation() {
-					return $.get(box).rotation;
-				},
-
-				get scale() {
-					return $.get(box).scale;
-				},
-
-				get spinSpeed() {
-					return $.get(box).spinSpeed;
-				}
-			}));
-		}
+			get rotation() {
+				return $.get(boxRotation);
+			},
+			onDragMove: rotateBothBoxes
+		}));
 	});
 
 	$.reset(scene);
+
+	$.template_effect(() => {
+		$.set_attribute(bufferGeometry, 'vertices', leftBoxVertices);
+		$.set_attribute(bufferGeometry, 'bounds', boxBounds);
+		$.set_attribute(bufferGeometry_1, 'vertices', rightBoxVertices);
+		$.set_attribute(bufferGeometry_1, 'bounds', boxBounds);
+		$.set_attribute(bufferGeometry_2, 'vertices', floorVertices);
+		$.set_attribute(bufferGeometry_2, 'bounds', floorBounds);
+	});
+
 	$.append($$anchor, scene);
 	$$pop_renderer();
 }

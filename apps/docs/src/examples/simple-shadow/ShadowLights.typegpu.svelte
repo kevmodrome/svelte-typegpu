@@ -1,15 +1,11 @@
-<ambientLight color={[0.92, 0.96, 1]} intensity={0.18}></ambientLight>
+<ambientLight color={[1, 1, 1]} intensity={0.1}></ambientLight>
 <directionalLight
-  rotation={[-0.92, 0.46, 0]}
-  color={[1, 0.95, 0.84]}
-  intensity={1.55}
+  position={[0, 4, 4]}
+  lookAt={[0, 0, 0]}
+  color={[1, 1, 1]}
+  intensity={1.25}
+  castShadow={true}
+  shadowMapSize={2048}
+  shadowBias={1}
+  shadowSlopeBias={4}
 ></directionalLight>
-<spotLight
-  position={[-2.1, 2.6, 2.2]}
-  lookAt={[0, -0.32, 0]}
-  color={[1, 0.8, 0.48]}
-  intensity={4.2}
-  range={9}
-  angle={0.66}
-  penumbra={0.34}
-></spotLight>

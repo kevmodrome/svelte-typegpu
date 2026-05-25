@@ -5,23 +5,21 @@ import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
 
-var root = $.from_tree([['mesh']], 4);
+var root = $.from_tree([['mesh', { drag: 'rotate' }]], 4);
 
 export default function SceneBox_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
-
-	let rotation = $.prop($$props, 'rotation', 19, () => [0, 0, 0]),
-		spinSpeed = $.prop($$props, 'spinSpeed', 3, 0);
-
 	var mesh = root();
 
 	$.template_effect(() => {
 		$.set_attribute(mesh, 'geometry', $$props.geometry);
 		$.set_attribute(mesh, 'material', $$props.material);
 		$.set_attribute(mesh, 'position', $$props.position);
-		$.set_attribute(mesh, 'rotation', rotation());
-		$.set_attribute(mesh, 'scale', $$props.scale);
-		$.set_attribute(mesh, 'spinSpeed', spinSpeed());
+		$.set_attribute(mesh, 'rotation', $$props.rotation);
+	});
+
+	$.event('dragmove', mesh, function (...$$args) {
+		$$props.onDragMove?.apply(this, $$args);
 	});
 
 	$.append($$anchor, mesh);
