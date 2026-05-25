@@ -51,7 +51,7 @@ export interface TypeGpuCameraInteractionOptions {
   canvas: HTMLCanvasElement;
   renderer: TypeGpuCameraRenderer;
   windowTarget?: ListenerTarget;
-  shouldIgnorePointerDragStart?: (event: MouseEvent) => boolean;
+  shouldIgnorePointerDragStart?: (event: Event) => boolean;
   requestFrame?: RequestFrame;
   cancelFrame?: CancelFrame;
 }
@@ -320,6 +320,11 @@ export function createCameraInteractionController({
   const onTouchStart = (event: Event) => {
     const touchEvent = event as TouchEvent;
     if (!activePointerControls || !orbit) return;
+    if (touchEvent.defaultPrevented || shouldIgnorePointerDragStart(touchEvent)) {
+      touchEvent.preventDefault();
+      resetGestureState();
+      return;
+    }
 
     if (touchEvent.touches.length === 1 && allowsTouchOrbit(activePointerControls)) {
       touchEvent.preventDefault();
@@ -346,6 +351,11 @@ export function createCameraInteractionController({
   const onTouchMove = (event: Event) => {
     const touchEvent = event as TouchEvent;
     if (!activeScene || !activePointerControls || !orbit) return;
+    if (touchEvent.defaultPrevented || shouldIgnorePointerDragStart(touchEvent)) {
+      touchEvent.preventDefault();
+      resetGestureState();
+      return;
+    }
 
     if (
       activeTouchGesture === 'orbit' &&

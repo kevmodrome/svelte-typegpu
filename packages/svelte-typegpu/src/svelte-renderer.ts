@@ -58,8 +58,11 @@ interface RuntimeState extends TypeGpuRuntime {
   dispose(): void;
 }
 
+type ListenerTarget = Pick<Window, 'addEventListener' | 'removeEventListener'>;
+type ListenerRegistration = [string, EventListener];
+
 interface RuntimeOptions {
-  windowTarget?: Pick<Window, 'addEventListener' | 'removeEventListener'>;
+  windowTarget?: ListenerTarget;
   loadUrl?: TypeGpuModelCacheOptions['loadUrl'];
   loadData?: TypeGpuModelCacheOptions['loadData'];
 }
@@ -164,7 +167,9 @@ function createRuntime(
       : undefined
   });
   let activeDrag: ActiveObjectDrag | null = null;
+  let objectDragWindowListenersAttached = false;
   let suppressNextDragClick = false;
+  const objectDragWindowTarget = windowTargetForObjectDrag(options.windowTarget);
   const cameraInteraction = createCameraInteractionController({
     canvas,
     renderer: gpu,
@@ -238,6 +243,7 @@ function createRuntime(
     event.preventDefault();
     activeDrag = createActiveDrag(hit, event);
     capturePointer(canvas, activeDrag.pointerId);
+    attachObjectDragWindowListeners();
     dispatchDragEvent('dragstart', event);
   }
 
@@ -275,6 +281,18 @@ function createRuntime(
 
   function dispatchCanvasPointerCancel(event: PointerEvent) {
     finishActiveDrag(event, true);
+  }
+
+  function dispatchCanvasLostPointerCapture(event: PointerEvent) {
+    finishActiveDrag(event, true, { releasePointerCapture: false });
+  }
+
+  function dispatchWindowPointerUp(event: Event) {
+    finishActiveDrag(event as PointerEvent, false);
+  }
+
+  function dispatchWindowPointerCancel(event: Event) {
+    finishActiveDrag(event as PointerEvent, true);
   }
 
   function updateHoveredTarget(hit: TypeGpuInteractionHit | null, event: PointerEvent) {
@@ -354,19 +372,30 @@ function createRuntime(
     return true;
   }
 
-  function finishActiveDrag(event: PointerEvent, cancelled: boolean): boolean {
-    if (!activeDrag || !samePointer(event, activeDrag)) return false;
+  function finishActiveDrag(
+    event: PointerEvent,
+    cancelled: boolean,
+    options: { releasePointerCapture?: boolean } = {}
+  ): boolean {
+    const drag = activeDrag;
+    if (!drag || !samePointer(event, drag)) return false;
 
     event.preventDefault();
     const endCanvas = canvasPointFromEvent(canvas, event);
     const moved =
-      activeDrag.moved ||
-      endCanvas.x !== activeDrag.startCanvas.x ||
-      endCanvas.y !== activeDrag.startCanvas.y;
+      drag.moved ||
+      endCanvas.x !== drag.startCanvas.x ||
+      endCanvas.y !== drag.startCanvas.y;
     suppressNextDragClick = suppressNextDragClick || moved;
-    dispatchDragEvent('dragend', event, cancelled);
-    releasePointer(canvas, activeDrag.pointerId);
+    if (!cancelled) {
+      dispatchCapturedPointerUp(drag, event);
+    }
+    dispatchDragEventFor(drag, 'dragend', event, cancelled);
+    detachObjectDragWindowListeners();
     activeDrag = null;
+    if (options.releasePointerCapture !== false) {
+      releasePointer(canvas, drag.pointerId);
+    }
     return true;
   }
 
@@ -375,11 +404,33 @@ function createRuntime(
     event: PointerEvent,
     cancelled = false
   ) {
-    if (!activeDrag || !activeDrag.target.handlers.has(type)) return;
+    if (!activeDrag) return;
+    dispatchDragEventFor(activeDrag, type, event, cancelled);
+  }
 
-    dispatchNodeEvent(activeDrag.node, type, {
+  function dispatchDragEventFor(
+    drag: ActiveObjectDrag,
+    type: (typeof DRAG_EVENT_TYPES)[number],
+    event: PointerEvent,
+    cancelled = false
+  ) {
+    if (!drag.target.handlers.has(type)) return;
+
+    dispatchNodeEvent(drag.node, type, {
       originalEvent: event,
-      detail: dragEventDetail(canvas, activeDrag, event, cancelled)
+      detail: dragEventDetail(canvas, drag, event, cancelled)
+    });
+  }
+
+  function dispatchCapturedPointerUp(drag: ActiveObjectDrag, event: PointerEvent) {
+    if (!drag.target.handlers.has('pointerup')) return;
+
+    dispatchNodeEvent(drag.node, 'pointerup', {
+      originalEvent: event,
+      detail: {
+        instanceId: drag.instanceId,
+        point: drag.point
+      }
     });
   }
 
@@ -402,8 +453,34 @@ function createRuntime(
   canvas.addEventListener('pointermove', dispatchCanvasPointerMove);
   canvas.addEventListener('pointerup', dispatchCanvasPointerUp);
   canvas.addEventListener('pointercancel', dispatchCanvasPointerCancel);
+  canvas.addEventListener('lostpointercapture', dispatchCanvasLostPointerCapture);
   canvas.addEventListener('pointerleave', dispatchCanvasPointerExit);
   canvas.addEventListener('pointerout', dispatchCanvasPointerExit);
+
+  const objectDragWindowListeners: ListenerRegistration[] = [
+    ['pointerup', dispatchWindowPointerUp],
+    ['pointercancel', dispatchWindowPointerCancel]
+  ];
+
+  function attachObjectDragWindowListeners(): void {
+    if (!objectDragWindowTarget || objectDragWindowListenersAttached) return;
+
+    for (const [type, listener] of objectDragWindowListeners) {
+      objectDragWindowTarget.addEventListener(type, listener);
+    }
+
+    objectDragWindowListenersAttached = true;
+  }
+
+  function detachObjectDragWindowListeners(): void {
+    if (!objectDragWindowTarget || !objectDragWindowListenersAttached) return;
+
+    for (const [type, listener] of objectDragWindowListeners) {
+      objectDragWindowTarget.removeEventListener(type, listener);
+    }
+
+    objectDragWindowListenersAttached = false;
+  }
 
   return {
     scheduleSync,
@@ -414,8 +491,11 @@ function createRuntime(
       canvas.removeEventListener('pointermove', dispatchCanvasPointerMove);
       canvas.removeEventListener('pointerup', dispatchCanvasPointerUp);
       canvas.removeEventListener('pointercancel', dispatchCanvasPointerCancel);
+      canvas.removeEventListener('lostpointercapture', dispatchCanvasLostPointerCapture);
       canvas.removeEventListener('pointerleave', dispatchCanvasPointerExit);
       canvas.removeEventListener('pointerout', dispatchCanvasPointerExit);
+      detachObjectDragWindowListeners();
+      activeDrag = null;
       gpu.dispose();
     }
   };
@@ -539,6 +619,12 @@ function releasePointer(canvas: HTMLCanvasElement, pointerId: number): void {
   } catch {
     // Ignore stale pointer releases for parity with pointer capture best effort.
   }
+}
+
+function windowTargetForObjectDrag(windowTarget?: ListenerTarget): ListenerTarget | null {
+  if (windowTarget) return windowTarget;
+
+  return typeof globalThis.window === 'undefined' ? null : globalThis.window;
 }
 
 export function createTypeGpuRuntimeForTest(

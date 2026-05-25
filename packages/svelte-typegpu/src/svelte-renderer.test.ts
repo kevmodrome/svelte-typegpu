@@ -244,6 +244,7 @@ describe('TypeGPU Svelte renderer runtime', () => {
     const mesh = createElement('mesh');
     const geometry = createElement('boxGeometry');
     const dragEvents: unknown[] = [];
+    const pointerUpEvents: unknown[] = [];
     const canvas = new FakeCanvas();
     const windowTarget = new FakeCanvas();
     const renderer = fakeRenderer();
@@ -262,6 +263,7 @@ describe('TypeGPU Svelte renderer runtime', () => {
     addEventListener(mesh, 'dragstart', (event) => dragEvents.push(event));
     addEventListener(mesh, 'dragmove', (event) => dragEvents.push(event));
     addEventListener(mesh, 'dragend', (event) => dragEvents.push(event));
+    addEventListener(mesh, 'pointerup', (event) => pointerUpEvents.push(event));
     insert(controls, pointer, null);
     insert(camera, controls, null);
     insert(mesh, geometry, null);
@@ -355,9 +357,295 @@ describe('TypeGPU Svelte renderer runtime', () => {
         })
       })
     ]);
+    expect(pointerUpEvents).toEqual([
+      expect.objectContaining({
+        target: mesh,
+        detail: expect.objectContaining({
+          instanceId: mesh.uid,
+          point: expect.any(Array)
+        })
+      })
+    ]);
     expect(canvas.setPointerCapture).toHaveBeenCalledWith(7);
     expect(canvas.releasePointerCapture).toHaveBeenCalledWith(7);
     expect(renderer.setCamera).not.toHaveBeenCalled();
+  });
+
+  it('dispatches touch drag events without starting touch orbit controls', async () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const camera = createElement('perspectiveCamera');
+    const controls = createElement('controls');
+    const pointer = createElement('pointerControls');
+    const mesh = createElement('mesh');
+    const geometry = createElement('boxGeometry');
+    const dragEvents: unknown[] = [];
+    const canvas = new FakeCanvas();
+    const windowTarget = new FakeCanvas();
+    const renderer = fakeRenderer();
+    const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
+    const runtime = createTypeGpuRuntimeForTest(
+      root,
+      canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget as unknown as Window
+    );
+
+    canvas.clientWidth = 100;
+    canvas.clientHeight = 100;
+    setAttribute(camera, 'position', [0, 0, 10]);
+    setAttribute(camera, 'target', [0, 0, 0]);
+    setAttribute(mesh, 'drag', 'rotate');
+    addEventListener(mesh, 'dragstart', (event) => dragEvents.push(event));
+    addEventListener(mesh, 'dragmove', (event) => dragEvents.push(event));
+    addEventListener(mesh, 'dragend', (event) => dragEvents.push(event));
+    insert(controls, pointer, null);
+    insert(camera, controls, null);
+    insert(mesh, geometry, null);
+    insert(scene, camera, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+
+    runtime.scheduleSync(root, scene, Dirty.All);
+    await Promise.resolve();
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      callback(100);
+      return 42;
+    }) as typeof requestAnimationFrame;
+
+    try {
+      canvas.dispatch<PointerEvent>('pointerdown', {
+        pointerId: 11,
+        pointerType: 'touch',
+        button: 0,
+        buttons: 1,
+        clientX: 50,
+        clientY: 50,
+        offsetX: 50,
+        offsetY: 50
+      } as Partial<PointerEvent>);
+      canvas.dispatch<TouchEvent>('touchstart', {
+        touches: [{ clientX: 50, clientY: 50 }]
+      } as unknown as Partial<TouchEvent>);
+      canvas.dispatch<PointerEvent>('pointermove', {
+        pointerId: 11,
+        pointerType: 'touch',
+        buttons: 1,
+        clientX: 60,
+        clientY: 70,
+        offsetX: 60,
+        offsetY: 70
+      } as Partial<PointerEvent>);
+      windowTarget.dispatch<TouchEvent>('touchmove', {
+        touches: [{ clientX: 90, clientY: 50 }]
+      } as unknown as Partial<TouchEvent>);
+      canvas.dispatch<PointerEvent>('pointerup', {
+        pointerId: 11,
+        pointerType: 'touch',
+        button: 0,
+        buttons: 0,
+        clientX: 60,
+        clientY: 70,
+        offsetX: 60,
+        offsetY: 70
+      } as Partial<PointerEvent>);
+
+      expect(dragEvents.map((event) => (event as { type: string }).type)).toEqual([
+        'dragstart',
+        'dragmove',
+        'dragend'
+      ]);
+      expect(dragEvents[1]).toMatchObject({
+        target: mesh,
+        detail: expect.objectContaining({
+          pointerId: 11,
+          pointerType: 'touch',
+          deltaX: 10,
+          deltaY: 20,
+          totalDeltaX: 10,
+          totalDeltaY: 20
+        })
+      });
+      expect(renderer.setCamera).not.toHaveBeenCalled();
+    } finally {
+      globalThis.requestAnimationFrame = previousRequestAnimationFrame;
+    }
+  });
+
+  it('cancels active drag on lost pointer capture and releases camera suppression', async () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const camera = createElement('perspectiveCamera');
+    const controls = createElement('controls');
+    const pointer = createElement('pointerControls');
+    const mesh = createElement('mesh');
+    const geometry = createElement('boxGeometry');
+    const dragEvents: unknown[] = [];
+    const canvas = new FakeCanvas();
+    const windowTarget = new FakeCanvas();
+    const renderer = fakeRenderer();
+    const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
+    const runtime = createTypeGpuRuntimeForTest(
+      root,
+      canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget as unknown as Window
+    );
+
+    canvas.clientWidth = 100;
+    canvas.clientHeight = 100;
+    setAttribute(camera, 'position', [0, 0, 10]);
+    setAttribute(camera, 'target', [0, 0, 0]);
+    setAttribute(mesh, 'drag', 'rotate');
+    addEventListener(mesh, 'dragstart', (event) => dragEvents.push(event));
+    addEventListener(mesh, 'dragend', (event) => dragEvents.push(event));
+    insert(controls, pointer, null);
+    insert(camera, controls, null);
+    insert(mesh, geometry, null);
+    insert(scene, camera, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+
+    runtime.scheduleSync(root, scene, Dirty.All);
+    await Promise.resolve();
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      callback(100);
+      return 42;
+    }) as typeof requestAnimationFrame;
+
+    try {
+      canvas.dispatch<PointerEvent>('pointerdown', {
+        pointerId: 12,
+        pointerType: 'mouse',
+        button: 0,
+        buttons: 1,
+        clientX: 50,
+        clientY: 50,
+        offsetX: 50,
+        offsetY: 50
+      } as Partial<PointerEvent>);
+      canvas.dispatch<PointerEvent>('lostpointercapture', {
+        pointerId: 12,
+        pointerType: 'mouse',
+        button: 0,
+        buttons: 0,
+        clientX: 50,
+        clientY: 50,
+        offsetX: 50,
+        offsetY: 50
+      } as Partial<PointerEvent>);
+      canvas.dispatch<MouseEvent>('mousedown', { button: 0, clientX: 5, clientY: 5 } as Partial<
+        MouseEvent
+      >);
+      windowTarget.dispatch<MouseEvent>('mousemove', {
+        buttons: 1,
+        clientX: 55,
+        clientY: 5
+      } as Partial<MouseEvent>);
+
+      expect(dragEvents.map((event) => (event as { type: string }).type)).toEqual([
+        'dragstart',
+        'dragend'
+      ]);
+      expect(dragEvents[1]).toMatchObject({
+        detail: expect.objectContaining({
+          cancelled: true
+        })
+      });
+      expect(renderer.setCamera).toHaveBeenCalledOnce();
+    } finally {
+      globalThis.requestAnimationFrame = previousRequestAnimationFrame;
+    }
+  });
+
+  it('finishes active drag from window pointerup when pointer capture is unavailable', async () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const camera = createElement('perspectiveCamera');
+    const controls = createElement('controls');
+    const pointer = createElement('pointerControls');
+    const mesh = createElement('mesh');
+    const geometry = createElement('boxGeometry');
+    const dragEvents: unknown[] = [];
+    const pointerUpEvents: unknown[] = [];
+    const canvas = new FakeCanvas();
+    const windowTarget = new FakeCanvas();
+    const renderer = fakeRenderer();
+    const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
+    const runtime = createTypeGpuRuntimeForTest(
+      root,
+      canvas as unknown as HTMLCanvasElement,
+      renderer,
+      windowTarget as unknown as Window
+    );
+
+    canvas.clientWidth = 100;
+    canvas.clientHeight = 100;
+    canvas.setPointerCapture.mockImplementation(() => {
+      throw new Error('capture failed');
+    });
+    setAttribute(camera, 'position', [0, 0, 10]);
+    setAttribute(camera, 'target', [0, 0, 0]);
+    setAttribute(mesh, 'drag', 'rotate');
+    addEventListener(mesh, 'dragstart', (event) => dragEvents.push(event));
+    addEventListener(mesh, 'dragend', (event) => dragEvents.push(event));
+    addEventListener(mesh, 'pointerup', (event) => pointerUpEvents.push(event));
+    insert(controls, pointer, null);
+    insert(camera, controls, null);
+    insert(mesh, geometry, null);
+    insert(scene, camera, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+
+    runtime.scheduleSync(root, scene, Dirty.All);
+    await Promise.resolve();
+    globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      callback(100);
+      return 42;
+    }) as typeof requestAnimationFrame;
+
+    try {
+      canvas.dispatch<PointerEvent>('pointerdown', {
+        pointerId: 13,
+        pointerType: 'mouse',
+        button: 0,
+        buttons: 1,
+        clientX: 50,
+        clientY: 50,
+        offsetX: 50,
+        offsetY: 50
+      } as Partial<PointerEvent>);
+      windowTarget.dispatch<PointerEvent>('pointerup', {
+        pointerId: 13,
+        pointerType: 'mouse',
+        button: 0,
+        buttons: 0,
+        clientX: 130,
+        clientY: 40
+      } as Partial<PointerEvent>);
+      canvas.dispatch<MouseEvent>('mousedown', { button: 0, clientX: 5, clientY: 5 } as Partial<
+        MouseEvent
+      >);
+      windowTarget.dispatch<MouseEvent>('mousemove', {
+        buttons: 1,
+        clientX: 55,
+        clientY: 5
+      } as Partial<MouseEvent>);
+
+      expect(dragEvents.map((event) => (event as { type: string }).type)).toEqual([
+        'dragstart',
+        'dragend'
+      ]);
+      expect(dragEvents[1]).toMatchObject({
+        detail: expect.objectContaining({
+          cancelled: false
+        })
+      });
+      expect(pointerUpEvents).toHaveLength(1);
+      expect(renderer.setCamera).toHaveBeenCalledOnce();
+    } finally {
+      globalThis.requestAnimationFrame = previousRequestAnimationFrame;
+    }
   });
 
   it('keeps orbit controls active when pointerdown misses draggable objects', async () => {
