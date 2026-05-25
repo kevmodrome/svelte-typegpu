@@ -6,6 +6,7 @@ import {
   createPlaneGeometryData,
   createSphereGeometryData
 } from './geometries';
+import { MESH_VERTEX_LAYOUT_KEY } from './instance-data';
 import {
   readInlineMaterial as readInlineMaterialDescriptor,
   samplerDescriptorFor,
@@ -116,7 +117,13 @@ export function readInlineGeometry(node: TypeGpuNode): TypeGpuGeometryData | nul
   if (node.name === 'bufferGeometry') {
     const vertices = node.attributes.vertices;
     const bounds = boundsArg(node.attributes.bounds);
-    if (!(vertices instanceof Float32Array) || !bounds) return null;
+    if (
+      !(vertices instanceof Float32Array) ||
+      !bounds ||
+      geometryLayoutArg(node) !== MESH_VERTEX_LAYOUT_KEY
+    ) {
+      return null;
+    }
 
     return createBufferGeometryData({
       key: versionedKey(
@@ -131,6 +138,10 @@ export function readInlineGeometry(node: TypeGpuNode): TypeGpuGeometryData | nul
   }
 
   return null;
+}
+
+function geometryLayoutArg(node: TypeGpuNode): string | null {
+  return stringArg(node.attributes.layoutKey) ?? stringArg(node.attributes.vertexLayout);
 }
 
 export function readInlineMaterial(

@@ -59,13 +59,14 @@ describe('TypeGPU resource descriptors', () => {
     const bounds = { min: [-1, 0, -1], max: [1, 0, 1] };
     const node = createElement('bufferGeometry');
     setAttribute(node, 'key', 'triangle');
+    setAttribute(node, 'layoutKey', MESH_VERTEX_LAYOUT_KEY);
     setAttribute(node, 'vertices', vertices);
     setAttribute(node, 'bounds', bounds);
 
     const geometry = readInlineGeometry(node);
 
     expect(geometry).toMatchObject({
-      key: 'triangle@rev:3',
+      key: 'triangle@rev:4',
       kind: 'buffer',
       bounds,
       vertexCount: 3,
@@ -99,6 +100,29 @@ describe('TypeGPU resource descriptors', () => {
     expect(readInlineGeometry(node)).toBeNull();
   });
 
+  it('rejects ambiguous legacy 8-float buffer geometry without a canonical layout declaration', () => {
+    const node = createElement('bufferGeometry');
+    setAttribute(node, 'key', 'ambiguous-legacy');
+    setAttribute(
+      node,
+      'vertices',
+      new Float32Array([
+        -1, 0, -1, 0, 1, 0, 0, 0,
+        1, 0, -1, 0, 1, 0, 1, 0,
+        0, 0, 1, 0, 1, 0, 0.5, 1,
+        -1, 0, -1, 0, 1, 0, 0, 0,
+        1, 0, -1, 0, 1, 0, 1, 0,
+        0, 0, 1, 0, 1, 0, 0.5, 1,
+        -1, 0, -1, 0, 1, 0, 0, 0,
+        1, 0, -1, 0, 1, 0, 1, 0,
+        0, 0, 1, 0, 1, 0, 0.5, 1
+      ])
+    );
+    setAttribute(node, 'bounds', { min: [-1, 0, -1], max: [1, 0, 1] });
+
+    expect(readInlineGeometry(node)).toBeNull();
+  });
+
   it('reads inline indexed buffer geometry without mutating caller arrays', () => {
     const vertices = new Float32Array([
       -1, 0, -1, 0, 1, 0, 0, 0, 1, 0, 0, 1,
@@ -109,6 +133,7 @@ describe('TypeGPU resource descriptors', () => {
     const node = createElement('bufferGeometry');
 
     setAttribute(node, 'id', 'indexed');
+    setAttribute(node, 'vertexLayout', MESH_VERTEX_LAYOUT_KEY);
     setAttribute(node, 'vertices', vertices);
     setAttribute(node, 'indices', indices);
     setAttribute(node, 'bounds', { min: [-1, 0, -1], max: [1, 0, 1] });
@@ -129,6 +154,7 @@ describe('TypeGPU resource descriptors', () => {
 
   it('rejects indexed buffer geometry with invalid triangle indices', () => {
     const invalidCount = createElement('bufferGeometry');
+    setAttribute(invalidCount, 'layoutKey', MESH_VERTEX_LAYOUT_KEY);
     setAttribute(invalidCount, 'vertices', new Float32Array([
       -1, 0, -1, 0, 1, 0, 0, 0, 1, 1, 1, 1,
       1, 0, -1, 0, 1, 0, 1, 0, 1, 1, 1, 1,
@@ -138,6 +164,7 @@ describe('TypeGPU resource descriptors', () => {
     setAttribute(invalidCount, 'bounds', { min: [-1, 0, -1], max: [1, 0, 1] });
 
     const outOfRange = createElement('bufferGeometry');
+    setAttribute(outOfRange, 'layoutKey', MESH_VERTEX_LAYOUT_KEY);
     setAttribute(outOfRange, 'vertices', new Float32Array([
       -1, 0, -1, 0, 1, 0, 0, 0, 1, 1, 1, 1,
       1, 0, -1, 0, 1, 0, 1, 0, 1, 1, 1, 1
@@ -300,6 +327,7 @@ describe('TypeGPU resource descriptors', () => {
     setAttribute(texture, 'src', '/textures/a.png');
     setAttribute(geometry, 'id', 'triangle');
     setAttribute(geometry, 'key', 'triangle-buffer');
+    setAttribute(geometry, 'layoutKey', MESH_VERTEX_LAYOUT_KEY);
     setAttribute(geometry, 'bounds', bounds);
     setAttribute(
       geometry,

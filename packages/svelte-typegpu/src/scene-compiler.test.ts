@@ -181,6 +181,7 @@ describe('TypeGPU scene compiler', () => {
     setAttribute(boxGeometry, 'height', 4);
     setAttribute(boxGeometry, 'depth', 6);
     setAttribute(bufferMesh, 'scale', [2, 3, 4]);
+    setAttribute(bufferGeometry, 'layoutKey', MESH_VERTEX_LAYOUT_KEY);
     setAttribute(
       bufferGeometry,
       'vertices',
