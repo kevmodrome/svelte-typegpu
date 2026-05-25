@@ -138,7 +138,7 @@ Expected: PASS.
 - Test: `packages/svelte-typegpu/src/scene-compiler.test.ts`
 - Test: `packages/svelte-typegpu/src/gpu-renderer.test.ts`
 
-- [ ] **Step 1: Add failing tests**
+- [x] **Step 1: Add failing tests**
 
 Add tests for `<shaderPass fragment={fragmentFn} uniforms={{ time: 'time', resolution: 'resolution' }} active={true}>`. Assert scene state contains one fullscreen pass and no mesh draw batch.
 
@@ -146,7 +146,7 @@ Run: `pnpm --filter svelte-typegpu --fail-if-no-match test -- scene-compiler.tes
 
 Expected: FAIL because `shaderPass` is inert.
 
-- [ ] **Step 2: Implement shader pass state and rendering**
+- [x] **Step 2: Implement shader pass state and rendering**
 
 Collect active shader pass nodes, create the corresponding TypeGPU pipeline inside the renderer, bind built-in time/resolution uniforms, and draw six fullscreen vertices before or instead of mesh batches according to `renderOrder`.
 
