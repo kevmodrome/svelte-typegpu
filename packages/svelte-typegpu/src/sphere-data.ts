@@ -41,7 +41,8 @@ export function createSphereGeometryData(): TypeGpuGeometryData {
     key: 'sphere',
     vertexData: createSphereVertexData(),
     vertexCount: SPHERE_VERTEX_COUNT,
-    vertexFloats: MESH_VERTEX_FLOATS
+    vertexFloats: MESH_VERTEX_FLOATS,
+    hasVertexAlpha: false
   };
 }
 

@@ -1,8 +1,15 @@
 import tgpu from 'typegpu';
 import { describe, expect, it } from 'vitest';
-import { meshFragmentMain } from './typegpu-pipeline';
+import { meshFragmentMain, meshVertexMain } from './typegpu-pipeline';
 
 describe('TypeGPU mesh pipeline shader functions', () => {
+  it('resolves the vertex shader with vertex colors passed to varyings', () => {
+    const wgsl = tgpu.resolve([meshVertexMain], { names: 'strict' });
+
+    expect(wgsl).toContain('vertex_color');
+    expect(wgsl).toContain('output.vertex_color = vertex_color;');
+  });
+
   it('resolves the fragment shader with varying inputs attached', () => {
     const wgsl = tgpu.resolve([meshFragmentMain], { names: 'strict' });
 

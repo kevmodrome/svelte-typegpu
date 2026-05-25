@@ -53,7 +53,7 @@ const rotateHue = tgpu
   }`
   .$name('rotate_hue');
 
-const meshVertexMain = tgpu
+export const meshVertexMain = tgpu
   .vertexFn({
     in: {
       position: d.vec3f,

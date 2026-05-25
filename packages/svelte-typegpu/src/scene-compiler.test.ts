@@ -111,6 +111,70 @@ describe('TypeGPU scene compiler', () => {
     ).toBe(true);
   });
 
+  it('uses alpha blending and disables depth writes for geometry vertex alpha', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const mesh = createElement('mesh');
+    const geometry = createElement('bufferGeometry');
+
+    setAttribute(geometry, 'layoutKey', MESH_VERTEX_LAYOUT_KEY);
+    setAttribute(geometry, 'vertices', new Float32Array([
+      -1, 0, -1, 0, 1, 0, 0, 0, 1, 1, 1, 1,
+      1, 0, -1, 0, 1, 0, 1, 0, 1, 1, 1, 0.5,
+      0, 0, 1, 0, 1, 0, 0.5, 1, 1, 1, 1, 1
+    ]));
+    setAttribute(geometry, 'bounds', { min: [-1, 0, -1], max: [1, 0, 1] });
+
+    insert(mesh, geometry, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+
+    const state = createSceneState(root, createTypeGpuSceneCache(), { dirty: Dirty.All });
+
+    expect(state.drawBatches).toHaveLength(1);
+    expect(state.drawBatches[0].geometry.hasVertexAlpha).toBe(true);
+    expect(state.drawBatches[0].material).toMatchObject({
+      transparent: true,
+      blendMode: 'alpha',
+      depthWrite: false
+    });
+    expect(state.drawBatches[0].pipelineKey).toContain('blend:alpha');
+    expect(state.drawBatches[0].pipelineKey).toContain('depthWrite:false');
+  });
+
+  it('keeps explicit material blend and depth settings with geometry vertex alpha', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const mesh = createElement('mesh');
+    const geometry = createElement('bufferGeometry');
+    const material = createElement('standardMaterial');
+
+    setAttribute(geometry, 'layoutKey', MESH_VERTEX_LAYOUT_KEY);
+    setAttribute(geometry, 'vertices', new Float32Array([
+      -1, 0, -1, 0, 1, 0, 0, 0, 1, 1, 1, 0.25,
+      1, 0, -1, 0, 1, 0, 1, 0, 1, 1, 1, 1,
+      0, 0, 1, 0, 1, 0, 0.5, 1, 1, 1, 1, 1
+    ]));
+    setAttribute(geometry, 'bounds', { min: [-1, 0, -1], max: [1, 0, 1] });
+    setAttribute(material, 'blendMode', 'opaque');
+    setAttribute(material, 'depthWrite', true);
+
+    insert(mesh, geometry, null);
+    insert(mesh, material, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+
+    const state = createSceneState(root, createTypeGpuSceneCache(), { dirty: Dirty.All });
+
+    expect(state.drawBatches[0].material).toMatchObject({
+      transparent: true,
+      blendMode: 'opaque',
+      depthWrite: true
+    });
+    expect(state.drawBatches[0].pipelineKey).toContain('blend:opaque');
+    expect(state.drawBatches[0].pipelineKey).toContain('depthWrite:true');
+  });
+
   it('uses scene activeCamera and background color aliases', () => {
     const root = createFragment();
     const scene = createElement('scene');

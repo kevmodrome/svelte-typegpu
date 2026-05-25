@@ -76,6 +76,9 @@ export function createMaterialDescriptor(
     depthTest: booleanArg(input.depthTest, true),
     cullMode: cullModeFor(input.cullMode),
     blendMode,
+    explicitBlendMode: hasOwn(input, 'blendMode'),
+    explicitDepthWrite: hasOwn(input, 'depthWrite'),
+    explicitDepthTest: hasOwn(input, 'depthTest'),
     map: texture
   };
 
@@ -250,6 +253,10 @@ function blendModeFor(value: unknown, transparent: boolean): 'opaque' | 'alpha' 
 
 function cullModeFor(value: unknown): GPUCullMode {
   return value === 'none' || value === 'front' || value === 'back' ? value : 'back';
+}
+
+function hasOwn(object: object, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(object, key);
 }
 
 function filterMode(value: unknown, fallback: GPUFilterMode): GPUFilterMode {

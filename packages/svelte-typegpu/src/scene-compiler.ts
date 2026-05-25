@@ -217,6 +217,7 @@ function readMeshDrawItem(
   }
 
   const material = readMeshMaterial(mesh, resources);
+  const effectiveMaterial = materialForGeometry(material.value, geometry.value);
   const itemRevision = combineNodeRevision(
     combineNodeRevision(meshRevision, geometry.node),
     material.node
@@ -228,10 +229,10 @@ function readMeshDrawItem(
     node: mesh,
     revision: itemRevision,
     geometry: geometry.value,
-    material: material.value,
+    material: effectiveMaterial,
     transform,
     bounds: transformBounds(localBounds, transform),
-    color: rgbaArg(mesh.attributes.color, material.value.color),
+    color: rgbaArg(mesh.attributes.color, effectiveMaterial.color),
     phase: numberArg(mesh.attributes.phase, 0),
     spinSpeed: numberArg(mesh.attributes.spinSpeed, 0),
     renderOrder: numberArg(mesh.attributes.renderOrder, 0),
@@ -298,12 +299,13 @@ function readInstancedMeshDrawItems(
   }
 
   const material = readMeshMaterial(instancedMesh, resources);
+  const effectiveMaterial = materialForGeometry(material.value, geometry.value);
   const baseRevision = combineNodeRevision(
     combineNodeRevision(meshRevision, geometry.node),
     material.node
   );
   const localBounds = geometry.value.bounds ?? defaultBounds();
-  const defaultColor = rgbaArg(instancedMesh.attributes.color, material.value.color);
+  const defaultColor = rgbaArg(instancedMesh.attributes.color, effectiveMaterial.color);
   const defaultSpinSpeed = numberArg(instancedMesh.attributes.spinSpeed, 0);
   const getKey = callbackArg(instancedMesh.attributes.getKey);
   const getTransform = callbackArg(instancedMesh.attributes.getTransform);
@@ -329,7 +331,7 @@ function readInstancedMeshDrawItems(
         spinSpeed
       ]),
       geometry: geometry.value,
-      material: material.value,
+      material: effectiveMaterial,
       transform: itemTransform,
       bounds: transformBounds(localBounds, itemTransform),
       color,
@@ -366,6 +368,7 @@ function readModelDrawItems(
     const material = readModelMaterial(modelNode, mesh, resources);
     const transform = composeTransforms(modelTransform, mesh.transform);
     const geometry = mesh.geometry;
+    const effectiveMaterial = materialForGeometry(material.value, geometry);
     const localBounds = geometry.bounds ?? defaultBounds();
 
     items.push({
@@ -376,10 +379,10 @@ function readModelDrawItems(
         null
       ),
       geometry,
-      material: material.value,
+      material: effectiveMaterial,
       transform,
       bounds: transformBounds(localBounds, transform),
-      color: rgbaArg(modelNode.attributes.color, material.value.color),
+      color: rgbaArg(modelNode.attributes.color, effectiveMaterial.color),
       phase: numberArg(modelNode.attributes.phase, 0),
       spinSpeed: numberArg(modelNode.attributes.spinSpeed, 0),
       renderOrder: numberArg(modelNode.attributes.renderOrder, 0),
@@ -600,6 +603,25 @@ function recomputeMaterialKeys(material: TypeGpuMaterialDescriptor): TypeGpuMate
   };
 }
 
+function materialForGeometry(
+  material: TypeGpuMaterialDescriptor,
+  geometry: TypeGpuGeometryData
+): TypeGpuMaterialDescriptor {
+  if (!geometry.hasVertexAlpha) return material;
+
+  const adjusted = recomputeMaterialKeys({
+    ...material,
+    transparent: true,
+    blendMode: material.explicitBlendMode ? material.blendMode : 'alpha',
+    depthWrite: material.explicitDepthWrite ? material.depthWrite : false
+  });
+
+  return {
+    ...adjusted,
+    key: `material:${adjusted.kind}`
+  };
+}
+
 function ensureMaterialDescriptor(material: TypeGpuMaterialDescriptor): TypeGpuMaterialDescriptor {
   const textureKey = material.textureKey ?? textureKeyFor(material.map);
   const samplerKey = material.samplerKey ?? DEFAULT_SAMPLER.key;
@@ -612,6 +634,9 @@ function ensureMaterialDescriptor(material: TypeGpuMaterialDescriptor): TypeGpuM
     depthTest: material.depthTest ?? true,
     cullMode: material.cullMode ?? 'back',
     blendMode: material.blendMode ?? (material.opacity < 1 || material.color[3] < 1 ? 'alpha' : 'opaque'),
+    explicitBlendMode: material.explicitBlendMode ?? false,
+    explicitDepthWrite: material.explicitDepthWrite ?? false,
+    explicitDepthTest: material.explicitDepthTest ?? false,
     pipelineKey:
       material.pipelineKey ??
       [

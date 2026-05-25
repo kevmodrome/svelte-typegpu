@@ -106,6 +106,7 @@ export function createBoxGeometryData(): TypeGpuGeometryData {
     key: 'box',
     vertexData: createBoxVertexData(),
     vertexCount: BOX_VERTEX_COUNT,
-    vertexFloats: MESH_VERTEX_FLOATS
+    vertexFloats: MESH_VERTEX_FLOATS,
+    hasVertexAlpha: false
   };
 }

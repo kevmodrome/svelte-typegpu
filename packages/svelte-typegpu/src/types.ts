@@ -136,6 +136,7 @@ export interface TypeGpuGeometryData {
   shape?: Vector3Tuple;
   topology?: TypeGpuPrimitiveTopology;
   layoutKey?: string;
+  hasVertexAlpha?: boolean;
 }
 
 export interface TypeGpuProceduralGeometryDescriptor {
@@ -231,6 +232,9 @@ export interface TypeGpuMaterialDescriptorBase<K extends TypeGpuMaterialKind> {
   depthTest?: boolean;
   cullMode?: GPUCullMode;
   blendMode?: 'opaque' | 'alpha' | 'additive';
+  explicitBlendMode?: boolean;
+  explicitDepthWrite?: boolean;
+  explicitDepthTest?: boolean;
   map: TypeGpuTextureSource | null;
 }
 

@@ -294,7 +294,8 @@ function readPrimitive(
       vertexFloats: MESH_VERTEX_FLOATS,
       bounds: boundsForVertexData(vertexData),
       topology: 'triangle-list',
-      layoutKey: MESH_VERTEX_LAYOUT_KEY
+      layoutKey: MESH_VERTEX_LAYOUT_KEY,
+      hasVertexAlpha: false
     },
     material: readMaterial(container, modelKey, primitive.material),
     transform: IDENTITY_TRANSFORM

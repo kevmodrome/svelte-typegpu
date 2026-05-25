@@ -23,7 +23,8 @@ export function createBoxGeometryData(
     vertexFloats: MESH_VERTEX_FLOATS,
     bounds: boxBounds([width, height, depth]),
     topology: 'triangle-list',
-    layoutKey: MESH_VERTEX_LAYOUT_KEY
+    layoutKey: MESH_VERTEX_LAYOUT_KEY,
+    hasVertexAlpha: false
   };
 }
 
@@ -67,7 +68,8 @@ export function createPlaneGeometryData(
     vertexFloats: MESH_VERTEX_FLOATS,
     bounds: planeBounds([width, height, 0]),
     topology: 'triangle-list',
-    layoutKey: MESH_VERTEX_LAYOUT_KEY
+    layoutKey: MESH_VERTEX_LAYOUT_KEY,
+    hasVertexAlpha: false
   };
 }
 
@@ -92,7 +94,8 @@ export function createSphereGeometryData(
     vertexFloats: MESH_VERTEX_FLOATS,
     bounds: sphereBounds([radius * 2, radius * 2, radius * 2]),
     topology: 'triangle-list',
-    layoutKey: MESH_VERTEX_LAYOUT_KEY
+    layoutKey: MESH_VERTEX_LAYOUT_KEY,
+    hasVertexAlpha: false
   };
 }
 
@@ -131,7 +134,8 @@ export function createBufferGeometryData(input: {
       max: [...input.bounds.max]
     },
     topology: input.topology ?? 'triangle-list',
-    layoutKey: MESH_VERTEX_LAYOUT_KEY
+    layoutKey: MESH_VERTEX_LAYOUT_KEY,
+    hasVertexAlpha: hasVertexAlpha(vertexData)
   };
 }
 
@@ -166,4 +170,12 @@ function isValidTriangleListIndexData(
   }
 
   return true;
+}
+
+function hasVertexAlpha(vertexData: Float32Array): boolean {
+  for (let index = 0; index < vertexData.length; index += MESH_VERTEX_FLOATS) {
+    if ((vertexData[index + 11] ?? 1) < 1) return true;
+  }
+
+  return false;
 }

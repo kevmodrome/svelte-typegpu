@@ -24,7 +24,8 @@ describe('TypeGPU resource descriptors', () => {
       kind: 'box',
       bounds: { min: [-1, -2, -3], max: [1, 2, 3] },
       topology: 'triangle-list',
-      layoutKey: MESH_VERTEX_LAYOUT_KEY
+      layoutKey: MESH_VERTEX_LAYOUT_KEY,
+      hasVertexAlpha: false
     });
     expect(geometry?.vertexFloats).toBe(MESH_VERTEX_FLOATS);
     expect(geometry?.vertexCount).toBe(36);
@@ -43,7 +44,8 @@ describe('TypeGPU resource descriptors', () => {
       kind: 'plane',
       bounds: { min: [-4, 0, -5], max: [4, 0, 5] },
       topology: 'triangle-list',
-      layoutKey: MESH_VERTEX_LAYOUT_KEY
+      layoutKey: MESH_VERTEX_LAYOUT_KEY,
+      hasVertexAlpha: false
     });
     expect(geometry?.vertexFloats).toBe(MESH_VERTEX_FLOATS);
     expect(geometry?.vertexCount).toBe(6);
@@ -54,7 +56,7 @@ describe('TypeGPU resource descriptors', () => {
     const vertices = new Float32Array([
       -1, 0, -1, 0, 1, 0, 0, 0, 1, 0, 0, 1,
       1, 0, -1, 0, 1, 0, 1, 0, 0, 1, 0, 1,
-      0, 0, 1, 0, 1, 0, 0.5, 1, 0, 0, 1, 1
+      0, 0, 1, 0, 1, 0, 0.5, 1, 0, 0, 1, 0.5
     ]);
     const bounds = { min: [-1, 0, -1], max: [1, 0, 1] };
     const node = createElement('bufferGeometry');
@@ -71,7 +73,8 @@ describe('TypeGPU resource descriptors', () => {
       bounds,
       vertexCount: 3,
       vertexFloats: MESH_VERTEX_FLOATS,
-      layoutKey: MESH_VERTEX_LAYOUT_KEY
+      layoutKey: MESH_VERTEX_LAYOUT_KEY,
+      hasVertexAlpha: true
     });
     expect(geometry?.vertexData).not.toBe(vertices);
     expect(Array.from(geometry?.vertexData ?? [])).toEqual(Array.from(vertices));
