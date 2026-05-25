@@ -99,9 +99,16 @@ async function loadDataModel(data: ArrayBuffer, key: string): Promise<TypeGpuLoa
   if (isGlbBuffer(data)) return loadGlbModel(data, key);
 
   const text = new TextDecoder().decode(data);
-  if (looksLikeObjText(text)) return loadObjModel(text, key);
+  if (hasInvalidObjTextCharacters(text) || !looksLikeObjText(text)) {
+    throw new Error(`Unsupported model data format for ${key}. Expected GLB binary or OBJ text.`);
+  }
 
-  throw new Error(`Unsupported model data format for ${key}. Expected GLB binary or OBJ text.`);
+  const model = loadObjModel(text, key);
+  if (model.meshes.length === 0) {
+    throw new Error(`OBJ model data for ${key} did not contain renderable geometry.`);
+  }
+
+  return model;
 }
 
 function isObjUrl(src: string): boolean {
@@ -124,4 +131,8 @@ function looksLikeObjText(text: string): boolean {
   }
 
   return false;
+}
+
+function hasInvalidObjTextCharacters(text: string): boolean {
+  return /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufffd]/.test(text);
 }
