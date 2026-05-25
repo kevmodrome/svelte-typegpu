@@ -14,6 +14,8 @@ import {
 	rightBoxVertices
 } from './box-geometry.js';
 
+import { rotateBoxesFromDrag } from './box-interaction.js';
+
 var root = $.from_tree([
 	[
 		'scene',
@@ -72,8 +74,10 @@ var root = $.from_tree([
 	]
 ]);
 
-export default function TwoBoxes_typegpu($$anchor) {
+export default function TwoBoxes_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
+
+	$.push($$props, true);
 
 	const boxes = [
 		{
@@ -92,17 +96,7 @@ export default function TwoBoxes_typegpu($$anchor) {
 	let boxRotation = $.state($.proxy([0, 0, 0]));
 
 	function rotateBothBoxes(event) {
-		if (event.detail.button !== 2) return;
-
-		$.set(
-			boxRotation,
-			[
-				$.get(boxRotation)[0] - event.detail.deltaY * 0.003,
-				$.get(boxRotation)[1] - event.detail.deltaX * 0.003,
-				$.get(boxRotation)[2]
-			],
-			true
-		);
+		$.set(boxRotation, rotateBoxesFromDrag($.get(boxRotation), event), true);
 	}
 
 	var scene = root();
@@ -175,5 +169,6 @@ export default function TwoBoxes_typegpu($$anchor) {
 	});
 
 	$.append($$anchor, scene);
+	$.pop();
 	$$pop_renderer();
 }

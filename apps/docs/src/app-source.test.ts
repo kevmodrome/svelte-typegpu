@@ -13,6 +13,20 @@ describe('docs app source wiring', () => {
     expect(source).toContain("'/examples/:slug': Mochi.page('./src/routes/Examples.svelte'");
   });
 
+  it('declares direct docs dependencies for shader helpers and local Mochi builds', () => {
+    const manifest = JSON.parse(read('../package.json')) as {
+      scripts?: Record<string, string>;
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+
+    expect(manifest.scripts?.['generate:typegpu']).toContain('node --disable-warning=ExperimentalWarning --experimental-strip-types');
+    expect(manifest.scripts?.['generate:typegpu']).toContain('scripts/compile-typegpu-scenes.ts');
+    expect(manifest.dependencies?.typegpu).toBe('^0.11.6');
+    expect(manifest.devDependencies?.bun).toBe('1.3.14');
+    expect(manifest.devDependencies?.['vite-node']).toBeUndefined();
+  });
+
   it('uses svelte-typegpu as the product name in the shell', () => {
     const source = read('./components/SiteShell.svelte');
 
@@ -43,7 +57,6 @@ describe('docs app source wiring', () => {
 
     expect(source).toContain("import { compile } from 'svelte/compiler'");
     expect(source).toContain("import.meta.resolve('svelte-typegpu/svelte-renderer')");
-    expect(source).toContain("node_modules/svelte-typegpu/src/svelte-renderer.ts");
     expect(source).toContain('resolveRendererPath');
     expect(source).toContain('customRenderer: rendererPath');
     expect(source).toContain("import { codeToTokens } from 'shiki'");

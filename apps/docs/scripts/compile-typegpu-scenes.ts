@@ -4,14 +4,18 @@ import { fileURLToPath } from 'node:url';
 import { codeToTokens } from 'shiki';
 import { compile } from 'svelte/compiler';
 import ts from 'typescript';
-import { exampleDefinitions } from '../src/examples/example-definitions';
-import { docSnippetDefinitions } from '../src/snippets/doc-snippets';
 
 const scriptRoot = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(scriptRoot, '..');
 const generatedRoot = path.join(appRoot, 'src/generated');
 const sceneOutDir = path.join(generatedRoot, 'typegpu-scenes');
 const rendererPath = resolveRendererPath();
+const { exampleDefinitions } = await import(
+  new URL('../src/examples/example-definitions.ts', import.meta.url).href
+);
+const { docSnippetDefinitions } = await import(
+  new URL('../src/snippets/doc-snippets.ts', import.meta.url).href
+);
 
 rmSync(sceneOutDir, { recursive: true, force: true });
 mkdirSync(sceneOutDir, { recursive: true });

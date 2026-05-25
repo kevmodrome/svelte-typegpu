@@ -7,6 +7,7 @@
     leftBoxVertices,
     rightBoxVertices
   } from './box-geometry';
+  import { rotateBoxesFromDrag } from './box-interaction';
   import type { TypeGpuDragEventDetail, Vector3Tuple } from 'svelte-typegpu';
 
   const boxes: {
@@ -29,13 +30,7 @@
   let boxRotation = $state<Vector3Tuple>([0, 0, 0]);
 
   function rotateBothBoxes(event: CustomEvent<TypeGpuDragEventDetail>) {
-    if (event.detail.button !== 2) return;
-
-    boxRotation = [
-      boxRotation[0] - event.detail.deltaY * 0.003,
-      boxRotation[1] - event.detail.deltaX * 0.003,
-      boxRotation[2]
-    ];
+    boxRotation = rotateBoxesFromDrag(boxRotation, event);
   }
 </script>
 

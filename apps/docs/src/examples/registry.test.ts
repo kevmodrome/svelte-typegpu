@@ -99,14 +99,23 @@ describe('docs example registry', () => {
     ];
 
     for (const definition of exampleDefinitions) {
-      const svelteSources = definition.sourceFiles
-        .filter((sourceUrl) => fileURLToPath(sourceUrl).endsWith('.svelte'))
-        .map((sourceUrl) => readFileSync(sourceUrl, 'utf8'));
+      const sourceFiles = definition.sourceFiles.map((sourceUrl) => ({
+        filename: fileURLToPath(sourceUrl).split('/').at(-1) ?? '',
+        source: readFileSync(sourceUrl, 'utf8')
+      }));
 
-      for (const source of svelteSources) {
+      for (const { source } of sourceFiles) {
         for (const pattern of forbiddenRawOrchestration) {
           expect(source).not.toMatch(pattern);
         }
+      }
+
+      if (definition.slug === 'interactive-orbit-field') {
+        const shaderHelper = sourceFiles.find((sourceFile) =>
+          sourceFile.filename.endsWith('disco-fragment.ts')
+        );
+
+        expect(shaderHelper?.source).toMatch(/tgpu\s*\.\s*fragmentFn/);
       }
     }
   });

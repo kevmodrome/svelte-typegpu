@@ -14,7 +14,8 @@ export const exampleDefinitions = [
     sourceFiles: [
       new URL('./two-boxes/TwoBoxes.typegpu.svelte', import.meta.url),
       new URL('./two-boxes/SceneBox.typegpu.svelte', import.meta.url),
-      new URL('./two-boxes/box-geometry.ts', import.meta.url)
+      new URL('./two-boxes/box-geometry.ts', import.meta.url),
+      new URL('./two-boxes/box-interaction.ts', import.meta.url)
     ],
     typeGpuSourceFiles: [{ path: 'index.ts', loc: 417 }]
   },

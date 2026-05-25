@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "generate:typegpu": "vite-node scripts/compile-typegpu-scenes.ts",
+    "generate:typegpu": "node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/compile-typegpu-scenes.ts",
     "predev": "pnpm run generate:typegpu",
     "dev": "MODE=development bun src/index.ts",
     "prebuild": "pnpm run generate:typegpu",
@@ -15,15 +15,16 @@
   "dependencies": {
     "mochi-framework": "0.3.2",
     "svelte": "https://pkg.pr.new/svelte@18042",
-    "svelte-typegpu": "workspace:*"
+    "svelte-typegpu": "workspace:*",
+    "typegpu": "^0.11.6"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
     "@types/node": "^24.10.1",
     "@webgpu/types": "^0.1.70",
+    "bun": "1.3.14",
     "shiki": "^4.1.0",
     "typescript": "^5.9.3",
-    "vite-node": "2.1.9",
     "vitest": "^4.0.14"
   }
 }
