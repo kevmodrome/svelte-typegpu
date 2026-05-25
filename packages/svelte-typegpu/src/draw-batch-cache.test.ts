@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createElement } from './core';
 import { createDrawBatchCache } from './draw-batch-cache';
+import { MESH_VERTEX_FLOATS, MESH_VERTEX_LAYOUT_KEY } from './instance-data';
 import type {
   TypeGpuGeometryData,
   TypeGpuMaterialDescriptor,
@@ -124,12 +125,12 @@ function geometryData(key: string): TypeGpuGeometryData {
   return {
     key,
     kind: key.startsWith('sphere') ? 'sphere' : 'box',
-    vertexData: new Float32Array([0, 0, 0, 0, 1, 0, 0, 0]),
+    vertexData: new Float32Array([0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1]),
     vertexCount: 1,
-    vertexFloats: 8,
+    vertexFloats: MESH_VERTEX_FLOATS,
     bounds: { min: [-0.5, -0.5, -0.5], max: [0.5, 0.5, 0.5] },
     topology: 'triangle-list',
-    layoutKey: 'position:normal:uv'
+    layoutKey: MESH_VERTEX_LAYOUT_KEY
   };
 }
 

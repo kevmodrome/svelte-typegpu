@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { addEventListener, createElement, createFragment, insert, setAttribute } from './core';
 import { Dirty, hasDirty } from './dirty';
 import type { TypeGpuLoadedModel } from './glb-loader';
+import { MESH_VERTEX_FLOATS, MESH_VERTEX_LAYOUT_KEY } from './instance-data';
 import { createModelCache } from './model-cache';
 import { createSceneState, createTypeGpuSceneCache } from './scene-compiler';
 
@@ -184,9 +185,9 @@ describe('TypeGPU scene compiler', () => {
       bufferGeometry,
       'vertices',
       new Float32Array([
-        0, 0, 0, 0, 1, 0, 0, 0,
-        4, 0, 0, 0, 1, 0, 1, 0,
-        0, 5, 6, 0, 1, 0, 0, 1
+        0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1,
+        4, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1,
+        0, 5, 6, 0, 1, 0, 0, 1, 1, 1, 1, 1
       ])
     );
     setAttribute(bufferGeometry, 'bounds', { min: [0, 0, 0], max: [4, 5, 6] });
@@ -357,12 +358,12 @@ describe('TypeGPU scene compiler', () => {
           geometry: {
             key: 'url:/models/column.glb:primitive:0',
             kind: 'imported',
-            vertexData: new Float32Array([0, 0, 0, 0, 1, 0, 0, 0]),
+            vertexData: new Float32Array([0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1]),
             vertexCount: 1,
-            vertexFloats: 8,
+            vertexFloats: MESH_VERTEX_FLOATS,
             bounds: { min: [0, 0, 0], max: [1, 1, 0] },
             topology: 'triangle-list',
-            layoutKey: 'pnu8'
+            layoutKey: MESH_VERTEX_LAYOUT_KEY
           },
           material: {
             kind: 'phong',
@@ -430,9 +431,9 @@ describe('TypeGPU scene compiler', () => {
         {
           geometry: {
             key: 'url:/models/textured.glb:primitive:0',
-            vertexData: new Float32Array([0, 0, 0, 0, 0, 1, 0, 0]),
+            vertexData: new Float32Array([0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1]),
             vertexCount: 1,
-            vertexFloats: 8,
+            vertexFloats: MESH_VERTEX_FLOATS,
             bounds: { min: [0, 0, 0], max: [1, 1, 1] }
           },
           material: {
@@ -515,12 +516,12 @@ function loadedModelFixture(key: string): TypeGpuLoadedModel {
         geometry: {
           key: `${key}:primitive:0`,
           kind: 'imported',
-          vertexData: new Float32Array([0, 0, 0, 0, 1, 0, 0, 0]),
+          vertexData: new Float32Array([0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1]),
           vertexCount: 1,
-          vertexFloats: 8,
+          vertexFloats: MESH_VERTEX_FLOATS,
           bounds: { min: [0, 0, 0], max: [1, 1, 1] },
           topology: 'triangle-list',
-          layoutKey: 'pnu8'
+          layoutKey: MESH_VERTEX_LAYOUT_KEY
         },
         material: {
           kind: 'standard',

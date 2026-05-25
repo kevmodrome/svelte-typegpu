@@ -7,6 +7,7 @@ import {
   resolveGeometryReference,
   resolveMaterialReference
 } from './resources';
+import { MESH_VERTEX_FLOATS, MESH_VERTEX_LAYOUT_KEY } from './instance-data';
 import type { TypeGpuStandardMaterialDescriptor } from './types';
 
 describe('TypeGPU resource descriptors', () => {
@@ -23,9 +24,9 @@ describe('TypeGPU resource descriptors', () => {
       kind: 'box',
       bounds: { min: [-1, -2, -3], max: [1, 2, 3] },
       topology: 'triangle-list',
-      layoutKey: 'position:normal:uv:color'
+      layoutKey: MESH_VERTEX_LAYOUT_KEY
     });
-    expect(geometry?.vertexFloats).toBe(12);
+    expect(geometry?.vertexFloats).toBe(MESH_VERTEX_FLOATS);
     expect(geometry?.vertexCount).toBe(36);
     expect(Array.from(geometry?.vertexData.slice(8, 12) ?? [])).toEqual([1, 1, 1, 1]);
   });
@@ -42,9 +43,9 @@ describe('TypeGPU resource descriptors', () => {
       kind: 'plane',
       bounds: { min: [-4, 0, -5], max: [4, 0, 5] },
       topology: 'triangle-list',
-      layoutKey: 'position:normal:uv:color'
+      layoutKey: MESH_VERTEX_LAYOUT_KEY
     });
-    expect(geometry?.vertexFloats).toBe(12);
+    expect(geometry?.vertexFloats).toBe(MESH_VERTEX_FLOATS);
     expect(geometry?.vertexCount).toBe(6);
     expect(Array.from(geometry?.vertexData.slice(8, 12) ?? [])).toEqual([1, 1, 1, 1]);
   });
@@ -68,8 +69,8 @@ describe('TypeGPU resource descriptors', () => {
       kind: 'buffer',
       bounds,
       vertexCount: 3,
-      vertexFloats: 12,
-      layoutKey: 'position:normal:uv:color'
+      vertexFloats: MESH_VERTEX_FLOATS,
+      layoutKey: MESH_VERTEX_LAYOUT_KEY
     });
     expect(geometry?.vertexData).not.toBe(vertices);
     expect(Array.from(geometry?.vertexData ?? [])).toEqual(Array.from(vertices));
@@ -79,6 +80,23 @@ describe('TypeGPU resource descriptors', () => {
 
     bounds.min[0] = -99;
     expect(geometry?.bounds?.min[0]).toBe(-1);
+  });
+
+  it('rejects legacy 8-float non-indexed buffer geometry records', () => {
+    const node = createElement('bufferGeometry');
+    setAttribute(node, 'key', 'legacy-triangle');
+    setAttribute(
+      node,
+      'vertices',
+      new Float32Array([
+        -1, 0, -1, 0, 1, 0, 0, 0,
+        1, 0, -1, 0, 1, 0, 1, 0,
+        0, 0, 1, 0, 1, 0, 0.5, 1
+      ])
+    );
+    setAttribute(node, 'bounds', { min: [-1, 0, -1], max: [1, 0, 1] });
+
+    expect(readInlineGeometry(node)).toBeNull();
   });
 
   it('reads inline indexed buffer geometry without mutating caller arrays', () => {
@@ -107,6 +125,28 @@ describe('TypeGPU resource descriptors', () => {
 
     indices[0] = 2;
     expect(geometry?.indexData?.[0]).toBe(0);
+  });
+
+  it('rejects indexed buffer geometry with invalid triangle indices', () => {
+    const invalidCount = createElement('bufferGeometry');
+    setAttribute(invalidCount, 'vertices', new Float32Array([
+      -1, 0, -1, 0, 1, 0, 0, 0, 1, 1, 1, 1,
+      1, 0, -1, 0, 1, 0, 1, 0, 1, 1, 1, 1,
+      0, 0, 1, 0, 1, 0, 0.5, 1, 1, 1, 1, 1
+    ]));
+    setAttribute(invalidCount, 'indices', new Uint16Array([0, 1]));
+    setAttribute(invalidCount, 'bounds', { min: [-1, 0, -1], max: [1, 0, 1] });
+
+    const outOfRange = createElement('bufferGeometry');
+    setAttribute(outOfRange, 'vertices', new Float32Array([
+      -1, 0, -1, 0, 1, 0, 0, 0, 1, 1, 1, 1,
+      1, 0, -1, 0, 1, 0, 1, 0, 1, 1, 1, 1
+    ]));
+    setAttribute(outOfRange, 'indices', new Uint16Array([0, 1, 2]));
+    setAttribute(outOfRange, 'bounds', { min: [-1, 0, -1], max: [1, 0, 1] });
+
+    expect(readInlineGeometry(invalidCount)).toBeNull();
+    expect(readInlineGeometry(outOfRange)).toBeNull();
   });
 
   it('normalizes inline material descriptor variants', () => {

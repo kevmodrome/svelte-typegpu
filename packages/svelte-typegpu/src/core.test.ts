@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { MESH_INSTANCE_FLOATS } from './instance-data';
+import { MESH_INSTANCE_FLOATS, MESH_VERTEX_FLOATS } from './instance-data';
 import {
   addEventListener,
   createElement,
@@ -508,9 +508,9 @@ describe('TypeGPU renderer core', () => {
         {
           geometry: {
             key: 'url:/models/triangle.glb:primitive:0',
-            vertexData: new Float32Array([0, 0, 0, 0, 0, 1, 0, 0]),
+            vertexData: new Float32Array([0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1]),
             vertexCount: 1,
-            vertexFloats: 8
+            vertexFloats: MESH_VERTEX_FLOATS
           },
           material: {
             kind: 'standard',
@@ -561,9 +561,9 @@ describe('TypeGPU renderer core', () => {
         {
           geometry: {
             key: 'url:/models/painted.glb:primitive:0',
-            vertexData: new Float32Array([0, 0, 0, 0, 0, 1, 0, 0]),
+            vertexData: new Float32Array([0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1]),
             vertexCount: 1,
-            vertexFloats: 8
+            vertexFloats: MESH_VERTEX_FLOATS
           },
           material: {
             kind: 'standard',
@@ -619,9 +619,9 @@ describe('TypeGPU renderer core', () => {
         {
           geometry: {
             key: 'box',
-            vertexData: new Float32Array([0, 0, 0, 0, 0, 1, 0, 0]),
+            vertexData: new Float32Array([0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1]),
             vertexCount: 1,
-            vertexFloats: 8
+            vertexFloats: MESH_VERTEX_FLOATS
           },
           material: {
             kind: 'standard',
@@ -677,9 +677,9 @@ describe('TypeGPU renderer core', () => {
         {
           geometry: {
             key: 'url:/models/multi.glb:primitive:0',
-            vertexData: new Float32Array([0, 0, 0, 0, 0, 1, 0, 0]),
+            vertexData: new Float32Array([0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1]),
             vertexCount: 1,
-            vertexFloats: 8
+            vertexFloats: MESH_VERTEX_FLOATS
           },
           material: {
             kind: 'standard',
@@ -698,9 +698,9 @@ describe('TypeGPU renderer core', () => {
         {
           geometry: {
             key: 'url:/models/multi.glb:primitive:1',
-            vertexData: new Float32Array([0, 0, 0, 0, 0, 1, 0, 0]),
+            vertexData: new Float32Array([0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1]),
             vertexCount: 1,
-            vertexFloats: 8
+            vertexFloats: MESH_VERTEX_FLOATS
           },
           material: {
             kind: 'standard',

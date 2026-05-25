@@ -34,5 +34,6 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     expect(wgsl).toContain('textureSample');
     expect(wgsl).toContain('in.uv');
     expect(wgsl).toContain('texel * in.color * in.vertex_color');
+    expect(wgsl).toContain('texel.a * in.color.a * in.vertex_color.a * in.material.z');
   });
 });

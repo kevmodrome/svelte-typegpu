@@ -1,4 +1,4 @@
-import { MESH_VERTEX_FLOATS } from './instance-data';
+import { MESH_VERTEX_FLOATS, MESH_VERTEX_LAYOUT_KEY } from './instance-data';
 import type { TypeGpuNode } from './core';
 import { readInlineMaterial } from './material-descriptors';
 import { IDENTITY_TRANSFORM } from './transform';
@@ -294,7 +294,7 @@ function readPrimitive(
       vertexFloats: MESH_VERTEX_FLOATS,
       bounds: boundsForVertexData(vertexData),
       topology: 'triangle-list',
-      layoutKey: 'position:normal:uv:color'
+      layoutKey: MESH_VERTEX_LAYOUT_KEY
     },
     material: readMaterial(container, modelKey, primitive.material),
     transform: IDENTITY_TRANSFORM

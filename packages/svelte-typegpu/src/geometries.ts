@@ -1,14 +1,12 @@
 import { boxBounds, planeBounds, sphereBounds } from './bounds';
 import { createBoxVertexData } from './box-data';
-import { MESH_VERTEX_FLOATS } from './instance-data';
+import { MESH_VERTEX_FLOATS, MESH_VERTEX_LAYOUT_KEY } from './instance-data';
 import { createSphereVertexData } from './sphere-data';
 import type {
   TypeGpuBounds,
   TypeGpuGeometryData,
   TypeGpuPrimitiveTopology
 } from './types';
-
-const LAYOUT_KEY = 'position:normal:uv:color';
 
 export function createBoxGeometryData(
   width: number,
@@ -25,7 +23,7 @@ export function createBoxGeometryData(
     vertexFloats: MESH_VERTEX_FLOATS,
     bounds: boxBounds([width, height, depth]),
     topology: 'triangle-list',
-    layoutKey: LAYOUT_KEY
+    layoutKey: MESH_VERTEX_LAYOUT_KEY
   };
 }
 
@@ -69,7 +67,7 @@ export function createPlaneGeometryData(
     vertexFloats: MESH_VERTEX_FLOATS,
     bounds: planeBounds([width, height, 0]),
     topology: 'triangle-list',
-    layoutKey: LAYOUT_KEY
+    layoutKey: MESH_VERTEX_LAYOUT_KEY
   };
 }
 
@@ -94,7 +92,7 @@ export function createSphereGeometryData(
     vertexFloats: MESH_VERTEX_FLOATS,
     bounds: sphereBounds([radius * 2, radius * 2, radius * 2]),
     topology: 'triangle-list',
-    layoutKey: LAYOUT_KEY
+    layoutKey: MESH_VERTEX_LAYOUT_KEY
   };
 }
 
@@ -111,13 +109,20 @@ export function createBufferGeometryData(input: {
 
   const vertexData = new Float32Array(input.vertices);
   const indexData = input.indices ? copyIndexData(input.indices) : undefined;
+  const vertexCount = vertexData.length / MESH_VERTEX_FLOATS;
+
+  if (indexData) {
+    if (!isValidTriangleListIndexData(indexData, vertexCount)) return null;
+  } else if (vertexCount % 3 !== 0) {
+    return null;
+  }
 
   return {
     key: input.key,
     kind: 'buffer',
     vertexData,
     indexData,
-    vertexCount: vertexData.length / MESH_VERTEX_FLOATS,
+    vertexCount,
     indexCount: indexData?.length,
     indexFormat: indexData instanceof Uint16Array ? 'uint16' : indexData ? 'uint32' : undefined,
     vertexFloats: MESH_VERTEX_FLOATS,
@@ -126,7 +131,7 @@ export function createBufferGeometryData(input: {
       max: [...input.bounds.max]
     },
     topology: input.topology ?? 'triangle-list',
-    layoutKey: LAYOUT_KEY
+    layoutKey: MESH_VERTEX_LAYOUT_KEY
   };
 }
 
@@ -148,4 +153,17 @@ function scalePositions(vertexData: Float32Array, scale: [number, number, number
 
 function copyIndexData(indices: Uint16Array | Uint32Array): Uint16Array | Uint32Array {
   return indices instanceof Uint16Array ? new Uint16Array(indices) : new Uint32Array(indices);
+}
+
+function isValidTriangleListIndexData(
+  indices: Uint16Array | Uint32Array,
+  vertexCount: number
+): boolean {
+  if (indices.length === 0 || indices.length % 3 !== 0) return false;
+
+  for (const index of indices) {
+    if (index >= vertexCount) return false;
+  }
+
+  return true;
 }
