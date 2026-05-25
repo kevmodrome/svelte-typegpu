@@ -4,10 +4,12 @@ import {
   lightingBindGroupLayout,
   materialBindGroupLayout,
   MAX_TYPEGPU_LIGHTS,
+  shaderPassBindGroupLayout,
   shadowBindGroupLayout,
   shadowPassBindGroupLayout,
   TYPEGPU_LIGHT_RECORD_BYTES,
   TYPEGPU_LIGHTING_BYTES,
+  TYPEGPU_SHADER_PASS_UNIFORM_BYTES,
   TYPEGPU_SHADOW_UNIFORM_BYTES,
   sceneBindGroupLayout,
   TYPEGPU_SCENE_UNIFORM_FLOATS,
@@ -15,6 +17,7 @@ import {
   meshVertexLayout,
   typegpuLightSchema,
   typegpuLightingSchema,
+  typegpuShaderPassUniformSchema,
   typegpuShadowSchema,
   typegpuSceneUniformSchema,
   typegpuMeshInstanceSchema,
@@ -161,6 +164,15 @@ describe('TypeGPU layout schemas', () => {
     expect(shadowBindGroupLayout.entries.shadow?.uniform).toBe(typegpuShadowSchema);
     expect(shadowBindGroupLayout.entries.shadowMap?.texture.type).toBe('texture_depth_2d');
     expect(shadowBindGroupLayout.entries.shadowSampler?.sampler).toBe('comparison');
+  });
+
+  it('describes fullscreen shader pass uniforms with a contiguous TypeGPU bind group', () => {
+    expect(TYPEGPU_SHADER_PASS_UNIFORM_BYTES).toBe(16);
+    expect(d.sizeOf(typegpuShaderPassUniformSchema)).toBe(TYPEGPU_SHADER_PASS_UNIFORM_BYTES);
+    expect(typegpuShaderPassUniformSchema.propTypes.time).toBeDefined();
+    expect(typegpuShaderPassUniformSchema.propTypes.resolution).toBeDefined();
+    expect(shaderPassBindGroupLayout.index).toBe(0);
+    expect(shaderPassBindGroupLayout.entries.uniforms?.uniform).toBe(typegpuShaderPassUniformSchema);
   });
 
   it('describes a separate contiguous shadow-pass uniform bind group', () => {

@@ -4,6 +4,7 @@ export {
   type TypeGpuRoot,
   type TypeGpuRootOptions
 } from './svelte-renderer';
+export { shaderPassBindGroupLayout } from './typegpu-layouts';
 export type {
   RgbaTuple,
   TypeGpuCameraSettings,
@@ -17,6 +18,8 @@ export type {
   TypeGpuPointerDragButton,
   TypeGpuPointerWheelMode,
   TypeGpuPrimitiveTopology,
+  TypeGpuShaderPassFragment,
+  TypeGpuShaderPassUniformMap,
   TypeGpuTouchMode,
   Vector2Tuple,
   Vector3Tuple,

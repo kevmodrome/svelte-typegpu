@@ -181,6 +181,68 @@ describe('TypeGPU scene compiler', () => {
     expect((receiverFlags & 8) === 8).toBe(true);
   });
 
+  it('collects active shaderPass nodes in render order without mesh draw batches', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const later = createElement('shaderPass');
+    const earlier = createElement('shader-pass');
+    const laterFragment = () => null;
+    const earlierFragment = () => null;
+
+    setAttribute(later, 'fragment', laterFragment);
+    setAttribute(later, 'uniforms', { time: 'time' });
+    setAttribute(later, 'renderOrder', 3);
+    setAttribute(earlier, 'fragment', earlierFragment);
+    setAttribute(earlier, 'uniforms', { resolution: 'resolution', time: 'time' });
+    setAttribute(earlier, 'renderOrder', -1);
+    insert(scene, later, null);
+    insert(scene, earlier, null);
+    insert(root, scene, null);
+
+    const state = createSceneState(root, createTypeGpuSceneCache(), { dirty: Dirty.All });
+
+    expect(state.drawBatches).toHaveLength(0);
+    expect(state.shaderPasses).toHaveLength(2);
+    expect(state.shaderPassesChanged).toBe(true);
+    expect(state.shaderPasses.map((pass) => pass.node)).toEqual([earlier, later]);
+    expect(state.shaderPasses.map((pass) => pass.renderOrder)).toEqual([-1, 3]);
+    expect(state.shaderPasses[0]).toMatchObject({
+      key: `shader-pass:${earlier.uid}`,
+      fragment: earlierFragment,
+      uniforms: { resolution: 'resolution', time: 'time' },
+      active: true
+    });
+    expect(state.shaderPasses[1]).toMatchObject({
+      key: `shader-pass:${later.uid}`,
+      fragment: laterFragment,
+      uniforms: { time: 'time' },
+      active: true
+    });
+  });
+
+  it('ignores inactive shaderPass nodes and reuses clean passes by dirty mask', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const active = createElement('shaderPass');
+    const inactive = createElement('shaderPass');
+    const cache = createTypeGpuSceneCache();
+
+    setAttribute(active, 'fragment', () => null);
+    setAttribute(inactive, 'fragment', () => null);
+    setAttribute(inactive, 'active', false);
+    insert(scene, active, null);
+    insert(scene, inactive, null);
+    insert(root, scene, null);
+
+    const first = createSceneState(root, cache, { dirty: Dirty.All });
+    const second = createSceneState(root, cache, { dirty: Dirty.RenderSettings });
+
+    expect(first.shaderPasses).toHaveLength(1);
+    expect(first.shaderPasses[0].node).toBe(active);
+    expect(second.shaderPasses).toBe(first.shaderPasses);
+    expect(second.shaderPassesChanged).toBe(false);
+  });
+
   it('compiles model and instancedMesh castShadow attributes into shadow batches', async () => {
     const root = createFragment();
     const scene = createElement('scene');

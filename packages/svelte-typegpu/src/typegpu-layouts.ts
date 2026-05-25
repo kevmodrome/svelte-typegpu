@@ -113,3 +113,22 @@ export const shadowPassBindGroupLayout = tgpu
   })
   .$idx(1)
   .$name('TypeGPU shadow pass bind group layout');
+
+export const TYPEGPU_SHADER_PASS_UNIFORM_FLOATS = 4;
+export const TYPEGPU_SHADER_PASS_UNIFORM_BYTES =
+  TYPEGPU_SHADER_PASS_UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT;
+
+export const typegpuShaderPassUniformSchema = d
+  .struct({
+    time: d.f32,
+    padding0: d.f32,
+    resolution: d.vec2f
+  })
+  .$name('TypeGpuShaderPassUniforms');
+
+export const shaderPassBindGroupLayout = tgpu
+  .bindGroupLayout({
+    uniforms: { uniform: typegpuShaderPassUniformSchema, visibility: ['fragment'] }
+  })
+  .$idx(0)
+  .$name('TypeGPU shader pass bind group layout');

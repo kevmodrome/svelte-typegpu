@@ -1,3 +1,4 @@
+import type { TgpuFragmentFn } from 'typegpu';
 import type { TypeGpuNode } from './core';
 import { Dirty } from './dirty';
 
@@ -329,6 +330,21 @@ export interface TypeGpuDrawBatch {
   sortKey: number;
 }
 
+export type TypeGpuShaderPassUniformBuiltIn = 'time' | 'resolution';
+export type TypeGpuShaderPassUniformMap = Record<string, TypeGpuShaderPassUniformBuiltIn>;
+export type TypeGpuShaderPassFragment = TgpuFragmentFn<any, any>;
+
+export interface TypeGpuShaderPass {
+  key: string;
+  node: TypeGpuNode;
+  revision: number;
+  fragment: TypeGpuShaderPassFragment;
+  uniforms: TypeGpuShaderPassUniformMap;
+  active: boolean;
+  renderOrder: number;
+  sortKey: number;
+}
+
 export interface TypeGpuInteractionTarget {
   id?: TypeGpuInstanceId;
   drawItemId?: TypeGpuInstanceId;
@@ -406,6 +422,8 @@ export interface TypeGpuSceneState {
   lightsChanged: boolean;
   drawBatches: TypeGpuDrawBatch[];
   drawBatchesChanged: boolean;
+  shaderPasses: TypeGpuShaderPass[];
+  shaderPassesChanged: boolean;
   interaction: TypeGpuInteractionIndex;
   interactionChanged: boolean;
   liveResourceKeys: TypeGpuLiveResourceKeys;

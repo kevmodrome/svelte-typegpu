@@ -1,8 +1,17 @@
-import tgpu from 'typegpu';
+import { readFileSync } from 'node:fs';
+import tgpu, { d } from 'typegpu';
 import { describe, expect, it } from 'vitest';
-import { meshFragmentMain, meshVertexMain, shadowVertexMain } from './typegpu-pipeline';
+import {
+  createShaderPassPipeline,
+  meshFragmentMain,
+  meshVertexMain,
+  shadowVertexMain
+} from './typegpu-pipeline';
+import { shaderPassBindGroupLayout } from './typegpu-layouts';
 
 describe('TypeGPU mesh pipeline shader functions', () => {
+  const pipelineSource = readFileSync(new URL('./typegpu-pipeline.ts', import.meta.url), 'utf8');
+
   it('resolves the vertex shader with vertex colors passed to varyings', () => {
     const wgsl = tgpu.resolve([meshVertexMain], { names: 'strict' });
 
@@ -61,5 +70,29 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     expect(wgsl).not.toContain('sampler_comparison');
     expect(wgsl).not.toContain('shadowMap');
     expect(wgsl).not.toContain('@fragment');
+  });
+
+  it('supports fullscreen shader pass fragments with built-in uniforms', () => {
+    const fragment = tgpu
+      .fragmentFn({
+        in: { uv: d.vec2f },
+        out: d.vec4f
+      })/* wgsl */ `{
+        let resolution = shaderPassBindGroupLayout.$.uniforms.resolution;
+        let time = shaderPassBindGroupLayout.$.uniforms.time;
+        return vec4f(in.uv.x, in.uv.y, fract(time + resolution.x * 0.0), 1.0);
+      }`
+      .$uses({ shaderPassBindGroupLayout })
+      .$name('shaderPassFragmentFixture');
+
+    const wgsl = tgpu.resolve([fragment], { names: 'strict' });
+
+    expect(createShaderPassPipeline).toBeTypeOf('function');
+    expect(wgsl).toContain('@fragment fn shaderPassFragmentFixture');
+    expect(wgsl).toContain('@group(0)');
+    expect(wgsl).toContain('var<uniform> uniforms');
+    expect(wgsl).toContain('resolution');
+    expect(wgsl).toContain('time');
+    expect(pipelineSource).toContain('common.fullScreenTriangle');
   });
 });

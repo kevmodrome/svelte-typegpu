@@ -22,6 +22,7 @@ import {
   samplerKeyFor,
   textureKeyFor
 } from './material-descriptors';
+import { normalizeShaderPassUniforms } from './shader-pass';
 import { composeTransforms, IDENTITY_TRANSFORM, readLocalTransform } from './transform';
 import type {
   RgbaTuple,
@@ -36,6 +37,7 @@ import type {
   TypeGpuMeshDrawItem,
   TypeGpuRenderSettings,
   TypeGpuSceneState,
+  TypeGpuShaderPass,
   TypeGpuTransform,
   Vector3Tuple
 } from './types';
@@ -45,6 +47,7 @@ export interface TypeGpuSceneCache {
   modelCache: TypeGpuModelCache;
   cleanDrawBatches: TypeGpuDrawBatch[];
   cleanLights: TypeGpuLight[];
+  cleanShaderPasses: TypeGpuShaderPass[];
   cleanInteraction: TypeGpuInteractionIndex;
 }
 
@@ -93,6 +96,7 @@ export function createTypeGpuSceneCache(
       }),
     cleanDrawBatches: [],
     cleanLights: [],
+    cleanShaderPasses: [],
     cleanInteraction: createInteractionIndex([])
   };
 }
@@ -107,6 +111,7 @@ export function createSceneState(
   const sceneSettings = readRenderSettings(root);
   const camera = readCameraState(root, sceneSettings.activeCamera);
   const recomputeLights = options.reuseLights === true ? false : hasDirty(dirty, Dirty.Lights);
+  const recomputeShaderPasses = shouldRecomputeShaderPasses(dirty);
   const recomputeDrawBatches =
     options.reuseDrawBatches === true ? false : shouldRecomputeDrawBatches(dirty);
   const recomputeInteraction = shouldRecomputeInteraction(dirty);
@@ -116,6 +121,12 @@ export function createSceneState(
 
   if (recomputeLights) {
     cache.cleanLights = lights;
+  }
+
+  const shaderPasses = recomputeShaderPasses ? collectShaderPasses(root) : cache.cleanShaderPasses;
+
+  if (recomputeShaderPasses) {
+    cache.cleanShaderPasses = shaderPasses;
   }
 
   const drawBatches = recomputeDrawBatches
@@ -152,6 +163,8 @@ export function createSceneState(
     lightsChanged: recomputeLights,
     drawBatches,
     drawBatchesChanged: recomputeDrawBatches,
+    shaderPasses,
+    shaderPassesChanged: recomputeShaderPasses,
     interaction,
     interactionChanged: recomputeInteraction,
     liveResourceKeys: liveResourceKeysFor(drawBatches)
@@ -172,6 +185,53 @@ function collectMeshDrawItems(
     modelCache
   );
   return items;
+}
+
+function collectShaderPasses(root: TypeGpuNode): TypeGpuShaderPass[] {
+  const passes: TypeGpuShaderPass[] = [];
+  let sortKey = 0;
+
+  collectShaderPassesFromNode(root, passes, () => sortKey++);
+
+  return passes.sort(
+    (left, right) =>
+      left.renderOrder - right.renderOrder ||
+      left.sortKey - right.sortKey ||
+      left.key.localeCompare(right.key)
+  );
+}
+
+function collectShaderPassesFromNode(
+  node: TypeGpuNode,
+  passes: TypeGpuShaderPass[],
+  nextSortKey: () => number
+): void {
+  if (node.name === 'shaderPass') {
+    const pass = readShaderPass(node, nextSortKey());
+    if (pass) passes.push(pass);
+  }
+
+  for (let child = node.firstChild; child; child = child.nextSibling) {
+    collectShaderPassesFromNode(child, passes, nextSortKey);
+  }
+}
+
+function readShaderPass(node: TypeGpuNode, sortKey: number): TypeGpuShaderPass | null {
+  if (node.attributes.active === false) return null;
+
+  const fragment = node.attributes.fragment;
+  if (!fragment) return null;
+
+  return {
+    key: stringAttribute(node.attributes.id) ?? `shader-pass:${node.uid}`,
+    node,
+    revision: node.revision,
+    fragment: fragment as TypeGpuShaderPass['fragment'],
+    uniforms: normalizeShaderPassUniforms(node.attributes.uniforms),
+    active: true,
+    renderOrder: numberArg(node.attributes.renderOrder, 0),
+    sortKey
+  };
 }
 
 function collectDrawItemsFromNode(
@@ -537,6 +597,10 @@ function shouldRecomputeInteraction(dirty: Dirty): boolean {
     hasDirty(dirty, Dirty.Geometry) ||
     hasDirty(dirty, Dirty.Tree)
   );
+}
+
+function shouldRecomputeShaderPasses(dirty: Dirty): boolean {
+  return hasDirty(dirty, Dirty.ShaderPass) || hasDirty(dirty, Dirty.Tree);
 }
 
 function stringAttribute(value: unknown): string | undefined {

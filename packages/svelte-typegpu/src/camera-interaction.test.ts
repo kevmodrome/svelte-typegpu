@@ -169,6 +169,8 @@ function sceneState({
     lightsChanged: false,
     drawBatches: [],
     drawBatchesChanged: false,
+    shaderPasses: [],
+    shaderPassesChanged: false,
     renderSettings: {
       clearColor: [0, 0, 0, 1],
       depth: true,

@@ -15,6 +15,7 @@ export const enum Dirty {
   Interaction = 1 << 12,
   RenderSettings = 1 << 13,
   Sampler = 1 << 14,
+  ShaderPass = 1 << 15,
   All = -1
 }
 

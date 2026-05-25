@@ -26,6 +26,7 @@ describe('TypeGPU primitive descriptors', () => {
     expect(normalizePrimitiveName('phong-material')).toBe('phongMaterial');
     expect(normalizePrimitiveName('standard-material')).toBe('standardMaterial');
     expect(normalizePrimitiveName('instanced-mesh')).toBe('instancedMesh');
+    expect(normalizePrimitiveName('shader-pass')).toBe('shaderPass');
     expect(normalizePrimitiveName('unknown-node')).toBe('unknown-node');
   });
 
@@ -288,6 +289,27 @@ describe('TypeGPU primitive descriptors', () => {
     expectExactDirty(dirtyForEventListener('mesh', 'dragmove'), Dirty.Interaction);
     expectExactDirty(dirtyForEventListener('mesh', 'keydown'), Dirty.None);
     expectExactDirty(dirtyForAttribute('mesh', 'drag', undefined, 'rotate'), Dirty.Interaction);
+  });
+
+  it('marks shaderPass primitive changes without creating mesh dirtiness', () => {
+    const previousFragment = () => null;
+    const nextFragment = () => null;
+
+    expectExactDirty(dirtyForInsert('shaderPass'), Dirty.Tree, Dirty.ShaderPass);
+    expectExactDirty(dirtyForRemove('shader-pass'), Dirty.Tree, Dirty.ShaderPass);
+    expectExactDirty(
+      dirtyForAttribute('shaderPass', 'fragment', previousFragment, nextFragment),
+      Dirty.ShaderPass
+    );
+    expectExactDirty(
+      dirtyForAttribute('shaderPass', 'uniforms', { time: 'time' }, { resolution: 'resolution' }),
+      Dirty.ShaderPass
+    );
+    expectExactDirty(dirtyForAttribute('shaderPass', 'active', true, false), Dirty.ShaderPass);
+    expectExactDirty(dirtyForAttribute('shaderPass', 'renderOrder', 0, 1), Dirty.ShaderPass);
+    expect(hasDirty(dirtyForAttribute('shaderPass', 'renderOrder', 0, 1), Dirty.DrawBatches)).toBe(
+      false
+    );
   });
 
   it('allows custom primitive descriptors to own dirtiness', () => {

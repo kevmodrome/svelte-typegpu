@@ -1,4 +1,4 @@
-import tgpu, { d, type TgpuRoot } from 'typegpu';
+import tgpu, { common, d, type TgpuRoot } from 'typegpu';
 import { DEPTH_FORMAT } from './render-constants';
 import {
   lightingBindGroupLayout,
@@ -9,7 +9,7 @@ import {
   shadowBindGroupLayout,
   shadowPassBindGroupLayout
 } from './typegpu-layouts';
-import type { TypeGpuMaterialDescriptor } from './types';
+import type { TypeGpuMaterialDescriptor, TypeGpuShaderPass } from './types';
 
 const rotateX = tgpu
   .fn([d.vec3f, d.f32], d.vec3f)/* wgsl */ `(position, angle) {
@@ -399,6 +399,10 @@ export interface TypeGpuShadowPipelineOptions {
   cullMode?: GPUCullMode;
 }
 
+export interface TypeGpuShaderPassPipelineOptions {
+  depth?: boolean;
+}
+
 export function createMeshPipeline(
   root: TgpuRoot,
   format: GPUTextureFormat,
@@ -474,6 +478,53 @@ export function createShadowPipeline(
       }
     })
     .$name('TypeGPU shadow pipeline');
+}
+
+export function createShaderPassPipeline(
+  root: TgpuRoot,
+  format: GPUTextureFormat,
+  shaderPass: TypeGpuShaderPass,
+  options: TypeGpuShaderPassPipelineOptions = {}
+) {
+  const descriptor = {
+    vertex: common.fullScreenTriangle,
+    fragment: shaderPass.fragment,
+    targets: {
+      format,
+      blend: {
+        color: {
+          srcFactor: 'src-alpha',
+          dstFactor: 'one-minus-src-alpha',
+          operation: 'add'
+        },
+        alpha: {
+          srcFactor: 'one',
+          dstFactor: 'one-minus-src-alpha',
+          operation: 'add'
+        }
+      }
+    },
+    primitive: {
+      topology: 'triangle-list'
+    }
+  } as const;
+
+  if (options.depth !== false) {
+    return root
+      .createRenderPipeline({
+        ...descriptor,
+        depthStencil: {
+          format: DEPTH_FORMAT,
+          depthWriteEnabled: false,
+          depthCompare: 'always'
+        }
+      })
+      .$name(`TypeGPU shader pass pipeline ${shaderPass.key}`);
+  }
+
+  return root
+    .createRenderPipeline(descriptor)
+    .$name(`TypeGPU shader pass pipeline ${shaderPass.key}`);
 }
 
 function blendStateFor(blendMode: TypeGpuMaterialDescriptor['blendMode']): GPUBlendState | undefined {

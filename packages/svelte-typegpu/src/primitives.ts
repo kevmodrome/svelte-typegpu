@@ -16,7 +16,8 @@ const aliases = new Map<string, string>([
   ['buffer-geometry', 'bufferGeometry'],
   ['basic-material', 'basicMaterial'],
   ['phong-material', 'phongMaterial'],
-  ['standard-material', 'standardMaterial']
+  ['standard-material', 'standardMaterial'],
+  ['shader-pass', 'shaderPass']
 ]);
 
 export interface PrimitiveDescriptor {
@@ -79,6 +80,7 @@ const samplerAttributes = new Set([
   'addressModeV',
   'addressModeW'
 ]);
+const shaderPassAttributes = new Set(['fragment', 'uniforms', 'active', 'renderOrder']);
 const lightNames = new Set([
   'ambientLight',
   'hemisphereLight',
@@ -190,6 +192,12 @@ export function dirtyForAttribute(
     }
   }
 
+  if (name === 'shaderPass') {
+    return shaderPassAttributes.has(attribute) || attribute === 'id'
+      ? Dirty.ShaderPass
+      : Dirty.None;
+  }
+
   if (transformAttributes.has(attribute)) {
     return mergeDirty(Dirty.Transform, Dirty.InstanceData, Dirty.Interaction);
   }
@@ -292,6 +300,7 @@ function dirtyForTreeChange(nodeName: string | undefined): Dirty {
   if (materialNames.has(name)) return mergeDirty(Dirty.Tree, Dirty.Material, Dirty.DrawBatches);
   if (name === 'texture') return mergeDirty(Dirty.Tree, Dirty.Texture, Dirty.BindGroup, Dirty.DrawBatches);
   if (name === 'sampler') return mergeDirty(Dirty.Tree, Dirty.Sampler, Dirty.BindGroup, Dirty.DrawBatches);
+  if (name === 'shaderPass') return mergeDirty(Dirty.Tree, Dirty.ShaderPass);
   if (name === 'group') return mergeDirty(Dirty.Tree, Dirty.DrawBatches, Dirty.Interaction, Dirty.Lights);
   if (name === 'mesh' || name === 'instancedMesh' || name === 'model') {
     return mergeDirty(Dirty.Tree, Dirty.DrawBatches, Dirty.Interaction);

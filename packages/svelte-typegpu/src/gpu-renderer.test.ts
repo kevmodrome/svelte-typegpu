@@ -3,6 +3,7 @@ import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createDirectionalShadowViewProjection,
+  drawTypeGpuShaderPass,
   drawTypeGpuShadowBatch,
   loadMaterialTextureImageSource,
   SCENE_UNIFORM_FLOATS,
@@ -11,6 +12,7 @@ import {
 } from './gpu-renderer';
 import { MESH_INSTANCE_FLOATS, MESH_ROTATION_OFFSET, MESH_VERTEX_FLOATS } from './instance-data';
 import { TextureResourceCache } from './resource-caches';
+import { packShaderPassUniforms } from './shader-pass';
 import type { TypeGpuDrawBatch, TypeGpuLight, TypeGpuTextureSource } from './types';
 
 describe('TypeGPU GPU renderer', () => {
@@ -367,6 +369,45 @@ describe('TypeGPU GPU renderer', () => {
     expect(source).not.toContain('device.createRenderPipeline');
   });
 
+  it('packs fullscreen shader pass built-in uniforms as time and resolution', () => {
+    const data = new Float32Array(
+      packShaderPassUniforms({
+        time: 1.25,
+        width: 640,
+        height: 360
+      })
+    );
+
+    expect(Array.from(data)).toEqual([1.25, 0, 640, 360]);
+  });
+
+  it('draws fullscreen shader passes through a TypeGPU full-screen triangle pipeline', () => {
+    const { pipeline, calls } = createRecordingPipeline();
+    const pass = { kind: 'main-render-pass' };
+    const shaderPassBindGroup = { kind: 'shader-pass-uniform-bind-group' };
+
+    drawTypeGpuShaderPass({
+      pipeline: pipeline as never,
+      pass: pass as never,
+      shaderPassBindGroup: shaderPassBindGroup as never
+    });
+
+    expect(calls).toEqual([[pass], [shaderPassBindGroup]]);
+    expect(pipeline.draw).toHaveBeenCalledWith(3);
+  });
+
+  it('renders fullscreen shader passes after mesh batches in shader-pass renderOrder', () => {
+    const materialIndex = rendererSource.indexOf('drawTypeGpuMaterialBatch');
+    const shaderIndex = rendererSource.indexOf('drawTypeGpuShaderPass');
+
+    expect(rendererSource).toContain('#shaderPasses');
+    expect(rendererSource).toContain('scene.shaderPasses');
+    expect(rendererSource).toMatch(/this\.\#shaderPassUniformBuffer\.write\(\s*packShaderPassUniforms/);
+    expect(rendererSource).toContain('this.#shaderPassPipelineFor(shaderPass)');
+    expect(materialIndex).toBeGreaterThanOrEqual(0);
+    expect(shaderIndex).toBeGreaterThan(materialIndex);
+  });
+
   it('binds only the shadow-pass uniform group while drawing the shadow depth pass', () => {
     const { pipeline, calls } = createRecordingPipeline();
     const pass = { kind: 'shadow-pass' };
@@ -502,7 +543,11 @@ describe('TypeGPU GPU renderer', () => {
 
     expect(rendererSource).toContain('beginTypeGpuRenderPass');
     expect(rendererSource).toContain('pipeline.with(pass).with(sceneBindGroup).with(lightingBindGroup)');
-    expect(drawCallScopes).toEqual(['drawTypeGpuMaterialBatch', 'drawTypeGpuShadowBatch']);
+    expect(drawCallScopes).toEqual([
+      'drawTypeGpuMaterialBatch',
+      'drawTypeGpuShadowBatch',
+      'drawTypeGpuShaderPass'
+    ]);
   });
 });
 
