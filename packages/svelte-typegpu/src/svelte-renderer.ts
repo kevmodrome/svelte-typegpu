@@ -387,15 +387,20 @@ function createRuntime(
       endCanvas.x !== drag.startCanvas.x ||
       endCanvas.y !== drag.startCanvas.y;
     suppressNextDragClick = suppressNextDragClick || moved;
-    if (!cancelled) {
-      dispatchCapturedPointerUp(drag, event);
+
+    try {
+      if (!cancelled) {
+        dispatchCapturedPointerUp(drag, event);
+      }
+      dispatchDragEventFor(drag, 'dragend', event, cancelled);
+    } finally {
+      detachObjectDragWindowListeners();
+      activeDrag = null;
+      if (options.releasePointerCapture !== false) {
+        releasePointer(canvas, drag.pointerId);
+      }
     }
-    dispatchDragEventFor(drag, 'dragend', event, cancelled);
-    detachObjectDragWindowListeners();
-    activeDrag = null;
-    if (options.releasePointerCapture !== false) {
-      releasePointer(canvas, drag.pointerId);
-    }
+
     return true;
   }
 
@@ -502,7 +507,7 @@ function createRuntime(
 }
 
 function canvasPointFromEvent(canvas: HTMLCanvasElement, event: MouseEvent): { x: number; y: number } {
-  if (Number.isFinite(event.offsetX) && Number.isFinite(event.offsetY)) {
+  if (isCanvasEvent(canvas, event) && Number.isFinite(event.offsetX) && Number.isFinite(event.offsetY)) {
     return { x: event.offsetX, y: event.offsetY };
   }
 
@@ -515,6 +520,10 @@ function canvasPointFromEvent(canvas: HTMLCanvasElement, event: MouseEvent): { x
     x: event.clientX - rect.left,
     y: event.clientY - rect.top
   };
+}
+
+function isCanvasEvent(canvas: HTMLCanvasElement, event: Event): boolean {
+  return event.currentTarget === canvas || event.target === canvas;
 }
 
 function canvasViewport(canvas: HTMLCanvasElement): { width: number; height: number } {
