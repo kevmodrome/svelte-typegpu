@@ -33,7 +33,7 @@
 - Test: `packages/svelte-typegpu/src/resources.test.ts`
 - Test: `packages/svelte-typegpu/src/typegpu-layouts.test.ts`
 
-- [ ] **Step 1: Add failing tests**
+- [x] **Step 1: Add failing tests**
 
 Add tests that assert generated geometries use 12 floats per vertex and that the color channel defaults to `[1, 1, 1, 1]`. Add a `bufferGeometry` test with `vertexFloats={12}` and per-vertex colors.
 
@@ -41,7 +41,7 @@ Run: `pnpm --filter svelte-typegpu --fail-if-no-match test -- resources.test.ts 
 
 Expected: FAIL because the layout still has 8 floats.
 
-- [ ] **Step 2: Implement vertex color layout**
+- [x] **Step 2: Implement vertex color layout**
 
 Set `MESH_VERTEX_FLOATS` to `12`, add `color: d.location(3, d.float32x4)` to `typegpuMeshVertexSchema`, move instance attributes to higher locations, and update shader input/output to multiply `in.color * in.vertexColor`.
 
