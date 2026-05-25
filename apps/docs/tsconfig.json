@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["bun", "node", "@webgpu/types"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "target": "ES2022",
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true
+  },
+  "include": ["scripts/**/*.ts", "src/**/*.ts", "src/**/*.svelte", "src/**/*.d.ts", "src/**/*.test.ts"]
+}

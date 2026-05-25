@@ -1,0 +1,102 @@
+export const exampleDefinitions = [
+  {
+    slug: 'two-boxes',
+    title: 'Two Boxes',
+    category: 'rendering',
+    tags: ['3d', 'rasterization', 'scene graph'],
+    description:
+      'A compact scene that turns the imperative TypeGPU two-boxes setup into declarative Svelte scene markup.',
+    typeGpuSourceUrl:
+      'https://github.com/software-mansion/TypeGPU/tree/main/apps/typegpu-docs/src/examples/rendering/two-boxes',
+    notes: 'Adapted from the official TypeGPU Two Boxes example for the svelte-typegpu custom renderer.',
+    exportName: 'TwoBoxes',
+    sourceUrl: new URL('./two-boxes/TwoBoxes.typegpu.svelte', import.meta.url),
+    sourceFiles: [
+      new URL('./two-boxes/TwoBoxes.typegpu.svelte', import.meta.url),
+      new URL('./two-boxes/SceneBox.typegpu.svelte', import.meta.url)
+    ],
+    typeGpuSourceFiles: [{ path: 'index.ts', loc: 417 }]
+  },
+  {
+    slug: 'phong-reflection',
+    title: 'Phong Reflection Model',
+    category: 'rendering',
+    tags: ['3d', 'lighting', 'materials'],
+    description:
+      'A lighting study that highlights Phong-style material response through Svelte material and light nodes.',
+    typeGpuSourceUrl:
+      'https://github.com/software-mansion/TypeGPU/tree/main/apps/typegpu-docs/src/examples/rendering/phong-reflection',
+    notes:
+      'Adapted from the official TypeGPU Phong Reflection Model example using renderer-supported materials and primitives.',
+    exportName: 'PhongReflection',
+    sourceUrl: new URL('./phong-reflection/PhongReflection.typegpu.svelte', import.meta.url),
+    sourceFiles: [
+      new URL('./phong-reflection/PhongReflection.typegpu.svelte', import.meta.url),
+      new URL('./phong-reflection/PhongLights.typegpu.svelte', import.meta.url),
+      new URL('./phong-reflection/PhongOrb.typegpu.svelte', import.meta.url)
+    ],
+    typeGpuSourceFiles: [
+      { path: 'index.ts', loc: 163 },
+      { path: 'load-model.ts', loc: 33 },
+      { path: 'params.ts', loc: 10 },
+      { path: 'schemas.ts', loc: 20 }
+    ]
+  },
+  {
+    slug: 'simple-shadow',
+    title: 'Simple shadow',
+    category: 'rendering',
+    tags: ['3d', 'depth', 'composition'],
+    description:
+      'A floor-and-subject composition that mirrors the original shadow example with renderer features available today.',
+    typeGpuSourceUrl:
+      'https://github.com/software-mansion/TypeGPU/tree/main/apps/typegpu-docs/src/examples/rendering/simple-shadow',
+    notes:
+      'Adapted from the official TypeGPU Simple shadow example; full shadow-map parity is outside this first docs release.',
+    exportName: 'SimpleShadow',
+    sourceUrl: new URL('./simple-shadow/SimpleShadow.typegpu.svelte', import.meta.url),
+    sourceFiles: [
+      new URL('./simple-shadow/SimpleShadow.typegpu.svelte', import.meta.url),
+      new URL('./simple-shadow/ShadowLights.typegpu.svelte', import.meta.url),
+      new URL('./simple-shadow/ShadowSubject.typegpu.svelte', import.meta.url)
+    ],
+    typeGpuSourceFiles: [
+      { path: 'index.ts', loc: 410 },
+      { path: 'geometry.ts', loc: 143 },
+      { path: 'schema.ts', loc: 40 }
+    ]
+  },
+  {
+    slug: 'interactive-orbit-field',
+    title: 'Interactive Orbit Field',
+    category: 'interaction',
+    tags: ['animation', 'interaction', 'instancing'],
+    description:
+      'A rotating field of instanced cubes with orbit controls, showing how a Svelte scene can stay declarative while the preview remains hands-on.',
+    typeGpuSourceUrl:
+      'https://github.com/software-mansion/TypeGPU/tree/main/apps/typegpu-docs/src/examples/rendering/disco',
+    notes:
+      'Adapted from the motion-first official TypeGPU Disco example, using svelte-typegpu instanced meshes and pointer camera controls.',
+    exportName: 'InteractiveOrbitField',
+    sourceUrl: new URL(
+      './interactive-orbit-field/InteractiveOrbitField.typegpu.svelte',
+      import.meta.url
+    ),
+    sourceFiles: [
+      new URL('./interactive-orbit-field/InteractiveOrbitField.typegpu.svelte', import.meta.url),
+      new URL('./interactive-orbit-field/OrbitLights.typegpu.svelte', import.meta.url),
+      new URL('./interactive-orbit-field/OrbitSatellites.typegpu.svelte', import.meta.url),
+      new URL('./interactive-orbit-field/orbit-data.ts', import.meta.url)
+    ],
+    typeGpuSourceFiles: [
+      { path: 'index.ts', loc: 86 },
+      { path: 'consts.ts', loc: 3 },
+      { path: 'utils.ts', loc: 10 },
+      { path: 'shaders/fragment.ts', loc: 231 },
+      { path: 'shaders/vertex.ts', loc: 23 }
+    ]
+  }
+] as const;
+
+export type ExampleDefinition = (typeof exampleDefinitions)[number];
+export type ExampleSlug = ExampleDefinition['slug'];

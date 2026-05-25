@@ -1,0 +1,28 @@
+{
+  "name": "docs",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate:typegpu": "bun scripts/compile-typegpu-scenes.ts",
+    "predev": "bun run generate:typegpu",
+    "dev": "MODE=development bun src/index.ts",
+    "prebuild": "bun run generate:typegpu",
+    "build": "mochi-framework build --routes ./src/routes.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "mochi-framework": "0.3.2",
+    "svelte": "https://pkg.pr.new/svelte@18042",
+    "svelte-typegpu": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.14",
+    "@types/node": "^24.10.1",
+    "@webgpu/types": "^0.1.70",
+    "shiki": "^4.1.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.14"
+  }
+}

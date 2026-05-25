@@ -3,6 +3,7 @@ node_modules/
 dist/
 .svelte-kit/
 .vite/
+.mochi/
 .svelte-pr/
 coverage/
 *.log
