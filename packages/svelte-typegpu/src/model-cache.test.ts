@@ -1,6 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createModelCache } from './model-cache';
-import type { TypeGpuLoadedModel } from './glb-loader';
+import type { TypeGpuLoadedModel } from './types';
+import { createGlbFixture } from './glb-test-fixtures';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 function loadedModel(key: string): TypeGpuLoadedModel {
   return { key, meshes: [] };
@@ -82,4 +88,103 @@ describe('TypeGPU model cache', () => {
       model: { key: 'data:1' }
     });
   });
+
+  it('loads OBJ URLs through the default URL loader and ignores query/hash for format detection', async () => {
+    const fetchMock = vi.fn(async () => new Response(objTriangleText(), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const cache = createModelCache({ onSettled: vi.fn() });
+    const src = '/models/triangle.obj?v=1#preview';
+
+    expect(cache.read({ src }).status).toBe('loading');
+    const entry = await settleModel(cache, { src });
+
+    expect(fetchMock).toHaveBeenCalledWith(src);
+    expect(entry).toMatchObject({
+      status: 'ready',
+      model: {
+        key: 'url:/models/triangle.obj?v=1#preview',
+        meshes: [{ geometry: { key: 'url:/models/triangle.obj?v=1#preview:primitive:0' } }]
+      }
+    });
+  });
+
+  it('keeps GLB URL loading through the default URL loader', async () => {
+    const glb = createGlbFixture({ asset: { version: '2.0' }, scenes: [] });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(glb, { status: 200 })));
+    const cache = createModelCache();
+    const src = '/models/chair.glb';
+
+    cache.read({ src });
+    const entry = await settleModel(cache, { src });
+
+    expect(entry).toMatchObject({
+      status: 'ready',
+      model: { key: 'url:/models/chair.glb', meshes: [] }
+    });
+  });
+
+  it('routes ArrayBuffer data with GLB magic to the GLB loader', async () => {
+    const cache = createModelCache();
+    const data = createGlbFixture({ asset: { version: '2.0' }, scenes: [] });
+
+    cache.read({ data });
+    const entry = await settleModel(cache, { data });
+
+    expect(entry).toMatchObject({
+      status: 'ready',
+      model: { key: 'data:1', meshes: [] }
+    });
+  });
+
+  it('routes text ArrayBuffer data to the OBJ loader', async () => {
+    const cache = createModelCache();
+    const data = new TextEncoder().encode(objTriangleText()).buffer;
+
+    cache.read({ data });
+    const entry = await settleModel(cache, { data });
+
+    expect(entry).toMatchObject({
+      status: 'ready',
+      model: {
+        key: 'data:1',
+        meshes: [{ geometry: { key: 'data:1:primitive:0', vertexCount: 3 } }]
+      }
+    });
+  });
+
+  it('reports URL failures with neutral model wording', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })));
+    const cache = createModelCache();
+    const src = '/models/missing.obj';
+
+    cache.read({ src });
+    const entry = await settleModel(cache, { src });
+
+    expect(entry.status).toBe('failed');
+    expect(entry.status === 'failed' ? entry.error : null).toEqual(
+      new Error('Failed to load model /models/missing.obj: 404')
+    );
+  });
 });
+
+async function settleModel(
+  cache: ReturnType<typeof createModelCache>,
+  request: Parameters<ReturnType<typeof createModelCache>['read']>[0]
+) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await Promise.resolve();
+    const entry = cache.read(request);
+    if (entry.status !== 'loading') return entry;
+  }
+
+  return cache.read(request);
+}
+
+function objTriangleText(): string {
+  return `
+v 0 0 0
+v 1 0 0
+v 0 1 0
+f 1 2 3
+`;
+}

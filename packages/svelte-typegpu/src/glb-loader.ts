@@ -6,10 +6,14 @@ import type {
   TypeGpuBounds,
   TypeGpuEmbeddedTextureSource,
   TypeGpuGeometryData,
+  TypeGpuLoadedModel,
+  TypeGpuLoadedModelMesh,
   TypeGpuMaterialDescriptor,
   TypeGpuTransform,
   Vector3Tuple
 } from './types';
+
+export type { TypeGpuLoadedModel, TypeGpuLoadedModelMesh } from './types';
 
 type Matrix4 = [
   number, number, number, number,
@@ -21,17 +25,6 @@ type Matrix4 = [
 export interface ParsedGlbContainer {
   json: GltfJson;
   binary: Uint8Array;
-}
-
-export interface TypeGpuLoadedModel {
-  key: string;
-  meshes: TypeGpuLoadedModelMesh[];
-}
-
-export interface TypeGpuLoadedModelMesh {
-  geometry: TypeGpuGeometryData;
-  material: TypeGpuMaterialDescriptor;
-  transform: TypeGpuTransform;
 }
 
 export interface GltfJson {

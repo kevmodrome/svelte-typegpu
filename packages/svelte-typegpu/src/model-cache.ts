@@ -1,4 +1,6 @@
-import { loadGlbModel, type TypeGpuLoadedModel } from './glb-loader';
+import { loadGlbModel } from './glb-loader';
+import { loadObjModel } from './obj-loader';
+import type { TypeGpuLoadedModel } from './types';
 
 export type TypeGpuModelCacheEntry =
   | { status: 'idle' }
@@ -83,12 +85,29 @@ async function loadUrlModel(src: string): Promise<TypeGpuLoadedModel> {
   const response = await fetch(src);
 
   if (!response.ok) {
-    throw new Error(`Failed to load GLB model ${src}: ${response.status}`);
+    throw new Error(`Failed to load model ${src}: ${response.status}`);
   }
 
-  return loadGlbModel(await response.arrayBuffer(), `url:${src}`);
+  const data = await response.arrayBuffer();
+  const key = `url:${src}`;
+  return isObjUrl(src)
+    ? loadObjModel(new TextDecoder().decode(data), key)
+    : loadGlbModel(data, key);
 }
 
 async function loadDataModel(data: ArrayBuffer, key: string): Promise<TypeGpuLoadedModel> {
-  return loadGlbModel(data, key);
+  return isGlbBuffer(data)
+    ? loadGlbModel(data, key)
+    : loadObjModel(new TextDecoder().decode(data), key);
+}
+
+function isObjUrl(src: string): boolean {
+  const [withoutHash] = src.split('#', 1);
+  const [path] = (withoutHash ?? src).split('?', 1);
+  return (path ?? src).toLowerCase().endsWith('.obj');
+}
+
+function isGlbBuffer(data: ArrayBuffer): boolean {
+  if (data.byteLength < 4) return false;
+  return new DataView(data).getUint32(0, true) === 0x46546c67;
 }

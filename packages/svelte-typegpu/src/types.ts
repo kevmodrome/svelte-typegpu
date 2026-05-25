@@ -139,6 +139,17 @@ export interface TypeGpuGeometryData {
   hasVertexAlpha?: boolean;
 }
 
+export interface TypeGpuLoadedModel {
+  key: string;
+  meshes: TypeGpuLoadedModelMesh[];
+}
+
+export interface TypeGpuLoadedModelMesh {
+  geometry: TypeGpuGeometryData;
+  material: TypeGpuMaterialDescriptor;
+  transform: TypeGpuTransform;
+}
+
 export interface TypeGpuProceduralGeometryDescriptor {
   kind: TypeGpuProceduralGeometryKind;
   size: Vector3Tuple;
