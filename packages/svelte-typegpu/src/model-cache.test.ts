@@ -152,6 +152,19 @@ describe('TypeGPU model cache', () => {
     });
   });
 
+  it('rejects non-GLB ArrayBuffer data that does not look like OBJ text', async () => {
+    const cache = createModelCache();
+    const data = new Uint8Array([0, 1, 2, 3, 4, 5]).buffer;
+
+    cache.read({ data });
+    const entry = await settleModel(cache, { data });
+
+    expect(entry.status).toBe('failed');
+    expect(entry.status === 'failed' ? entry.error : null).toEqual(
+      new Error('Unsupported model data format for data:1. Expected GLB binary or OBJ text.')
+    );
+  });
+
   it('reports URL failures with neutral model wording', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 404 })));
     const cache = createModelCache();

@@ -134,7 +134,10 @@ function parseFaceVertex(
   uvCount: number,
   normalCount: number
 ): ObjFaceVertex | null {
-  const [positionToken, uvToken, normalToken] = token.split('/');
+  const parts = token.split('/');
+  if (parts.length > 3) return null;
+
+  const [positionToken, uvToken, normalToken] = parts;
   const position = resolveObjIndex(positionToken, positionCount);
   if (position === null) return null;
 
@@ -153,8 +156,9 @@ function parseFaceVertex(
 
 function resolveObjIndex(token: string | undefined, count: number): number | null {
   if (token === undefined || token === '') return null;
+  if (!/^-?\d+$/.test(token)) return null;
 
-  const parsed = Number(token);
+  const parsed = Number.parseInt(token, 10);
   if (!Number.isSafeInteger(parsed) || parsed === 0) return null;
 
   const index = parsed > 0 ? parsed - 1 : count + parsed;

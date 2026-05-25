@@ -96,9 +96,12 @@ async function loadUrlModel(src: string): Promise<TypeGpuLoadedModel> {
 }
 
 async function loadDataModel(data: ArrayBuffer, key: string): Promise<TypeGpuLoadedModel> {
-  return isGlbBuffer(data)
-    ? loadGlbModel(data, key)
-    : loadObjModel(new TextDecoder().decode(data), key);
+  if (isGlbBuffer(data)) return loadGlbModel(data, key);
+
+  const text = new TextDecoder().decode(data);
+  if (looksLikeObjText(text)) return loadObjModel(text, key);
+
+  throw new Error(`Unsupported model data format for ${key}. Expected GLB binary or OBJ text.`);
 }
 
 function isObjUrl(src: string): boolean {
@@ -110,4 +113,15 @@ function isObjUrl(src: string): boolean {
 function isGlbBuffer(data: ArrayBuffer): boolean {
   if (data.byteLength < 4) return false;
   return new DataView(data).getUint32(0, true) === 0x46546c67;
+}
+
+function looksLikeObjText(text: string): boolean {
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.split('#', 1)[0]?.trim() ?? '';
+    if (line.length === 0) continue;
+
+    if (/^(?:v|vt|vn|vp|f|o|g|s|usemtl|mtllib)\b/.test(line)) return true;
+  }
+
+  return false;
 }

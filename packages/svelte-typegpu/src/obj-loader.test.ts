@@ -72,6 +72,59 @@ f 1 2 3 4
     ]);
   });
 
+  it('triangulates n-gon faces beyond quads with fan ordering', () => {
+    const model = loadObjModel(
+      `
+v 0 0 0
+v 1 0 0
+v 2 1 0
+v 1 2 0
+v 0 1 0
+f 1 2 3 4 5
+`,
+      'model:ngon'
+    );
+
+    expect(model.meshes).toHaveLength(1);
+    expect(model.meshes[0].geometry.vertexCount).toBe(9);
+    expect(vertexPositions(model.meshes[0].geometry.vertexData)).toEqual([
+      [0, 0, 0],
+      [1, 0, 0],
+      [2, 1, 0],
+      [0, 0, 0],
+      [2, 1, 0],
+      [1, 2, 0],
+      [0, 0, 0],
+      [1, 2, 0],
+      [0, 1, 0]
+    ]);
+  });
+
+  it('loads v//vn faces with normals and omitted UVs', () => {
+    const model = loadObjModel(
+      `
+v 0 0 0
+v 1 0 0
+v 0 1 0
+vn 0 1 0
+f 1//1 2//1 3//1
+`,
+      'model:omitted-uvs'
+    );
+
+    expect(model.meshes).toHaveLength(1);
+    expect(vertexNormals(model.meshes[0].geometry.vertexData)).toEqual([
+      [0, 1, 0],
+      [0, 1, 0],
+      [0, 1, 0]
+    ]);
+    expect(vertexUvs(model.meshes[0].geometry.vertexData)).toEqual([
+      [0, 0],
+      [0, 0],
+      [0, 0]
+    ]);
+  });
+
   it('generates flat normals and default UVs and colors when attributes are missing', () => {
     const model = loadObjModel(
       `
@@ -124,6 +177,59 @@ f -3/-3/-1 -2/-2/-1 -1/-1/-1
       [0, 0],
       [0.5, 1],
       [1, 0]
+    ]);
+  });
+
+  it('ignores face tokens with too many slash-separated fields', () => {
+    const model = loadObjModel(
+      `
+v 0 0 0
+v 1 0 0
+v 0 1 0
+vt 0 0
+vt 1 0
+vt 0 1
+vn 0 0 1
+f 1/1/1/junk 2/2/1 3/3/1
+`,
+      'model:too-many-slashes'
+    );
+
+    expect(model.meshes).toHaveLength(0);
+  });
+
+  it('ignores face tokens with loose numeric index formats', () => {
+    const model = loadObjModel(
+      `
+v 0 0 0
+v 1 0 0
+v 0 1 0
+f 1e0 2 3
+f 0x1 2 3
+f 1.0 2 3
+`,
+      'model:loose-indices'
+    );
+
+    expect(model.meshes).toHaveLength(0);
+  });
+
+  it('keeps zero-area triangles and falls back to the default flat normal', () => {
+    const model = loadObjModel(
+      `
+v 0 0 0
+v 1 0 0
+v 2 0 0
+f 1 2 3
+`,
+      'model:degenerate'
+    );
+
+    expect(model.meshes).toHaveLength(1);
+    expect(vertexNormals(model.meshes[0].geometry.vertexData)).toEqual([
+      [0, 0, 1],
+      [0, 0, 1],
+      [0, 0, 1]
     ]);
   });
 
