@@ -1,4 +1,10 @@
-import { clampedNumberArg, nonNegativeNumberArg, rgbTuple, vectorTuple } from './attributes';
+import {
+  clampedNumberArg,
+  nonNegativeNumberArg,
+  numberArg,
+  rgbTuple,
+  vectorTuple
+} from './attributes';
 import type { TypeGpuNode } from './core';
 import { composeTransforms, IDENTITY_TRANSFORM, readLocalTransform } from './transform';
 import {
@@ -27,6 +33,10 @@ const LIGHT_NODE_TO_KIND = new Map<string, TypeGpuLightKind>([
 
 const MAX_SPOT_ANGLE = Math.PI / 2 - 0.001;
 const DEFAULT_SPOT_ANGLE = Math.PI / 6;
+const DEFAULT_SHADOW_MAP_SIZE = 1024;
+const MAX_SHADOW_MAP_SIZE = 8192;
+const DEFAULT_SHADOW_BIAS = 0.0005;
+const DEFAULT_SHADOW_SLOPE_BIAS = 1.5;
 
 interface LightWalkContext {
   transform: TypeGpuTransform;
@@ -37,6 +47,7 @@ export function collectLights(root: TypeGpuNode): TypeGpuLight[] {
   const lights: TypeGpuLight[] = [];
 
   collectFromNode(root, { transform: IDENTITY_TRANSFORM, revision: root.treeRevision }, lights);
+  assignSupportedShadowIndices(lights);
 
   return lights;
 }
@@ -108,9 +119,34 @@ function readLight(node: TypeGpuNode, context: LightWalkContext): TypeGpuLight {
     angle: clampedNumberArg(node.attributes.angle, DEFAULT_SPOT_ANGLE, 0.001, MAX_SPOT_ANGLE),
     penumbra: clampedNumberArg(node.attributes.penumbra, 0, 0, 1),
     groundColor,
-    castsShadow: false,
-    shadowIndex: -1
+    castsShadow: node.attributes.castShadow === true,
+    shadowIndex: -1,
+    shadowMapSize: shadowMapSizeArg(node.attributes.shadowMapSize),
+    shadowBias: numberArg(node.attributes.shadowBias, DEFAULT_SHADOW_BIAS),
+    shadowSlopeBias: numberArg(node.attributes.shadowSlopeBias, DEFAULT_SHADOW_SLOPE_BIAS)
   };
+}
+
+function assignSupportedShadowIndices(lights: TypeGpuLight[]): void {
+  let nextShadowIndex = 0;
+
+  for (const light of lights) {
+    if (light.kind === 'directional' && light.castsShadow && nextShadowIndex === 0) {
+      light.shadowIndex = nextShadowIndex;
+      nextShadowIndex += 1;
+      continue;
+    }
+
+    light.castsShadow = false;
+    light.shadowIndex = -1;
+  }
+}
+
+function shadowMapSizeArg(value: unknown): number {
+  const size = nonNegativeNumberArg(value, DEFAULT_SHADOW_MAP_SIZE);
+
+  if (!Number.isFinite(size) || size < 1) return DEFAULT_SHADOW_MAP_SIZE;
+  return Math.max(1, Math.min(MAX_SHADOW_MAP_SIZE, Math.floor(size)));
 }
 
 function lightTransform(node: TypeGpuNode, parent: TypeGpuTransform): TypeGpuTransform {

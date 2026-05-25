@@ -1,6 +1,6 @@
 import tgpu from 'typegpu';
 import { describe, expect, it } from 'vitest';
-import { meshFragmentMain, meshVertexMain } from './typegpu-pipeline';
+import { meshFragmentMain, meshVertexMain, shadowVertexMain } from './typegpu-pipeline';
 
 describe('TypeGPU mesh pipeline shader functions', () => {
   it('resolves the vertex shader with vertex colors passed to varyings', () => {
@@ -39,8 +39,23 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     expect(wgsl).toContain('baseColorTexture');
     expect(wgsl).toContain('baseColorSampler');
     expect(wgsl).toContain('textureSample');
+    expect(wgsl).toContain('textureSampleCompare');
     expect(wgsl).toContain('in.uv');
     expect(wgsl).toContain('texel * in.color * in.vertex_color');
+    expect(wgsl).toContain('receive_shadow');
+    expect(wgsl).toContain('shadowBindGroupLayout');
     expect(wgsl).toContain('texel.a * in.color.a * in.vertex_color.a * in.material.z');
+  });
+
+  it('resolves the depth-only shadow vertex shader with the shadow matrix bind group', () => {
+    const wgsl = tgpu.resolve([shadowVertexMain], { names: 'strict' });
+
+    expect(wgsl).toContain('@vertex fn shadowVertexMain');
+    expect(wgsl).toContain('@group(3)');
+    expect(wgsl).toContain('var<uniform> shadow');
+    expect(wgsl).toContain('view_projection');
+    expect(wgsl).toContain('@group(0)');
+    expect(wgsl).toContain('var<uniform> scene');
+    expect(wgsl).not.toContain('@fragment');
   });
 });

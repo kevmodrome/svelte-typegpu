@@ -5,7 +5,8 @@ import {
   materialBindGroupLayout,
   meshInstanceLayout,
   meshVertexLayout,
-  sceneBindGroupLayout
+  sceneBindGroupLayout,
+  shadowBindGroupLayout
 } from './typegpu-layouts';
 import type { TypeGpuMaterialDescriptor } from './types';
 
@@ -112,14 +113,113 @@ export const meshVertexMain = tgpu
   .$uses({ rotate_x: rotateX, rotate_y: rotateY, rotate_z: rotateZ, sceneBindGroupLayout })
   .$name('meshVertexMain');
 
+export const shadowVertexMain = tgpu
+  .vertexFn({
+    in: {
+      position: d.vec3f,
+      instance_position: d.vec3f,
+      phase: d.f32,
+      shape: d.vec4f,
+      spin_offset: d.f32,
+      world_rotation: d.vec3f
+    },
+    out: {
+      position: d.builtin.position
+    }
+  })/* wgsl */ `{
+    let spin = (
+      sceneBindGroupLayout.$.scene.time * sceneBindGroupLayout.$.scene.animation_speed +
+      sceneBindGroupLayout.$.scene.animation_offset
+    ) * shape.w + spin_offset;
+    let pulse = 0.9 + sin(spin + phase) * 0.05;
+    let spin_y = spin + phase;
+    let spin_x = spin * 0.65 + phase * 0.35;
+    let local_position = position * shape.xyz * sceneBindGroupLayout.$.scene.scale * pulse;
+    let animated_position = rotate_x(rotate_y(local_position, spin_y), spin_x);
+    let rotated_position = rotate_z(
+      rotate_y(rotate_x(animated_position, world_rotation.x), world_rotation.y),
+      world_rotation.z
+    );
+    let world_position = rotated_position + instance_position;
+    var output: Out;
+
+    output.position = shadowBindGroupLayout.$.shadow.view_projection * vec4(world_position, 1.0);
+
+    return output;
+  }`
+  .$uses({
+    rotate_x: rotateX,
+    rotate_y: rotateY,
+    rotate_z: rotateZ,
+    sceneBindGroupLayout,
+    shadowBindGroupLayout
+  })
+  .$name('shadowVertexMain');
+
+const evaluateShadow = tgpu
+  .fn([d.u32, d.vec3f, d.vec3f, d.bool], d.f32)/* wgsl */ `(
+    index,
+    world_position,
+    normal,
+    receive_shadow
+  ) {
+    if (!receive_shadow || shadowBindGroupLayout.$.shadow.params.y < 0.5) {
+      return 1.0;
+    }
+
+    let lightingBindGroupLayout_light = lightingBindGroupLayout.$.lighting.lights[index];
+    let light_flags = lightingBindGroupLayout_light.flags;
+
+    if (
+      lightingBindGroupLayout_light.kind != 3u ||
+      (light_flags & 1u) == 0u ||
+      lightingBindGroupLayout_light.shadowIndex != 0u
+    ) {
+      return 1.0;
+    }
+
+    let shadowBindGroupLayout_clip =
+      shadowBindGroupLayout.$.shadow.view_projection * vec4(world_position, 1.0);
+
+    if (abs(shadowBindGroupLayout_clip.w) < 0.0001) {
+      return 1.0;
+    }
+
+    let ndc = shadowBindGroupLayout_clip.xyz / shadowBindGroupLayout_clip.w;
+
+    if (
+      ndc.x < -1.0 || ndc.x > 1.0 ||
+      ndc.y < -1.0 || ndc.y > 1.0 ||
+      ndc.z < -1.0 || ndc.z > 1.0
+    ) {
+      return 1.0;
+    }
+
+    let coords = ndc.xy * vec2(0.5, -0.5) + vec2(0.5, 0.5);
+    let depth = ndc.z * 0.5 + 0.5;
+    let bias = max(lightingBindGroupLayout_light.params.z, shadowBindGroupLayout.$.shadow.params.x);
+    let surface_facing = max(dot(normal, normalize(-lightingBindGroupLayout_light.direction_angle.xyz)), 0.0);
+    let normal_bias = bias * (1.0 + (1.0 - surface_facing));
+
+    return textureSampleCompare(
+      shadowBindGroupLayout.$.shadowMap,
+      shadowBindGroupLayout.$.shadowSampler,
+      coords,
+      depth - normal_bias
+    );
+  }`
+  .$uses({ lightingBindGroupLayout, shadowBindGroupLayout })
+  .$name('evaluate_shadow');
+
 const evaluateLight = tgpu
-  .fn([d.u32, d.vec3f, d.vec3f, d.vec3f, d.f32, d.f32], d.vec3f)/* wgsl */ `(
+  .fn([d.u32, d.vec3f, d.vec3f, d.vec3f, d.f32, d.f32, d.bool], d.vec3f)/* wgsl */ `(
     index,
     world_position,
     normal,
     base_color,
     roughness,
-    metalness
+    metalness,
+    receive_shadow
   ) {
     let lightingBindGroupLayout_light = lightingBindGroupLayout.$.lighting.lights[index];
     let kind = lightingBindGroupLayout_light.kind;
@@ -186,19 +286,21 @@ const evaluateLight = tgpu
     let diffuse = max(dot(normal, light_direction), 0.0) * diffuse_weight;
     let specular = pow(max(dot(normal, light_direction), 0.0), mix(32.0, 8.0, roughness)) *
       specular_weight;
+    let shadow = evaluate_shadow(index, world_position, normal, receive_shadow);
 
-    return (base_color * diffuse + vec3(specular)) * light_color * attenuation;
+    return (base_color * diffuse * shadow + vec3(specular) * shadow) * light_color * attenuation;
   }`
-  .$uses({ lightingBindGroupLayout })
+  .$uses({ evaluate_shadow: evaluateShadow, lightingBindGroupLayout })
   .$name('evaluate_light');
 
 const evaluateLighting = tgpu
-  .fn([d.vec3f, d.vec3f, d.vec3f, d.f32, d.f32], d.vec3f)/* wgsl */ `(
+  .fn([d.vec3f, d.vec3f, d.vec3f, d.f32, d.f32, d.bool], d.vec3f)/* wgsl */ `(
     world_position,
     normal,
     base_color,
     roughness,
-    metalness
+    metalness,
+    receive_shadow
   ) {
     var lighting_normal = vec3(0.0, 0.0, 1.0);
     let normal_length = length(normal);
@@ -222,7 +324,15 @@ const evaluateLighting = tgpu
 
     for (var index = 0u; index < lightingBindGroupLayout_count; index = index + 1u) {
       lit_color = lit_color +
-        evaluate_light(index, world_position, lighting_normal, base_color, roughness, metalness);
+        evaluate_light(
+          index,
+          world_position,
+          lighting_normal,
+          base_color,
+          roughness,
+          metalness,
+          receive_shadow
+        );
     }
 
     return clamp(lit_color, vec3(0.0), vec3(1.0));
@@ -244,6 +354,8 @@ export const meshFragmentMain = tgpu
   })/* wgsl */ `{
     let roughness = clamp(in.material.x, 0.0, 1.0);
     let metalness = clamp(in.material.y, 0.0, 1.0);
+    let material_flags = u32(in.material.w + 0.5);
+    let receive_shadow = (material_flags & 8u) != 0u;
     let texel = textureSample(
       materialBindGroupLayout.$.baseColorTexture,
       materialBindGroupLayout.$.baseColorSampler,
@@ -258,7 +370,8 @@ export const meshFragmentMain = tgpu
       in.normal,
       shifted_color,
       roughness,
-      metalness
+      metalness,
+      receive_shadow
     );
 
     return vec4(lit_color, texel.a * in.color.a * in.vertex_color.a * in.material.z);
@@ -277,6 +390,12 @@ export interface TypeGpuMeshPipelineOptions {
   cullMode?: GPUCullMode;
   depthWrite?: boolean;
   depthTest?: boolean;
+}
+
+export interface TypeGpuShadowPipelineOptions {
+  depthBias?: number;
+  depthBiasSlopeScale?: number;
+  cullMode?: GPUCullMode;
 }
 
 export function createMeshPipeline(
@@ -324,6 +443,36 @@ export function createMeshPipeline(
   }
 
   return root.createRenderPipeline(descriptor).$name('TypeGPU mesh pipeline');
+}
+
+export function createShadowPipeline(
+  root: TgpuRoot,
+  options: TypeGpuShadowPipelineOptions = {}
+) {
+  return root
+    .createRenderPipeline({
+      attribs: {
+        position: meshVertexLayout.attrib.position,
+        instance_position: meshInstanceLayout.attrib.position,
+        phase: meshInstanceLayout.attrib.phase,
+        shape: meshInstanceLayout.attrib.shape,
+        spin_offset: meshInstanceLayout.attrib.spinOffset,
+        world_rotation: meshInstanceLayout.attrib.worldRotation
+      },
+      vertex: shadowVertexMain,
+      primitive: {
+        topology: 'triangle-list',
+        cullMode: options.cullMode ?? 'back'
+      },
+      depthStencil: {
+        format: DEPTH_FORMAT,
+        depthWriteEnabled: true,
+        depthCompare: 'less',
+        depthBias: Math.round((options.depthBias ?? 0) * 1_000_000),
+        depthBiasSlopeScale: options.depthBiasSlopeScale ?? 0
+      }
+    })
+    .$name('TypeGPU shadow pipeline');
 }
 
 function blendStateFor(blendMode: TypeGpuMaterialDescriptor['blendMode']): GPUBlendState | undefined {

@@ -4,14 +4,17 @@ import {
   lightingBindGroupLayout,
   materialBindGroupLayout,
   MAX_TYPEGPU_LIGHTS,
+  shadowBindGroupLayout,
   TYPEGPU_LIGHT_RECORD_BYTES,
   TYPEGPU_LIGHTING_BYTES,
+  TYPEGPU_SHADOW_UNIFORM_BYTES,
   sceneBindGroupLayout,
   TYPEGPU_SCENE_UNIFORM_FLOATS,
   meshInstanceLayout,
   meshVertexLayout,
   typegpuLightSchema,
   typegpuLightingSchema,
+  typegpuShadowSchema,
   typegpuSceneUniformSchema,
   typegpuMeshInstanceSchema,
   typegpuMeshVertexSchema
@@ -146,5 +149,16 @@ describe('TypeGPU layout schemas', () => {
     expect(materialBindGroupLayout.index).toBe(2);
     expect(materialBindGroupLayout.entries.baseColorTexture?.texture.type).toBe('texture_2d');
     expect(materialBindGroupLayout.entries.baseColorSampler?.sampler).toBe('filtering');
+  });
+
+  it('describes the shadow map bind group with a depth texture and comparison sampler', () => {
+    expect(TYPEGPU_SHADOW_UNIFORM_BYTES).toBe(80);
+    expect(d.sizeOf(typegpuShadowSchema)).toBe(TYPEGPU_SHADOW_UNIFORM_BYTES);
+    expect(typegpuShadowSchema.propTypes.view_projection).toBeDefined();
+    expect(typegpuShadowSchema.propTypes.params).toBeDefined();
+    expect(shadowBindGroupLayout.index).toBe(3);
+    expect(shadowBindGroupLayout.entries.shadow?.uniform).toBe(typegpuShadowSchema);
+    expect(shadowBindGroupLayout.entries.shadowMap?.texture.type).toBe('texture_depth_2d');
+    expect(shadowBindGroupLayout.entries.shadowSampler?.sampler).toBe('comparison');
   });
 });

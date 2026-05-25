@@ -12,6 +12,7 @@ export interface TypeGpuDrawBatchKeys {
   bindGroupKey: string;
   geometryKey: string;
   renderOrder: number;
+  castShadow: boolean;
 }
 
 export function drawBatchKeysForItem(item: TypeGpuMeshDrawItem): TypeGpuDrawBatchKeys {
@@ -21,12 +22,14 @@ export function drawBatchKeysForItem(item: TypeGpuMeshDrawItem): TypeGpuDrawBatc
     materialKey: keyOrDefault(item.material.key, materialKeyFor(item.material)),
     bindGroupKey: keyOrDefault(item.material.bindGroupKey, TYPEGPU_DEFAULT_BIND_GROUP_KEY),
     geometryKey: item.geometry.key,
-    renderOrder: item.renderOrder
+    renderOrder: item.renderOrder,
+    castShadow: item.castShadow
   };
 }
 
 export function drawBatchKey(keys: TypeGpuDrawBatchKeys): string {
-  return `${keys.passKey}|${keys.pipelineKey}|${keys.materialKey}|${keys.bindGroupKey}|${keys.geometryKey}|order:${keys.renderOrder}`;
+  const key = `${keys.passKey}|${keys.pipelineKey}|${keys.materialKey}|${keys.bindGroupKey}|${keys.geometryKey}|order:${keys.renderOrder}`;
+  return keys.castShadow ? `${key}|shadow:cast` : key;
 }
 
 export function compareDrawBatchKeys(a: TypeGpuDrawBatchKeys, b: TypeGpuDrawBatchKeys): number {
@@ -36,7 +39,8 @@ export function compareDrawBatchKeys(a: TypeGpuDrawBatchKeys, b: TypeGpuDrawBatc
     compareString(a.pipelineKey, b.pipelineKey) ||
     compareString(a.materialKey, b.materialKey) ||
     compareString(a.bindGroupKey, b.bindGroupKey) ||
-    compareString(a.geometryKey, b.geometryKey)
+    compareString(a.geometryKey, b.geometryKey) ||
+    compareNumber(Number(a.castShadow), Number(b.castShadow))
   );
 }
 

@@ -10,6 +10,10 @@ export const MESH_MATERIAL_PARAMS_OFFSET = 16;
 export const MESH_ROUGHNESS_OFFSET = MESH_MATERIAL_PARAMS_OFFSET;
 export const MESH_METALNESS_OFFSET = MESH_MATERIAL_PARAMS_OFFSET + 1;
 export const MESH_OPACITY_OFFSET = MESH_MATERIAL_PARAMS_OFFSET + 2;
+export const MESH_HAS_TEXTURE_FLAG = 1;
+export const MESH_TRANSPARENT_FLAG = 2;
+export const MESH_DEPTH_WRITE_DISABLED_FLAG = 4;
+export const MESH_RECEIVE_SHADOW_FLAG = 8;
 
 export function packMeshInstance(
   item: TypeGpuMeshDrawItem,
@@ -40,8 +44,13 @@ export function packMeshInstance(
 
 function materialFlags(item: TypeGpuMeshDrawItem): number {
   let flags = 0;
-  if (item.material.textureKey && item.material.textureKey !== 'solid:white') flags |= 1;
-  if (item.material.transparent || item.material.opacity < 1 || item.color[3] < 1) flags |= 2;
-  if (item.material.depthWrite === false) flags |= 4;
+  if (item.material.textureKey && item.material.textureKey !== 'solid:white') {
+    flags |= MESH_HAS_TEXTURE_FLAG;
+  }
+  if (item.material.transparent || item.material.opacity < 1 || item.color[3] < 1) {
+    flags |= MESH_TRANSPARENT_FLAG;
+  }
+  if (item.material.depthWrite === false) flags |= MESH_DEPTH_WRITE_DISABLED_FLAG;
+  if (item.receiveShadow) flags |= MESH_RECEIVE_SHADOW_FLAG;
   return flags;
 }

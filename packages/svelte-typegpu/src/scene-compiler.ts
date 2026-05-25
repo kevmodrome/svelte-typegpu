@@ -241,7 +241,9 @@ function readMeshDrawItem(
     renderOrder: numberArg(mesh.attributes.renderOrder, 0),
     hitTest: hitTestMode(mesh.attributes.hitTest),
     pointerEvents: mesh.attributes.pointerEvents === 'none' ? 'none' : 'auto',
-    drag: stringAttribute(mesh.attributes.drag)
+    drag: stringAttribute(mesh.attributes.drag),
+    castShadow: mesh.attributes.castShadow === true,
+    receiveShadow: mesh.attributes.receiveShadow === true
   });
 
   return { transform, revision: meshRevision };
@@ -344,7 +346,9 @@ function readInstancedMeshDrawItems(
       renderOrder: numberArg(instancedMesh.attributes.renderOrder, 0),
       hitTest: hitTestMode(instancedMesh.attributes.hitTest),
       pointerEvents: instancedMesh.attributes.pointerEvents === 'none' ? 'none' : 'auto',
-      drag: stringAttribute(instancedMesh.attributes.drag)
+      drag: stringAttribute(instancedMesh.attributes.drag),
+      castShadow: instancedMesh.attributes.castShadow === true,
+      receiveShadow: instancedMesh.attributes.receiveShadow === true
     });
   });
 
@@ -393,7 +397,9 @@ function readModelDrawItems(
       renderOrder: numberArg(modelNode.attributes.renderOrder, 0),
       hitTest: hitTestMode(modelNode.attributes.hitTest),
       pointerEvents: modelNode.attributes.pointerEvents === 'none' ? 'none' : 'auto',
-      drag: stringAttribute(modelNode.attributes.drag)
+      drag: stringAttribute(modelNode.attributes.drag),
+      castShadow: modelNode.attributes.castShadow === true,
+      receiveShadow: modelNode.attributes.receiveShadow === true
     });
   });
 

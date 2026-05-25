@@ -111,7 +111,7 @@ Expected: PASS.
 - Test: `packages/svelte-typegpu/src/lighting-data.test.ts`
 - Test: `packages/svelte-typegpu/src/gpu-renderer.test.ts`
 
-- [ ] **Step 1: Add failing tests**
+- [x] **Step 1: Add failing tests**
 
 Add tests for `<directionalLight castShadow shadowMapSize={2048} shadowBias={1} shadowSlopeBias={4}>` and `<mesh receiveShadow>`. Assert light state records `castsShadow`, map size, and bias values.
 
@@ -119,7 +119,7 @@ Run: `pnpm --filter svelte-typegpu --fail-if-no-match test -- lighting-data.test
 
 Expected: FAIL because lights always set `castsShadow: false`.
 
-- [ ] **Step 2: Implement first directional-light shadow map**
+- [x] **Step 2: Implement first directional-light shadow map**
 
 Allocate one depth texture and comparison sampler for the first shadow-casting directional light. Render shadow-casting draw batches into the shadow map before the main pass. Add a shadow bind group and sample it in the main fragment shader when a receiving mesh is lit by the shadowed directional light.
 

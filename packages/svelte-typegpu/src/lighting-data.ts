@@ -81,7 +81,14 @@ function writeLight(view: DataView, offset: number, light: TypeGpuLight): void {
     light.groundColor[2],
     0
   );
-  writeVec4(view, offset + TYPEGPU_LIGHT_PARAMS_OFFSET, light.decay, light.penumbra, 0, 0);
+  writeVec4(
+    view,
+    offset + TYPEGPU_LIGHT_PARAMS_OFFSET,
+    light.decay,
+    light.penumbra,
+    light.shadowBias,
+    light.shadowSlopeBias
+  );
 }
 
 function writeVec4(

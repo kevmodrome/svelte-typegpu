@@ -88,6 +88,8 @@ describe('TypeGPU lighting data packing', () => {
     expect(view.getFloat32(firstOffset + TYPEGPU_LIGHT_COLOR_OFFSET + 3 * f32, true)).toBeCloseTo(6);
     expect(view.getFloat32(firstOffset + TYPEGPU_LIGHT_PARAMS_OFFSET, true)).toBeCloseTo(2);
     expect(view.getFloat32(firstOffset + TYPEGPU_LIGHT_PARAMS_OFFSET + f32, true)).toBeCloseTo(0.25);
+    expect(view.getFloat32(firstOffset + TYPEGPU_LIGHT_PARAMS_OFFSET + 2 * f32, true)).toBeCloseTo(0.0005);
+    expect(view.getFloat32(firstOffset + TYPEGPU_LIGHT_PARAMS_OFFSET + 3 * f32, true)).toBeCloseTo(1.5);
 
     expect(view.getUint32(secondOffset + TYPEGPU_LIGHT_KIND_OFFSET, true)).toBe(
       TYPEGPU_LIGHT_KIND.hemisphere
@@ -115,6 +117,26 @@ describe('TypeGPU lighting data packing', () => {
 
     expect(view.getUint32(0, true)).toBe(MAX_TYPEGPU_LIGHTS);
   });
+
+  it('packs directional shadow bias parameters into the light record', () => {
+    const buffer = packLightingState([
+      light({
+        kind: 'directional',
+        castsShadow: true,
+        shadowIndex: 0,
+        shadowBias: 0.0025,
+        shadowSlopeBias: 3.75
+      })
+    ]);
+    const view = new DataView(buffer);
+    const offset = TYPEGPU_LIGHT_HEADER_BYTES;
+    const f32 = Float32Array.BYTES_PER_ELEMENT;
+
+    expect(view.getUint32(offset + TYPEGPU_LIGHT_FLAGS_OFFSET, true)).toBe(1);
+    expect(view.getUint32(offset + TYPEGPU_LIGHT_SHADOW_INDEX_OFFSET, true)).toBe(0);
+    expect(view.getFloat32(offset + TYPEGPU_LIGHT_PARAMS_OFFSET + 2 * f32, true)).toBeCloseTo(0.0025);
+    expect(view.getFloat32(offset + TYPEGPU_LIGHT_PARAMS_OFFSET + 3 * f32, true)).toBeCloseTo(3.75);
+  });
 });
 
 function light(overrides: Partial<TypeGpuLight>): TypeGpuLight {
@@ -133,6 +155,9 @@ function light(overrides: Partial<TypeGpuLight>): TypeGpuLight {
     groundColor: [0, 0, 0],
     castsShadow: false,
     shadowIndex: -1,
+    shadowMapSize: 1024,
+    shadowBias: 0.0005,
+    shadowSlopeBias: 1.5,
     ...overrides
   };
 }

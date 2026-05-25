@@ -117,7 +117,9 @@ function drawItem({
     spinSpeed: 0.5,
     renderOrder,
     hitTest: 'bounds',
-    pointerEvents: 'auto'
+    pointerEvents: 'auto',
+    castShadow: false,
+    receiveShadow: false
   };
 }
 

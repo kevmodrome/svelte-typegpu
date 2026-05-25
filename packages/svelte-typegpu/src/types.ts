@@ -286,6 +286,8 @@ export interface TypeGpuMeshDrawItem {
   hitTest: 'none' | 'bounds' | 'mesh';
   pointerEvents: 'auto' | 'none';
   drag?: string;
+  castShadow: boolean;
+  receiveShadow: boolean;
 }
 
 export interface TypeGpuLight {
@@ -303,6 +305,9 @@ export interface TypeGpuLight {
   groundColor: Vector3Tuple;
   castsShadow: boolean;
   shadowIndex: number;
+  shadowMapSize: number;
+  shadowBias: number;
+  shadowSlopeBias: number;
 }
 
 export interface TypeGpuDrawBatch {
@@ -314,6 +319,7 @@ export interface TypeGpuDrawBatch {
   geometryKey: string;
   geometry: TypeGpuGeometryData;
   material: TypeGpuMaterialDescriptor;
+  castShadow: boolean;
   floatsPerInstance: number;
   instances: Float32Array;
   instanceIds: TypeGpuInstanceId[];

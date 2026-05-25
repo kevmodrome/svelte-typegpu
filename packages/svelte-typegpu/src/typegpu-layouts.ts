@@ -79,6 +79,17 @@ export const lightingBindGroupLayout = tgpu
   .$idx(1)
   .$name('TypeGPU lighting bind group layout');
 
+export const TYPEGPU_SHADOW_UNIFORM_FLOATS = 20;
+export const TYPEGPU_SHADOW_UNIFORM_BYTES =
+  TYPEGPU_SHADOW_UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT;
+
+export const typegpuShadowSchema = d
+  .struct({
+    view_projection: d.mat4x4f,
+    params: d.vec4f
+  })
+  .$name('TypeGpuShadow');
+
 export const materialBindGroupLayout = tgpu
   .bindGroupLayout({
     baseColorTexture: { texture: d.texture2d(), visibility: ['fragment'] },
@@ -86,3 +97,12 @@ export const materialBindGroupLayout = tgpu
   })
   .$idx(2)
   .$name('TypeGPU standard material bind group layout');
+
+export const shadowBindGroupLayout = tgpu
+  .bindGroupLayout({
+    shadow: { uniform: typegpuShadowSchema },
+    shadowMap: { texture: d.textureDepth2d(), visibility: ['fragment'] },
+    shadowSampler: { sampler: 'comparison', visibility: ['fragment'] }
+  })
+  .$idx(3)
+  .$name('TypeGPU shadow map bind group layout');

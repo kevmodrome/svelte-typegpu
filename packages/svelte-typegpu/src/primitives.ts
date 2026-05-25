@@ -242,6 +242,8 @@ export function dirtyForAttribute(
     if (attribute === 'geometry' || attribute === 'material' || instanceBatchAttributes.has(attribute)) {
       return mergeDirty(Dirty.DrawBatches, Dirty.Interaction);
     }
+    if (attribute === 'castShadow') return Dirty.DrawBatches;
+    if (attribute === 'receiveShadow') return Dirty.InstanceData;
     if (instanceDataAttributes.has(attribute)) return mergeDirty(Dirty.InstanceData, Dirty.Interaction);
     if (attribute === 'pointerEvents' || attribute === 'hitTest' || attribute === 'drag') {
       return Dirty.Interaction;

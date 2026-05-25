@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { addEventListener, createElement, createFragment, insert, setAttribute } from './core';
 import { Dirty, hasDirty } from './dirty';
 import type { TypeGpuLoadedModel } from './glb-loader';
-import { MESH_VERTEX_FLOATS, MESH_VERTEX_LAYOUT_KEY } from './instance-data';
+import {
+  MESH_INSTANCE_FLOATS,
+  MESH_MATERIAL_PARAMS_OFFSET,
+  MESH_VERTEX_FLOATS,
+  MESH_VERTEX_LAYOUT_KEY
+} from './instance-data';
 import { createModelCache } from './model-cache';
 import { createSceneState, createTypeGpuSceneCache } from './scene-compiler';
 
@@ -103,6 +108,109 @@ describe('TypeGPU scene compiler', () => {
       'dragmove',
       'dragstart'
     ]);
+  });
+
+  it('collects the first shadow-casting directional light with declarative shadow settings', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const first = createElement('directionalLight');
+    const second = createElement('directionalLight');
+    const point = createElement('pointLight');
+
+    setAttribute(first, 'castShadow', true);
+    setAttribute(first, 'shadowMapSize', 2048);
+    setAttribute(first, 'shadowBias', 0.002);
+    setAttribute(first, 'shadowSlopeBias', 3);
+    setAttribute(second, 'castShadow', true);
+    setAttribute(second, 'shadowMapSize', 4096);
+    setAttribute(point, 'castShadow', true);
+    insert(scene, first, null);
+    insert(scene, second, null);
+    insert(scene, point, null);
+    insert(root, scene, null);
+
+    const state = createSceneState(root, createTypeGpuSceneCache(), { dirty: Dirty.All });
+
+    expect(state.lights).toHaveLength(3);
+    expect(state.lights[0]).toMatchObject({
+      kind: 'directional',
+      castsShadow: true,
+      shadowIndex: 0,
+      shadowMapSize: 2048,
+      shadowBias: 0.002,
+      shadowSlopeBias: 3
+    });
+    expect(state.lights[1]).toMatchObject({
+      kind: 'directional',
+      castsShadow: false,
+      shadowIndex: -1,
+      shadowMapSize: 4096
+    });
+    expect(state.lights[2]).toMatchObject({
+      kind: 'point',
+      castsShadow: false,
+      shadowIndex: -1
+    });
+  });
+
+  it('compiles mesh castShadow and receiveShadow attributes into draw state', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const caster = createElement('mesh');
+    const receiver = createElement('mesh');
+    const casterGeometry = createElement('boxGeometry');
+    const receiverGeometry = createElement('boxGeometry');
+
+    setAttribute(caster, 'castShadow', true);
+    setAttribute(receiver, 'receiveShadow', true);
+    insert(caster, casterGeometry, null);
+    insert(receiver, receiverGeometry, null);
+    insert(scene, caster, null);
+    insert(scene, receiver, null);
+    insert(root, scene, null);
+
+    const state = createSceneState(root, createTypeGpuSceneCache(), { dirty: Dirty.All });
+    const casterBatch = state.drawBatches.find((batch) => batch.castShadow);
+    const receiverBatch = state.drawBatches.find((batch) => !batch.castShadow);
+    const receiverFlags = receiverBatch!.instances[MESH_MATERIAL_PARAMS_OFFSET + 3];
+
+    expect(state.drawBatches).toHaveLength(2);
+    expect(casterBatch).toMatchObject({ castShadow: true });
+    expect(casterBatch!.key).toContain('shadow:cast');
+    expect(receiverBatch).toMatchObject({ castShadow: false });
+    expect((receiverFlags & 8) === 8).toBe(true);
+  });
+
+  it('compiles model and instancedMesh castShadow attributes into shadow batches', async () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const model = createElement('model');
+    const instanced = createElement('instancedMesh');
+    const geometry = createElement('boxGeometry');
+    const loaded = loadedModelFixture('url:/models/caster.obj');
+    const cache = createTypeGpuSceneCache({
+      modelCache: createModelCache({
+        loadUrl: async () => loaded,
+        loadData: async () => loaded
+      })
+    });
+
+    setAttribute(model, 'src', '/models/caster.obj');
+    setAttribute(model, 'castShadow', true);
+    setAttribute(instanced, 'castShadow', true);
+    setAttribute(instanced, 'instances', [{ id: 'a' }, { id: 'b' }]);
+    insert(instanced, geometry, null);
+    insert(scene, model, null);
+    insert(scene, instanced, null);
+    insert(root, scene, null);
+
+    createSceneState(root, cache, { dirty: Dirty.All });
+    await Promise.resolve();
+    const state = createSceneState(root, cache, { dirty: Dirty.All });
+
+    expect(state.drawBatches.every((batch) => batch.castShadow)).toBe(true);
+    expect(state.drawBatches.reduce((sum, batch) => sum + batch.instanceCount, 0)).toBe(3);
+    expect(state.drawBatches[0].floatsPerInstance).toBe(MESH_INSTANCE_FLOATS);
   });
 
   it('resolves geometry and material string references through scene resources', () => {

@@ -40,6 +40,9 @@ describe('TypeGPU GPU renderer', () => {
     expect(rendererSource).toContain('#textureResources');
     expect(rendererSource).toContain('#samplerResources');
     expect(rendererSource).toContain('#pipelines');
+    expect(rendererSource).toContain('#shadowTexture');
+    expect(rendererSource).toContain('#shadowBindGroup');
+    expect(rendererSource).toContain('#shadowPipeline');
   });
 
   it('prunes GPU resources from scene live keys', () => {
@@ -317,6 +320,7 @@ describe('TypeGPU GPU renderer', () => {
     expect(rendererSource).toContain('root.createBindGroup(sceneBindGroupLayout');
     expect(pipelineSource).toMatch(/root\s*\.\s*createRenderPipeline/);
     expect(rendererSource).toContain('.with(sceneBindGroup)');
+    expect(rendererSource).toContain('.with(shadowBindGroup)');
     expect(rendererSource).toContain('.with(materialResource.bindGroup)');
     expect(rendererSource).toContain('.with(meshVertexLayout');
     expect(rendererSource).toContain('.with(meshInstanceLayout');
@@ -337,6 +341,38 @@ describe('TypeGPU GPU renderer', () => {
     expect(rendererSource).toContain('.with(lightingBindGroup)');
     expect(source).not.toContain('device.createBindGroup');
     expect(source).not.toContain('device.createRenderPipeline');
+  });
+
+  it('uses declarative shadow resources without raw WebGPU resource creation', () => {
+    expect(layoutsSource).toContain('shadowBindGroupLayout');
+    expect(rendererSource).toContain('root.createBindGroup(shadowBindGroupLayout');
+    expect(rendererSource).toContain('root.createBuffer(typegpuShadowSchema)');
+    expect(rendererSource).toContain('root.createComparisonSampler');
+    expect(rendererSource).toContain(".$usage('render', 'sampled')");
+    expect(rendererSource).toContain('packShadowState');
+    expect(rendererSource).toContain('createShadowPipeline');
+    expect(rendererSource).toContain('shadowBindGroupLayout');
+    expect(source).not.toContain('device.createTexture');
+    expect(source).not.toContain('device.createSampler');
+    expect(source).not.toContain('device.createBindGroup');
+    expect(source).not.toContain('device.createRenderPipeline');
+  });
+
+  it('renders the shadow pass before the main material pass and filters non-casters', () => {
+    const shadowPassIndex = rendererSource.indexOf('beginTypeGpuShadowPass');
+    const mainPassIndex = rendererSource.indexOf('beginTypeGpuRenderPass');
+
+    expect(shadowPassIndex).toBeGreaterThanOrEqual(0);
+    expect(mainPassIndex).toBeGreaterThan(shadowPassIndex);
+    expect(rendererSource).toContain('if (!batch.castShadow) continue;');
+    expect(rendererSource).toContain('drawTypeGpuShadowBatch');
+  });
+
+  it('recreates and destroys the shadow map texture when the declarative map size changes', () => {
+    expect(rendererSource).toContain('this.#shadowMapSize !== mapSize');
+    expect(rendererSource).toContain('this.#shadowTexture?.destroy()');
+    expect(rendererSource).toMatch(/size:\s*\[mapSize,\s*mapSize\]/);
+    expect(rendererSource).toContain('this.#shadowTexture?.destroy();');
   });
 
   it('seeds initial scene state with empty camera metadata', () => {
@@ -389,7 +425,7 @@ describe('TypeGPU GPU renderer', () => {
 
     expect(rendererSource).toContain('beginTypeGpuRenderPass');
     expect(rendererSource).toContain('pipeline.with(pass).with(sceneBindGroup).with(lightingBindGroup)');
-    expect(drawCallScopes).toEqual(['drawTypeGpuMaterialBatch']);
+    expect(drawCallScopes).toEqual(['drawTypeGpuMaterialBatch', 'drawTypeGpuShadowBatch']);
   });
 });
 
