@@ -83,7 +83,7 @@ Expected: PASS.
 - Modify: `packages/svelte-typegpu/src/scene-compiler.test.ts`
 - Test: `packages/svelte-typegpu/src/obj-loader.test.ts`
 
-- [ ] **Step 1: Add failing tests**
+- [x] **Step 1: Add failing tests**
 
 Test parsing an OBJ with vertices, normals, triangular faces, and quad triangulation into `TypeGpuLoadedModel`. Test that `model-cache` chooses OBJ loading for `.obj` URLs.
 
@@ -91,7 +91,7 @@ Run: `pnpm --filter svelte-typegpu --fail-if-no-match test -- obj-loader.test.ts
 
 Expected: FAIL because `obj-loader.ts` does not exist.
 
-- [ ] **Step 2: Implement OBJ parser**
+- [x] **Step 2: Implement OBJ parser**
 
 Parse `v`, `vn`, and `f` records. Triangulate polygon faces with a fan. Emit `TypeGpuGeometryData` with the standard 12-float vertex layout and a default material.
 
