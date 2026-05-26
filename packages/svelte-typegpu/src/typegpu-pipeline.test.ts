@@ -31,9 +31,8 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     expect(wgsl).toContain('rotate_hue');
 
     const requiredLightingShaderSources = [
-      'lightingBindGroupLayout',
-      'evaluate_light',
-      'evaluate_lighting',
+      'light_count',
+      'light.kind',
       'in.world_position'
     ];
     const missingLightingShaderSources = requiredLightingShaderSources.filter(
@@ -41,18 +40,16 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     );
 
     expect(missingLightingShaderSources).toEqual([]);
-    expect(wgsl).toContain('var spot_falloff = step(outer_cos, spot_cos);');
-    expect(wgsl).toContain('if (penumbra > 0.0001)');
-    expect(wgsl).toContain('spot_falloff = smoothstep(outer_cos, inner_cos, spot_cos);');
+    expect(wgsl).toContain('if (light.kind == 1u)');
+    expect(wgsl).toContain('else if (light.kind == 3u)');
+    expect(wgsl).toContain('else if (light.kind == 4u || light.kind == 5u)');
     expect(wgsl).toContain('@group(2)');
     expect(wgsl).toContain('baseColorTexture');
     expect(wgsl).toContain('baseColorSampler');
     expect(wgsl).toContain('textureSample');
-    expect(wgsl).toContain('textureSampleCompare');
     expect(wgsl).toContain('in.uv');
     expect(wgsl).toContain('texel * in.color * in.vertex_color');
-    expect(wgsl).toContain('receive_shadow');
-    expect(wgsl).toContain('shadowBindGroupLayout');
+    expect(wgsl).toContain('shifted_color * 0.08');
     expect(wgsl).toContain('texel.a * in.color.a * in.vertex_color.a * in.material.z');
   });
 

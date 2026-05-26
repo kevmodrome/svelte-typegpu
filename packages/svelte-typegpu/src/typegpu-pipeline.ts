@@ -313,12 +313,7 @@ const evaluateLighting = tgpu
     let lightingBindGroupLayout_count = min(lightingBindGroupLayout.$.lighting.count, 32u);
 
     if (lightingBindGroupLayout_count == 0u) {
-      let fallback_light = normalize(vec3(0.45, 0.78, 0.6));
-      let diffuse = max(dot(lighting_normal, fallback_light), 0.0);
-      let shade = 0.24 + diffuse * mix(0.78, 0.58, roughness);
-      let lift = metalness * 0.08;
-
-      return clamp(base_color * shade + lift, vec3(0.0), vec3(1.0));
+      return clamp(base_color * 0.82, vec3(0.0), vec3(1.0));
     }
 
     var lit_color = vec3(0.0);
@@ -355,8 +350,6 @@ export const meshFragmentMain = tgpu
   })/* wgsl */ `{
     let roughness = clamp(in.material.x, 0.0, 1.0);
     let metalness = clamp(in.material.y, 0.0, 1.0);
-    let material_flags = u32(in.material.w + 0.5);
-    let receive_shadow = (material_flags & 8u) != 0u;
     let texel = textureSample(
       materialBindGroupLayout.$.baseColorTexture,
       materialBindGroupLayout.$.baseColorSampler,
@@ -366,22 +359,56 @@ export const meshFragmentMain = tgpu
       (texel * in.color * in.vertex_color).rgb,
       sceneBindGroupLayout.$.scene.color_transform.x
     );
-    let lit_color = evaluate_lighting(
-      in.world_position,
-      in.normal,
-      shifted_color,
-      roughness,
-      metalness,
-      receive_shadow
-    );
+    let output_alpha = clamp(texel.a * in.color.a * in.vertex_color.a * in.material.z, 0.0, 1.0);
+    let light_count = min(lightingBindGroupLayout.$.lighting.count, 32u);
 
-    return vec4(lit_color, texel.a * in.color.a * in.vertex_color.a * in.material.z);
+    if (light_count == 0u) {
+      return vec4(shifted_color * 0.82, output_alpha);
+    }
+
+    var lighting_normal = vec3(0.0, 0.0, 1.0);
+    let normal_length = length(in.normal);
+
+    if (normal_length > 0.0001) {
+      lighting_normal = in.normal / normal_length;
+    }
+
+    var lit_color = vec3(0.0);
+
+    for (var index = 0u; index < light_count; index = index + 1u) {
+      let light = lightingBindGroupLayout.$.lighting.lights[index];
+      let intensity = max(light.color_intensity.a, 0.0);
+      let light_color = light.color_intensity.rgb * intensity;
+
+      if (light.kind == 1u) {
+        lit_color = lit_color + shifted_color * light_color;
+      } else if (light.kind == 3u) {
+        let light_direction = normalize(-light.direction_angle.xyz);
+        let diffuse = max(dot(lighting_normal, light_direction), 0.0) * mix(1.0, 0.68, roughness);
+        let specular = pow(max(dot(lighting_normal, light_direction), 0.0), mix(32.0, 8.0, roughness)) *
+          mix(0.08, 0.32, metalness) * (1.0 - roughness * 0.75);
+
+        lit_color = lit_color + (shifted_color * diffuse + vec3(specular)) * light_color;
+      } else if (light.kind == 4u || light.kind == 5u) {
+        let to_light = light.position_range.xyz - in.world_position;
+        let distance = max(length(to_light), 0.0001);
+        let light_direction = to_light / distance;
+        let diffuse = max(dot(lighting_normal, light_direction), 0.0) * mix(1.0, 0.68, roughness);
+        let attenuation = 1.0 / pow(max(distance, 1.0), max(light.params.x, 0.0001));
+
+        lit_color = lit_color + shifted_color * diffuse * light_color * attenuation;
+      }
+    }
+
+    lit_color = max(lit_color, shifted_color * 0.08);
+
+    return vec4(lit_color, output_alpha);
   }`
   .$uses({
-    evaluate_lighting: evaluateLighting,
     rotate_hue: rotateHue,
     sceneBindGroupLayout,
-    materialBindGroupLayout
+    materialBindGroupLayout,
+    lightingBindGroupLayout
   })
   .$name('meshFragmentMain');
 
