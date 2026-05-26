@@ -45,7 +45,7 @@ export default function PhongReflection_typegpu($$anchor) {
 	$.set_attribute(perspectiveCamera, 'target', [0, 1, 0]);
 	$.set_attribute(perspectiveCamera, 'fov', 45);
 	$.set_attribute(perspectiveCamera, 'near', 0.1);
-	$.set_attribute(perspectiveCamera, 'far', 100);
+	$.set_attribute(perspectiveCamera, 'far', 1000);
 
 	var controls = $.child(perspectiveCamera);
 
@@ -71,8 +71,8 @@ export default function PhongReflection_typegpu($$anchor) {
 
 	var phongMaterial = $.child(model);
 
-	$.set_attribute(phongMaterial, 'color', [1, 0.7, 0, 1]);
-	$.set_attribute(phongMaterial, 'roughness', 0.2);
+	$.set_attribute(phongMaterial, 'color', [1, 1, 1, 1]);
+	$.set_attribute(phongMaterial, 'roughness', 0.72);
 	$.set_attribute(phongMaterial, 'metalness', 0);
 	$.reset(model);
 	$.reset(scene);

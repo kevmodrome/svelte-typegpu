@@ -373,6 +373,8 @@ export const meshFragmentMain = tgpu
       lighting_normal = in.normal / normal_length;
     }
 
+    let material_flags = u32(in.material.w + 0.5);
+    let receive_shadow = (material_flags & 8u) != 0u;
     var lit_color = vec3(0.0);
 
     for (var index = 0u; index < light_count; index = index + 1u) {
@@ -387,8 +389,36 @@ export const meshFragmentMain = tgpu
         let diffuse = max(dot(lighting_normal, light_direction), 0.0) * mix(1.0, 0.68, roughness);
         let specular = pow(max(dot(lighting_normal, light_direction), 0.0), mix(32.0, 8.0, roughness)) *
           mix(0.08, 0.32, metalness) * (1.0 - roughness * 0.75);
+        var shadow_factor = 1.0;
 
-        lit_color = lit_color + (shifted_color * diffuse + vec3(specular)) * light_color;
+        let shadow_clip = shadowBindGroupLayout.$.shadow.view_projection * vec4(in.world_position, 1.0);
+        let shadow_w = select(1.0, shadow_clip.w, abs(shadow_clip.w) >= 0.0001);
+        let shadow_ndc = shadow_clip.xyz / shadow_w;
+        let shadow_coords = clamp(shadow_ndc.xy * vec2(0.5, -0.5) + vec2(0.5, 0.5), vec2(0.0), vec2(1.0));
+        let shadow_bias = 0.0;
+        let surface_facing = max(dot(lighting_normal, light_direction), 0.0);
+        let normal_bias = shadow_bias * (1.0 + (1.0 - surface_facing));
+        let sampled_shadow = textureSampleCompare(
+          shadowBindGroupLayout.$.shadowMap,
+          shadowBindGroupLayout.$.shadowSampler,
+          shadow_coords,
+          shadow_ndc.z - normal_bias
+        );
+        let shadow_in_bounds =
+          abs(shadow_clip.w) >= 0.0001 &&
+          shadow_ndc.x >= -1.0 && shadow_ndc.x <= 1.0 &&
+          shadow_ndc.y >= -1.0 && shadow_ndc.y <= 1.0 &&
+          shadow_ndc.z >= 0.0 && shadow_ndc.z <= 1.0;
+        let shadow_enabled =
+          receive_shadow &&
+          shadowBindGroupLayout.$.shadow.params.y >= 0.5 &&
+          (light.flags & 1u) != 0u &&
+          light.shadowIndex == 0u &&
+          shadow_in_bounds;
+
+        shadow_factor = select(1.0, sampled_shadow, shadow_enabled);
+
+        lit_color = lit_color + (shifted_color * diffuse + vec3(specular)) * light_color * shadow_factor;
       } else if (light.kind == 4u || light.kind == 5u) {
         let to_light = light.position_range.xyz - in.world_position;
         let distance = max(length(to_light), 0.0001);
@@ -408,7 +438,8 @@ export const meshFragmentMain = tgpu
     rotate_hue: rotateHue,
     sceneBindGroupLayout,
     materialBindGroupLayout,
-    lightingBindGroupLayout
+    lightingBindGroupLayout,
+    shadowBindGroupLayout
   })
   .$name('meshFragmentMain');
 

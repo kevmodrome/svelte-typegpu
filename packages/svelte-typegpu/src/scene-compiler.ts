@@ -303,6 +303,7 @@ function readMeshDrawItem(
     hitTest: hitTestMode(mesh.attributes.hitTest),
     pointerEvents: mesh.attributes.pointerEvents === 'none' ? 'none' : 'auto',
     drag: stringAttribute(mesh.attributes.drag),
+    dragButton: dragButtonAttribute(mesh.attributes.dragButton),
     castShadow: castsDeclarativeShadow(mesh.attributes.castShadow, effectiveMaterial, color),
     receiveShadow: mesh.attributes.receiveShadow === true
   });
@@ -408,6 +409,7 @@ function readInstancedMeshDrawItems(
       hitTest: hitTestMode(instancedMesh.attributes.hitTest),
       pointerEvents: instancedMesh.attributes.pointerEvents === 'none' ? 'none' : 'auto',
       drag: stringAttribute(instancedMesh.attributes.drag),
+      dragButton: dragButtonAttribute(instancedMesh.attributes.dragButton),
       castShadow: castsDeclarativeShadow(instancedMesh.attributes.castShadow, effectiveMaterial, color),
       receiveShadow: instancedMesh.attributes.receiveShadow === true
     });
@@ -460,6 +462,7 @@ function readModelDrawItems(
       hitTest: hitTestMode(modelNode.attributes.hitTest),
       pointerEvents: modelNode.attributes.pointerEvents === 'none' ? 'none' : 'auto',
       drag: stringAttribute(modelNode.attributes.drag),
+      dragButton: dragButtonAttribute(modelNode.attributes.dragButton),
       castShadow: castsDeclarativeShadow(modelNode.attributes.castShadow, effectiveMaterial, color),
       receiveShadow: modelNode.attributes.receiveShadow === true
     });
@@ -558,7 +561,8 @@ function interactionTargetFor(item: TypeGpuMeshDrawItem): TypeGpuInteractionTarg
       pointerEvents: item.pointerEvents,
       handlers,
       renderOrder: item.renderOrder,
-      drag: item.drag
+      drag: item.drag,
+      dragButton: item.dragButton
     }
   ];
 }
@@ -605,6 +609,10 @@ function shouldRecomputeShaderPasses(dirty: Dirty): boolean {
 
 function stringAttribute(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+function dragButtonAttribute(value: unknown): 'primary' | 'middle' | 'secondary' | undefined {
+  return value === 'primary' || value === 'middle' || value === 'secondary' ? value : undefined;
 }
 
 function castsDeclarativeShadow(

@@ -150,17 +150,18 @@ export const floorBounds: Bounds = {
   max: [1, 0, 1]
 };
 
-export const leftBoxVertices = createCubeVertices(0);
-export const rightBoxVertices = createCubeVertices(13);
-export const floorVertices = createFloorVertices();
+const randomColors = createStableColorSequence(cubeFaces.length * 6 * 2 + floorFace.vertices.length);
 
-function createCubeVertices(seed: number): Float32Array {
+export const leftBoxVertices = createCubeVertices(randomColors, 0);
+export const rightBoxVertices = createCubeVertices(randomColors, cubeFaces.length * 6);
+export const floorVertices = createFloorVertices(randomColors, cubeFaces.length * 6 * 2);
+
+function createCubeVertices(colors: Rgba[], colorOffset: number): Float32Array {
   const values: number[] = [];
 
   cubeFaces.forEach((face, faceIndex) => {
-    const color = faceColor(seed + faceIndex * 5);
-
     face.vertices.forEach((position, vertexIndex) => {
+      const color = colors[colorOffset + faceIndex * face.vertices.length + vertexIndex] ?? [1, 1, 1, 1];
       pushVertex(values, position, face.normal, face.uvs[vertexIndex] ?? [0, 0], color);
     });
   });
@@ -168,11 +169,11 @@ function createCubeVertices(seed: number): Float32Array {
   return new Float32Array(values);
 }
 
-function createFloorVertices(): Float32Array {
+function createFloorVertices(colors: Rgba[], colorOffset: number): Float32Array {
   const values: number[] = [];
-  const color: Rgba = [0.18, 0.2, 0.22, 1];
 
   floorFace.vertices.forEach((position, vertexIndex) => {
+    const color = colors[colorOffset + vertexIndex] ?? [1, 1, 1, 1];
     pushVertex(values, position, floorFace.normal, floorFace.uvs[vertexIndex] ?? [0, 0], color);
   });
 
@@ -183,17 +184,25 @@ function pushVertex(values: number[], position: Vec3, normal: Vec3, uv: Vec2, co
   values.push(...position, ...normal, ...uv, ...color);
 }
 
-function faceColor(seed: number): Rgba {
-  return [
-    0.2 + randomChannel(seed, 0) * 0.75,
-    0.2 + randomChannel(seed, 1) * 0.75,
-    0.2 + randomChannel(seed, 2) * 0.75,
-    1
-  ];
+function createStableColorSequence(vertexCount: number): Rgba[] {
+  const random = stableRandom();
+  const colors: Rgba[] = [];
+
+  for (let vertexIndex = 0; vertexIndex < vertexCount; vertexIndex += 1) {
+    colors.push([random(), random(), random(), 1]);
+  }
+
+  return colors;
 }
 
-function randomChannel(seed: number, channel: number): number {
-  const value = Math.sin((seed + 1) * (channel + 3) * 12.9898) * 43758.5453;
+function stableRandom(): () => number {
+  let state = 0x6d2b79f5;
 
-  return value - Math.floor(value);
+  return () => {
+    state = (state + 0x6d2b79f5) | 0;
+    let value = Math.imul(state ^ (state >>> 15), 1 | state);
+    value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
+
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
 }

@@ -34,6 +34,7 @@ import type {
   TypeGpuDragEventDetail,
   TypeGpuInteractionHit,
   TypeGpuInteractionTarget,
+  TypeGpuPointerDragButton,
   TypeGpuSceneState,
   Vector3Tuple
 } from './types';
@@ -239,6 +240,7 @@ function createRuntime(
 
     const hit = pickCanvasTarget(event);
     if (!hit || !hasDragHandler(hit.target)) return;
+    if (!objectDragButtonMatches(hit.target.dragButton, event)) return;
 
     event.preventDefault();
     activeDrag = createActiveDrag(hit, event);
@@ -598,6 +600,21 @@ function sameInteractionTarget(
 
 function hasDragHandler(target: TypeGpuInteractionTarget): boolean {
   return DRAG_EVENT_TYPES.some((type) => target.handlers.has(type));
+}
+
+function objectDragButtonMatches(
+  dragButton: TypeGpuPointerDragButton | undefined,
+  event: PointerEvent
+): boolean {
+  if (event.pointerType && event.pointerType !== 'mouse') return true;
+
+  return finiteNumber(event.button, 0) === buttonNumber(dragButton ?? 'primary');
+}
+
+function buttonNumber(button: TypeGpuPointerDragButton): number {
+  if (button === 'middle') return 1;
+  if (button === 'secondary') return 2;
+  return 0;
 }
 
 function samePointer(event: PointerEvent, activeDrag: ActiveObjectDrag): boolean {

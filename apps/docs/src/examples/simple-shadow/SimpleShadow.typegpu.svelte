@@ -38,6 +38,7 @@
       color={[0.5, 0.4, 0.7, 1]}
       roughness={0.68}
       metalness={0}
+      cullMode="none"
     ></phongMaterial>
   </resources>
 
@@ -46,6 +47,7 @@
     geometry="floor"
     material="floor-material"
     position={[0, 0, 0]}
+    castShadow={true}
     receiveShadow={true}
   ></mesh>
   <ShadowSubject />

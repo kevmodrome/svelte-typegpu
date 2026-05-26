@@ -8,7 +8,7 @@
     rightBoxVertices
   } from './box-geometry';
   import { rotateBoxesFromDrag } from './box-interaction';
-  import type { TypeGpuDragEventDetail, Vector3Tuple } from 'svelte-typegpu';
+  import type { TypeGpuDragEventDetail, Vector3Tuple, Vector4Tuple } from 'svelte-typegpu';
 
   const boxes: {
     id: string;
@@ -27,7 +27,7 @@
     }
   ];
 
-  let boxRotation = $state<Vector3Tuple>([0, 0, 0]);
+  let boxRotation = $state<Vector4Tuple>([0, 0, 0, 1]);
 
   function rotateBothBoxes(event: CustomEvent<TypeGpuDragEventDetail>) {
     boxRotation = rotateBoxesFromDrag(boxRotation, event);
@@ -92,7 +92,7 @@
       geometry={box.geometry}
       material="vertex-colors"
       position={box.position}
-      rotation={boxRotation}
+      quaternion={boxRotation}
       onDragMove={rotateBothBoxes}
     />
   {/each}

@@ -33,7 +33,7 @@ var root = $.from_tree([
 			' ',
 			['phongMaterial', { id: 'cuboid-material' }],
 			' ',
-			['phongMaterial', { id: 'floor-material' }]
+			['phongMaterial', { id: 'floor-material', cullMode: 'none' }]
 		],
 		' ',,
 		' ',
@@ -101,6 +101,7 @@ export default function SimpleShadow_typegpu($$anchor) {
 	var mesh = $.sibling(node, 2);
 
 	$.set_attribute(mesh, 'position', [0, 0, 0]);
+	$.set_attribute(mesh, 'castShadow', true);
 	$.set_attribute(mesh, 'receiveShadow', true);
 
 	var node_1 = $.sibling(mesh, 2);

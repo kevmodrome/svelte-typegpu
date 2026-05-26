@@ -5,7 +5,7 @@ import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
 
-var root = $.from_tree([['mesh', { drag: 'rotate' }]], 4);
+var root = $.from_tree([['mesh', { drag: 'rotate', dragButton: 'secondary' }]], 4);
 
 export default function SceneBox_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
@@ -15,7 +15,7 @@ export default function SceneBox_typegpu($$anchor, $$props) {
 		$.set_attribute(mesh, 'geometry', $$props.geometry);
 		$.set_attribute(mesh, 'material', $$props.material);
 		$.set_attribute(mesh, 'position', $$props.position);
-		$.set_attribute(mesh, 'rotation', $$props.rotation);
+		$.set_attribute(mesh, 'quaternion', $$props.quaternion);
 	});
 
 	$.event('dragmove', mesh, function (...$$args) {

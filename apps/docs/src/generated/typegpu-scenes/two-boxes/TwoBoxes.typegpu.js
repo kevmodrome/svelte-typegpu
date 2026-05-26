@@ -93,7 +93,7 @@ export default function TwoBoxes_typegpu($$anchor, $$props) {
 		}
 	];
 
-	let boxRotation = $.state($.proxy([0, 0, 0]));
+	let boxRotation = $.state($.proxy([0, 0, 0, 1]));
 
 	function rotateBothBoxes(event) {
 		$.set(boxRotation, rotateBoxesFromDrag($.get(boxRotation), event), true);
@@ -150,7 +150,7 @@ export default function TwoBoxes_typegpu($$anchor, $$props) {
 				return $.get(box).position;
 			},
 
-			get rotation() {
+			get quaternion() {
 				return $.get(boxRotation);
 			},
 			onDragMove: rotateBothBoxes

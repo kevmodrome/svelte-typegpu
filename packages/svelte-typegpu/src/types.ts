@@ -287,6 +287,7 @@ export interface TypeGpuMeshDrawItem {
   hitTest: 'none' | 'bounds' | 'mesh';
   pointerEvents: 'auto' | 'none';
   drag?: string;
+  dragButton?: TypeGpuPointerDragButton;
   castShadow: boolean;
   receiveShadow: boolean;
 }
@@ -360,6 +361,7 @@ export interface TypeGpuInteractionTarget {
   handlers: Set<string>;
   renderOrder?: number;
   drag?: string;
+  dragButton?: TypeGpuPointerDragButton;
 }
 
 export interface TypeGpuInteractionHit {

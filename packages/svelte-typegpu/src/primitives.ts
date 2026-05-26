@@ -253,7 +253,12 @@ export function dirtyForAttribute(
     if (attribute === 'castShadow') return Dirty.DrawBatches;
     if (attribute === 'receiveShadow') return Dirty.InstanceData;
     if (instanceDataAttributes.has(attribute)) return mergeDirty(Dirty.InstanceData, Dirty.Interaction);
-    if (attribute === 'pointerEvents' || attribute === 'hitTest' || attribute === 'drag') {
+    if (
+      attribute === 'pointerEvents' ||
+      attribute === 'hitTest' ||
+      attribute === 'drag' ||
+      attribute === 'dragButton'
+    ) {
       return Dirty.Interaction;
     }
   }

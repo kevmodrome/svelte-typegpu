@@ -87,6 +87,7 @@ describe('TypeGPU scene compiler', () => {
     const geometry = createElement('boxGeometry');
 
     setAttribute(mesh, 'drag', 'rotate');
+    setAttribute(mesh, 'dragButton', 'secondary');
     addEventListener(mesh, 'dragstart', () => {});
     addEventListener(mesh, 'dragmove', () => {});
     addEventListener(mesh, 'dragend', () => {});
@@ -101,6 +102,7 @@ describe('TypeGPU scene compiler', () => {
       node: mesh,
       drawItemId: mesh.uid,
       drag: 'rotate',
+      dragButton: 'secondary',
       pointerEvents: 'auto',
       hitTest: 'bounds'
     });

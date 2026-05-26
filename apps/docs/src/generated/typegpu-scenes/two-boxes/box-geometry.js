@@ -144,23 +144,24 @@ export const floorBounds = {
     min: [-1, 0, -1],
     max: [1, 0, 1]
 };
-export const leftBoxVertices = createCubeVertices(0);
-export const rightBoxVertices = createCubeVertices(13);
-export const floorVertices = createFloorVertices();
-function createCubeVertices(seed) {
+const randomColors = createStableColorSequence(cubeFaces.length * 6 * 2 + floorFace.vertices.length);
+export const leftBoxVertices = createCubeVertices(randomColors, 0);
+export const rightBoxVertices = createCubeVertices(randomColors, cubeFaces.length * 6);
+export const floorVertices = createFloorVertices(randomColors, cubeFaces.length * 6 * 2);
+function createCubeVertices(colors, colorOffset) {
     const values = [];
     cubeFaces.forEach((face, faceIndex) => {
-        const color = faceColor(seed + faceIndex * 5);
         face.vertices.forEach((position, vertexIndex) => {
+            const color = colors[colorOffset + faceIndex * face.vertices.length + vertexIndex] ?? [1, 1, 1, 1];
             pushVertex(values, position, face.normal, face.uvs[vertexIndex] ?? [0, 0], color);
         });
     });
     return new Float32Array(values);
 }
-function createFloorVertices() {
+function createFloorVertices(colors, colorOffset) {
     const values = [];
-    const color = [0.18, 0.2, 0.22, 1];
     floorFace.vertices.forEach((position, vertexIndex) => {
+        const color = colors[colorOffset + vertexIndex] ?? [1, 1, 1, 1];
         pushVertex(values, position, floorFace.normal, floorFace.uvs[vertexIndex] ?? [0, 0], color);
     });
     return new Float32Array(values);
@@ -168,15 +169,20 @@ function createFloorVertices() {
 function pushVertex(values, position, normal, uv, color) {
     values.push(...position, ...normal, ...uv, ...color);
 }
-function faceColor(seed) {
-    return [
-        0.2 + randomChannel(seed, 0) * 0.75,
-        0.2 + randomChannel(seed, 1) * 0.75,
-        0.2 + randomChannel(seed, 2) * 0.75,
-        1
-    ];
+function createStableColorSequence(vertexCount) {
+    const random = stableRandom();
+    const colors = [];
+    for (let vertexIndex = 0; vertexIndex < vertexCount; vertexIndex += 1) {
+        colors.push([random(), random(), random(), 1]);
+    }
+    return colors;
 }
-function randomChannel(seed, channel) {
-    const value = Math.sin((seed + 1) * (channel + 3) * 12.9898) * 43758.5453;
-    return value - Math.floor(value);
+function stableRandom() {
+    let state = 0x6d2b79f5;
+    return () => {
+        state = (state + 0x6d2b79f5) | 0;
+        let value = Math.imul(state ^ (state >>> 15), 1 | state);
+        value ^= value + Math.imul(value ^ (value >>> 7), 61 | value);
+        return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+    };
 }

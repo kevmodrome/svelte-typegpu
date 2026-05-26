@@ -47,6 +47,13 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     expect(wgsl).toContain('baseColorTexture');
     expect(wgsl).toContain('baseColorSampler');
     expect(wgsl).toContain('textureSample');
+    expect(wgsl).toContain('textureSampleCompare');
+    expect(wgsl).toContain('@group(3)');
+    expect(wgsl).toContain('shadowMap');
+    expect(wgsl).toContain('shadowSampler');
+    expect(wgsl).toContain('receive_shadow');
+    expect(wgsl).toContain('shadow_factor');
+    expect(wgsl).not.toContain('var shadow =');
     expect(wgsl).toContain('in.uv');
     expect(wgsl).toContain('texel * in.color * in.vertex_color');
     expect(wgsl).toContain('shifted_color * 0.08');

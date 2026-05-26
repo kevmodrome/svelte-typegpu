@@ -376,6 +376,69 @@ describe('TypeGPU Svelte renderer runtime', () => {
     expect(renderer.setCamera).not.toHaveBeenCalled();
   });
 
+  it('honors declarative object drag button filters before capturing a mesh drag', async () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const camera = createElement('perspectiveCamera');
+    const controls = createElement('controls');
+    const pointer = createElement('pointerControls');
+    const mesh = createElement('mesh');
+    const geometry = createElement('boxGeometry');
+    const dragEvents: unknown[] = [];
+    const canvas = new FakeCanvas();
+    const windowTarget = new FakeCanvas();
+    const runtime = createTypeGpuRuntimeForTest(
+      root,
+      canvas as unknown as HTMLCanvasElement,
+      fakeRenderer(),
+      windowTarget as unknown as Window
+    );
+
+    canvas.clientWidth = 100;
+    canvas.clientHeight = 100;
+    setAttribute(camera, 'position', [0, 0, 10]);
+    setAttribute(camera, 'target', [0, 0, 0]);
+    setAttribute(mesh, 'drag', 'rotate');
+    setAttribute(mesh, 'dragButton', 'secondary');
+    addEventListener(mesh, 'dragstart', (event) => dragEvents.push(event));
+    insert(controls, pointer, null);
+    insert(camera, controls, null);
+    insert(mesh, geometry, null);
+    insert(scene, camera, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+
+    runtime.scheduleSync(root, scene, Dirty.All);
+    await Promise.resolve();
+
+    const primaryDown = canvas.dispatch<PointerEvent>('pointerdown', {
+      pointerId: 7,
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+      clientX: 50,
+      clientY: 50,
+      offsetX: 50,
+      offsetY: 50
+    } as Partial<PointerEvent>);
+    const secondaryDown = canvas.dispatch<PointerEvent>('pointerdown', {
+      pointerId: 8,
+      pointerType: 'mouse',
+      button: 2,
+      buttons: 2,
+      clientX: 50,
+      clientY: 50,
+      offsetX: 50,
+      offsetY: 50
+    } as Partial<PointerEvent>);
+
+    expect(primaryDown.preventDefault).not.toHaveBeenCalled();
+    expect(secondaryDown.preventDefault).toHaveBeenCalled();
+    expect(dragEvents).toHaveLength(1);
+    expect(canvas.setPointerCapture).toHaveBeenCalledTimes(1);
+    expect(canvas.setPointerCapture).toHaveBeenCalledWith(8);
+  });
+
   it('dispatches touch drag events without starting touch orbit controls', async () => {
     const root = createFragment();
     const scene = createElement('scene');

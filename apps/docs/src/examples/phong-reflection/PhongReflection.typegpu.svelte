@@ -10,7 +10,7 @@
     target={[0, 1, 0]}
     fov={45}
     near={0.1}
-    far={100}
+    far={1000}
   >
     <controls mode="orbit" minDistance={8} maxDistance={40}>
       <pointerControls
@@ -33,8 +33,8 @@
     hitTest="bounds"
   >
     <phongMaterial
-      color={[1, 0.7, 0, 1]}
-      roughness={0.2}
+      color={[1, 1, 1, 1]}
+      roughness={0.72}
       metalness={0}
     ></phongMaterial>
   </model>
