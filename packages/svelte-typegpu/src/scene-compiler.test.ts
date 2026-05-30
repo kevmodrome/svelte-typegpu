@@ -80,6 +80,55 @@ describe('TypeGPU scene compiler', () => {
     expect(hasDirty(state.dirty, Dirty.DrawBatches)).toBe(true);
   });
 
+  it('compiles inline mesh geometry and material without resource ids', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const mesh = createElement('mesh');
+    const geometry = createElement('boxGeometry');
+    const material = createElement('standardMaterial');
+
+    setAttribute(geometry, 'width', 2);
+    setAttribute(geometry, 'height', 3);
+    setAttribute(geometry, 'depth', 4);
+    setAttribute(material, 'color', [0.25, 0.5, 0.75, 1]);
+    insert(mesh, geometry, null);
+    insert(mesh, material, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+
+    const state = createSceneState(root, createTypeGpuSceneCache(), { dirty: Dirty.All });
+
+    expect(state.drawBatches).toHaveLength(1);
+    expect(state.drawBatches[0]).toMatchObject({
+      geometryKey: 'box:2:3:4',
+      materialKey: 'material:standard'
+    });
+    expect(state.drawBatches[0].instances).toBeInstanceOf(Float32Array);
+    expect(state.liveResourceKeys.geometries.has('box:2:3:4')).toBe(true);
+  });
+
+  it('does not resolve mesh geometry and material from public string ids', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const geometry = createElement('boxGeometry');
+    const material = createElement('standardMaterial');
+    const mesh = createElement('mesh');
+
+    setAttribute(geometry, 'id', 'box');
+    setAttribute(material, 'id', 'paint');
+    setAttribute(mesh, 'geometry', 'box');
+    setAttribute(mesh, 'material', 'paint');
+    insert(scene, geometry, null);
+    insert(scene, material, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+
+    const state = createSceneState(root, createTypeGpuSceneCache(), { dirty: Dirty.All });
+
+    expect(state.drawBatches).toHaveLength(0);
+    expect(state.liveResourceKeys.geometries.size).toBe(0);
+  });
+
   it('indexes declarative drag handlers and drag mode as interaction targets', () => {
     const root = createFragment();
     const scene = createElement('scene');
@@ -338,26 +387,18 @@ describe('TypeGPU scene compiler', () => {
     expect(state.drawBatches.every((batch) => !batch.key.includes('shadow:cast'))).toBe(true);
   });
 
-  it('resolves geometry and material string references through scene resources', () => {
+  it('compiles inline geometry and material texture URLs', () => {
     const root = createFragment();
     const scene = createElement('scene');
-    const reusableGeometry = createElement('boxGeometry');
-    const texture = createElement('texture');
+    const geometry = createElement('boxGeometry');
     const material = createElement('standardMaterial');
     const mesh = createElement('mesh');
 
-    setAttribute(reusableGeometry, 'id', 'crateGeometry');
-    setAttribute(reusableGeometry, 'width', 2);
-    setAttribute(texture, 'id', 'crateTexture');
-    setAttribute(texture, 'src', '/crate.png');
-    setAttribute(material, 'id', 'crateMaterial');
-    setAttribute(material, 'map', 'crateTexture');
-    setAttribute(mesh, 'geometry', 'crateGeometry');
-    setAttribute(mesh, 'material', 'crateMaterial');
+    setAttribute(geometry, 'width', 2);
+    setAttribute(material, 'map', '/crate.png');
 
-    insert(scene, reusableGeometry, null);
-    insert(scene, texture, null);
-    insert(scene, material, null);
+    insert(mesh, geometry, null);
+    insert(mesh, material, null);
     insert(scene, mesh, null);
     insert(root, scene, null);
 
@@ -368,11 +409,7 @@ describe('TypeGPU scene compiler', () => {
       materialKey: expect.stringContaining('material:standard')
     });
     expect(state.liveResourceKeys.geometries.has('box:2:1:1')).toBe(true);
-    expect(
-      [...state.liveResourceKeys.textures].some((key) =>
-        key.startsWith('texture:crateTexture@rev:')
-      )
-    ).toBe(true);
+    expect(state.liveResourceKeys.textures.has('url:/crate.png')).toBe(true);
   });
 
   it('uses alpha blending and disables depth writes for geometry vertex alpha', () => {
@@ -535,7 +572,7 @@ describe('TypeGPU scene compiler', () => {
     expect(Array.from(bufferBatch?.instances.slice(8, 11) ?? [])).toEqual([2, 3, 4]);
   });
 
-  it('re-packs instances when a referenced material uniform changes', () => {
+  it('re-packs instances when an inline material uniform changes', () => {
     const root = createFragment();
     const scene = createElement('scene');
     const material = createElement('standardMaterial');
@@ -543,11 +580,9 @@ describe('TypeGPU scene compiler', () => {
     const geometry = createElement('boxGeometry');
     const cache = createTypeGpuSceneCache();
 
-    setAttribute(material, 'id', 'paint');
     setAttribute(material, 'transparent', true);
-    setAttribute(mesh, 'material', 'paint');
     insert(mesh, geometry, null);
-    insert(scene, material, null);
+    insert(mesh, material, null);
     insert(scene, mesh, null);
     insert(root, scene, null);
 
@@ -571,7 +606,6 @@ describe('TypeGPU scene compiler', () => {
   it('compiles instancedMesh array data into one draw batch', () => {
     const root = createFragment();
     const scene = createElement('scene');
-    const resources = createElement('resources');
     const geometry = createElement('boxGeometry');
     const material = createElement('phongMaterial');
     const instanced = createElement('instancedMesh');
@@ -580,10 +614,6 @@ describe('TypeGPU scene compiler', () => {
       { id: 'b', position: [2, 0, 0] as const, color: [0, 1, 0, 1] as const }
     ];
 
-    setAttribute(geometry, 'id', 'cube');
-    setAttribute(material, 'id', 'mat');
-    setAttribute(instanced, 'geometry', 'cube');
-    setAttribute(instanced, 'material', 'mat');
     setAttribute(instanced, 'position', [1, 0, 0]);
     setAttribute(instanced, 'instances', instances);
     setAttribute(instanced, 'getKey', (item: (typeof instances)[number]) => item.id);
@@ -597,9 +627,8 @@ describe('TypeGPU scene compiler', () => {
       (_item: (typeof instances)[number], index: number) => index + 1
     );
 
-    insert(resources, geometry, null);
-    insert(resources, material, null);
-    insert(scene, resources, null);
+    insert(instanced, geometry, null);
+    insert(instanced, material, null);
     insert(scene, instanced, null);
     insert(root, scene, null);
 

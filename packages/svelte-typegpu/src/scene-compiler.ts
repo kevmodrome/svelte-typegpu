@@ -12,8 +12,6 @@ import {
   collectSceneResources,
   readInlineGeometry,
   readInlineMaterial,
-  resolveGeometryResourceReference,
-  resolveMaterialResourceReference,
   type TypeGpuResourceCollection
 } from './resources';
 import {
@@ -274,12 +272,12 @@ function readMeshDrawItem(
     return { transform, revision: meshRevision };
   }
 
-  const geometry = readMeshGeometry(mesh, resources);
+  const geometry = readMeshGeometry(mesh);
   if (!geometry) {
     return { transform, revision: meshRevision };
   }
 
-  const material = readMeshMaterial(mesh, resources);
+  const material = readMeshMaterial(mesh);
   const effectiveMaterial = materialForGeometry(material.value, geometry.value);
   const itemRevision = combineNodeRevision(
     combineNodeRevision(meshRevision, geometry.node),
@@ -311,31 +309,19 @@ function readMeshDrawItem(
   return { transform, revision: meshRevision };
 }
 
-function readMeshGeometry(
-  mesh: TypeGpuNode,
-  resources: TypeGpuResourceCollection
-): MeshResourceResult<TypeGpuGeometryData> | null {
+function readMeshGeometry(mesh: TypeGpuNode): MeshResourceResult<TypeGpuGeometryData> | null {
   for (let child = mesh.firstChild; child; child = child.nextSibling) {
     const geometry = readInlineGeometry(child);
     if (geometry) return { node: child, value: geometry };
   }
 
-  const referenced = resolveGeometryResourceReference(mesh.attributes.geometry, resources);
-  return referenced ? { node: referenced.node, value: referenced.value } : null;
+  return null;
 }
 
-function readMeshMaterial(
-  mesh: TypeGpuNode,
-  resources: TypeGpuResourceCollection
-): MeshResourceResult<TypeGpuMaterialDescriptor> {
+function readMeshMaterial(mesh: TypeGpuNode): MeshResourceResult<TypeGpuMaterialDescriptor> {
   for (let child = mesh.firstChild; child; child = child.nextSibling) {
-    const material = readInlineMaterial(child, resources);
+    const material = readInlineMaterial(child);
     if (material) return { node: child, value: batchMaterialDescriptor(material) };
-  }
-
-  const referenced = resolveMaterialResourceReference(mesh.attributes.material, resources);
-  if (referenced) {
-    return { node: referenced.node, value: batchMaterialDescriptor(referenced.value) };
   }
 
   return { node: null, value: defaultMaterial() };
@@ -361,12 +347,12 @@ function readInstancedMeshDrawItems(
     return { transform, revision: meshRevision };
   }
 
-  const geometry = readMeshGeometry(instancedMesh, resources);
+  const geometry = readMeshGeometry(instancedMesh);
   if (!geometry) {
     return { transform, revision: meshRevision };
   }
 
-  const material = readMeshMaterial(instancedMesh, resources);
+  const material = readMeshMaterial(instancedMesh);
   const effectiveMaterial = materialForGeometry(material.value, geometry.value);
   const baseRevision = combineNodeRevision(
     combineNodeRevision(meshRevision, geometry.node),
