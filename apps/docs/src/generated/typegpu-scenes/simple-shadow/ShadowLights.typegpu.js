@@ -10,6 +10,8 @@ var root = $.from_tree([['ambientLight'], ' ', ['directionalLight']], 1);
 export default function ShadowLights_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
 
+	$.push($$props, true);
+
 	let lightDirection = $.prop($$props, 'lightDirection', 19, () => [-0.5, -0.7, -1]),
 		shadowMapSize = $.prop($$props, 'shadowMapSize', 3, 2048),
 		shadowMapFiltering = $.prop($$props, 'shadowMapFiltering', 3, true),
@@ -17,6 +19,13 @@ export default function ShadowLights_typegpu($$anchor, $$props) {
 
 	const shadowBias = $.derived(() => shadowMapFiltering() ? 1 : 0.35);
 	const shadowSlopeBias = $.derived(() => shadowMapFiltering() ? 4 : 1.2);
+
+	const lightPosition = $.derived(() => [
+		-lightDirection()[0],
+		-lightDirection()[1],
+		-lightDirection()[2]
+	]);
+
 	const lightIntensity = $.derived(() => displayMode() === 'light depth' ? 0.55 : 1.25);
 	const ambientIntensity = $.derived(() => displayMode() === 'shadow' || displayMode() === 'inverse shadow' ? 0.02 : 0.1);
 	var fragment = root();
@@ -32,7 +41,7 @@ export default function ShadowLights_typegpu($$anchor, $$props) {
 
 	$.template_effect(() => {
 		$.set_attribute(ambientLight, 'intensity', $.get(ambientIntensity));
-		$.set_attribute(directionalLight, 'position', lightDirection());
+		$.set_attribute(directionalLight, 'position', $.get(lightPosition));
 		$.set_attribute(directionalLight, 'intensity', $.get(lightIntensity));
 		$.set_attribute(directionalLight, 'shadowMapSize', shadowMapSize());
 		$.set_attribute(directionalLight, 'shadowBias', $.get(shadowBias));
@@ -40,5 +49,6 @@ export default function ShadowLights_typegpu($$anchor, $$props) {
 	});
 
 	$.append($$anchor, fragment);
+	$.pop();
 	$$pop_renderer();
 }

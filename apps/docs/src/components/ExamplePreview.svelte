@@ -1,6 +1,11 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import renderer, { createTypeGpuRoot, type TypeGpuRoot } from 'svelte-typegpu';
+  import renderer, {
+    createTypeGpuRoot,
+    type TypeGpuCameraSettings,
+    type TypeGpuRoot,
+    type Vector3Tuple
+  } from 'svelte-typegpu';
   import type { ExampleSlug } from '../examples/example-definitions';
   import { sceneComponents } from '../examples/scene-components';
 
@@ -17,6 +22,8 @@
   });
   let simpleShadowControls = $state({
     cameraX: -4.9,
+    cameraPosition: [-4.9, 2, 5] as Vector3Tuple,
+    cameraTarget: [0, 0, 0] as Vector3Tuple,
     lightX: -0.5,
     lightY: -0.7,
     lightZ: -1,
@@ -38,7 +45,12 @@
 
     function sceneProps() {
       if (slug === 'phong-reflection') return { controls: phongControls };
-      if (slug === 'simple-shadow') return { controls: simpleShadowControls };
+      if (slug === 'simple-shadow') {
+        return {
+          controls: simpleShadowControls,
+          onCameraChange: handleSimpleShadowCameraChange
+        };
+      }
       if (slug === 'interactive-orbit-field') return { controls: discoControls };
       return {};
     }
@@ -125,6 +137,24 @@
   ) {
     simpleShadowControls[key] = value;
     rerenderScene();
+  }
+
+  function setSimpleCameraX(value: number) {
+    simpleShadowControls.cameraX = value;
+    simpleShadowControls.cameraPosition = [
+      value,
+      simpleShadowControls.cameraPosition[1],
+      simpleShadowControls.cameraPosition[2]
+    ];
+    rerenderScene();
+  }
+
+  function handleSimpleShadowCameraChange(
+    event: CustomEvent<{ camera: TypeGpuCameraSettings }>
+  ) {
+    simpleShadowControls.cameraPosition = [...event.detail.camera.position];
+    simpleShadowControls.cameraTarget = [...event.detail.camera.target];
+    simpleShadowControls.cameraX = event.detail.camera.position[0];
   }
 
   function setDiscoPattern(value: string) {
@@ -232,7 +262,7 @@
             max="10"
             step="0.01"
             value={simpleShadowControls.cameraX}
-            oninput={(event) => setSimpleValue('cameraX', event.currentTarget.valueAsNumber)}
+            oninput={(event) => setSimpleCameraX(event.currentTarget.valueAsNumber)}
           />
           <output>{simpleShadowControls.cameraX.toFixed(2)}</output>
         </label>
