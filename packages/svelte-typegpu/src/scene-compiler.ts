@@ -8,12 +8,7 @@ import type { TypeGpuLoadedModelMesh } from './glb-loader';
 import { createInteractionIndex } from './interaction-index';
 import { collectLights } from './lights';
 import { createModelCache, type TypeGpuModelCache } from './model-cache';
-import {
-  collectSceneResources,
-  readInlineGeometry,
-  readInlineMaterial,
-  type TypeGpuResourceCollection
-} from './resources';
+import { readInlineGeometry, readInlineMaterial } from './resources';
 import {
   DEFAULT_SAMPLER,
   materialKeyFor,
@@ -105,7 +100,6 @@ export function createSceneState(
   options: TypeGpuSceneStateOptions = {}
 ): TypeGpuSceneState {
   const dirty = options.dirty ?? Dirty.All;
-  const resources = collectSceneResources(root);
   const sceneSettings = readRenderSettings(root);
   const camera = readCameraState(root, sceneSettings.activeCamera);
   const recomputeLights = options.reuseLights === true ? false : hasDirty(dirty, Dirty.Lights);
@@ -128,7 +122,7 @@ export function createSceneState(
   }
 
   const drawBatches = recomputeDrawBatches
-    ? cache.drawBatchCache.read((drawItems = collectMeshDrawItems(root, resources, cache.modelCache)))
+    ? cache.drawBatchCache.read((drawItems = collectMeshDrawItems(root, cache.modelCache)))
     : cache.cleanDrawBatches;
 
   if (recomputeDrawBatches) {
@@ -137,9 +131,7 @@ export function createSceneState(
 
   const interaction = recomputeInteraction
     ? createInteractionIndex(
-        (drawItems ?? collectMeshDrawItems(root, resources, cache.modelCache)).flatMap(
-          interactionTargetFor
-        )
+        (drawItems ?? collectMeshDrawItems(root, cache.modelCache)).flatMap(interactionTargetFor)
       )
     : cache.cleanInteraction;
 
@@ -171,14 +163,12 @@ export function createSceneState(
 
 function collectMeshDrawItems(
   root: TypeGpuNode,
-  resources: TypeGpuResourceCollection,
   modelCache: TypeGpuModelCache
 ): TypeGpuMeshDrawItem[] {
   const items: TypeGpuMeshDrawItem[] = [];
   collectDrawItemsFromNode(
     root,
     { transform: IDENTITY_TRANSFORM, revision: root.treeRevision },
-    resources,
     items,
     modelCache
   );
@@ -235,7 +225,6 @@ function readShaderPass(node: TypeGpuNode, sortKey: number): TypeGpuShaderPass |
 function collectDrawItemsFromNode(
   node: TypeGpuNode,
   context: DrawItemWalkContext,
-  resources: TypeGpuResourceCollection,
   items: TypeGpuMeshDrawItem[],
   modelCache: TypeGpuModelCache
 ): void {
@@ -247,22 +236,21 @@ function collectDrawItemsFromNode(
       revision: combineNodeRevision(context.revision, node)
     };
   } else if (node.name === 'mesh') {
-    childContext = readMeshDrawItem(node, context, resources, items);
+    childContext = readMeshDrawItem(node, context, items);
   } else if (node.name === 'instancedMesh') {
-    childContext = readInstancedMeshDrawItems(node, context, resources, items);
+    childContext = readInstancedMeshDrawItems(node, context, items);
   } else if (node.name === 'model') {
-    childContext = readModelDrawItems(node, context, resources, items, modelCache);
+    childContext = readModelDrawItems(node, context, items, modelCache);
   }
 
   for (let child = node.firstChild; child; child = child.nextSibling) {
-    collectDrawItemsFromNode(child, childContext, resources, items, modelCache);
+    collectDrawItemsFromNode(child, childContext, items, modelCache);
   }
 }
 
 function readMeshDrawItem(
   mesh: TypeGpuNode,
   context: DrawItemWalkContext,
-  resources: TypeGpuResourceCollection,
   items: TypeGpuMeshDrawItem[]
 ): DrawItemWalkContext {
   const transform = composeTransforms(context.transform, readLocalTransform(mesh));
@@ -330,7 +318,6 @@ function readMeshMaterial(mesh: TypeGpuNode): MeshResourceResult<TypeGpuMaterial
 function readInstancedMeshDrawItems(
   instancedMesh: TypeGpuNode,
   context: DrawItemWalkContext,
-  resources: TypeGpuResourceCollection,
   items: TypeGpuMeshDrawItem[]
 ): DrawItemWalkContext {
   const transform = composeTransforms(context.transform, readLocalTransform(instancedMesh));
@@ -407,7 +394,6 @@ function readInstancedMeshDrawItems(
 function readModelDrawItems(
   modelNode: TypeGpuNode,
   context: DrawItemWalkContext,
-  resources: TypeGpuResourceCollection,
   items: TypeGpuMeshDrawItem[],
   modelCache: TypeGpuModelCache
 ): DrawItemWalkContext {
@@ -423,7 +409,7 @@ function readModelDrawItems(
   }
 
   entry.model.meshes.forEach((mesh, index) => {
-    const material = readModelMaterial(modelNode, mesh, resources);
+    const material = readModelMaterial(modelNode, mesh);
     const transform = composeTransforms(modelTransform, mesh.transform);
     const geometry = mesh.geometry;
     const effectiveMaterial = materialForGeometry(material.value, geometry);
@@ -459,11 +445,10 @@ function readModelDrawItems(
 
 function readModelMaterial(
   modelNode: TypeGpuNode,
-  mesh: TypeGpuLoadedModelMesh,
-  resources: TypeGpuResourceCollection
+  mesh: TypeGpuLoadedModelMesh
 ): MeshResourceResult<TypeGpuMaterialDescriptor> {
   for (let child = modelNode.firstChild; child; child = child.nextSibling) {
-    const override = readInlineMaterial(child, resources);
+    const override = readInlineMaterial(child);
     if (override) {
       return {
         node: child,

@@ -1,6 +1,5 @@
 import { colorTuple, numberArg } from './attributes';
 import type { TypeGpuNode } from './core';
-import type { TypeGpuResourceCollection } from './resources';
 import type {
   RgbaTuple,
   TypeGpuMaterialDescriptor,
@@ -20,13 +19,12 @@ export const DEFAULT_SAMPLER: TypeGpuSamplerDescriptor = {
 };
 
 export function readInlineMaterial(
-  node: TypeGpuNode,
-  resources?: TypeGpuResourceCollection
+  node: TypeGpuNode
 ): TypeGpuMaterialDescriptor | null {
   const kind = materialKindForNode(node);
   if (!kind) return null;
 
-  return createMaterialDescriptor(kind, node.attributes, resources);
+  return createMaterialDescriptor(kind, node.attributes);
 }
 
 export interface TypeGpuMaterialDescriptorInput {
@@ -47,14 +45,13 @@ export interface TypeGpuMaterialDescriptorInput {
 
 export function createMaterialDescriptor(
   kind: TypeGpuMaterialKind,
-  input: TypeGpuMaterialDescriptorInput = {},
-  resources?: TypeGpuResourceCollection
+  input: TypeGpuMaterialDescriptorInput = {}
 ): TypeGpuMaterialDescriptor {
   const textureInput = input.map ?? input.texture;
-  const texture = textureSourceFor(textureInput, resources);
-  const sampler = samplerDescriptorFor(input.sampler, resources);
-  const textureKey = textureKeyFor(textureInput, resources);
-  const samplerKey = samplerKeyFor(input.sampler, resources);
+  const texture = textureSourceFor(textureInput);
+  const sampler = samplerDescriptorFor(input.sampler);
+  const textureKey = textureKeyFor(textureInput);
+  const samplerKey = samplerKeyFor(input.sampler);
   const color = colorTuple(input.color);
   const opacity = numberArg(input.opacity, color[3]);
   const transparent = Boolean(input.transparent) || opacity < 1 || color[3] < 1;
@@ -114,8 +111,8 @@ export function materialKeyFor(input: TypeGpuMaterialDescriptor): string {
   ].join('|');
 }
 
-export function textureKeyFor(value: unknown, resources?: TypeGpuResourceCollection): string {
-  const source = textureSourceFor(value, resources);
+export function textureKeyFor(value: unknown): string {
+  const source = textureSourceFor(value);
   if (!source) return 'solid:white';
 
   if (source.key) return source.key;
@@ -126,22 +123,12 @@ export function textureKeyFor(value: unknown, resources?: TypeGpuResourceCollect
   return 'solid:white';
 }
 
-export function samplerKeyFor(value: unknown, resources?: TypeGpuResourceCollection): string {
-  return samplerDescriptorFor(value, resources).key;
+export function samplerKeyFor(value: unknown): string {
+  return samplerDescriptorFor(value).key;
 }
 
-export function textureSourceFor(
-  value: unknown,
-  resources?: TypeGpuResourceCollection
-): TypeGpuTextureSource | null {
+export function textureSourceFor(value: unknown): TypeGpuTextureSource | null {
   if (typeof value === 'string' && value.length > 0) {
-    const referenced = resources?.textures.get(value);
-    if (referenced) return referenced;
-
-    if (value.startsWith('texture:')) {
-      return { kind: 'url', key: value, src: value.slice('texture:'.length) };
-    }
-
     return { kind: 'url', key: `url:${value}`, src: value };
   }
 
@@ -191,12 +178,9 @@ export function textureSourceFor(
   return null;
 }
 
-export function samplerDescriptorFor(
-  value: unknown,
-  resources?: TypeGpuResourceCollection
-): TypeGpuSamplerDescriptor {
+export function samplerDescriptorFor(value: unknown): TypeGpuSamplerDescriptor {
   if (typeof value === 'string' && value.length > 0) {
-    return resources?.samplers.get(value) ?? { ...DEFAULT_SAMPLER, key: samplerKey(value) };
+    return { ...DEFAULT_SAMPLER, key: samplerKey(value) };
   }
 
   if (!value || typeof value !== 'object') return DEFAULT_SAMPLER;

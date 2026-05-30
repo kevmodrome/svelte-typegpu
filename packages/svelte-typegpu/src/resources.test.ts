@@ -1,12 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createElement, createFragment, insert, setAttribute } from './core';
-import {
-  collectSceneResources,
-  readInlineGeometry,
-  readInlineMaterial,
-  resolveGeometryReference,
-  resolveMaterialReference
-} from './resources';
+import { createElement, setAttribute } from './core';
+import { readInlineGeometry, readInlineMaterial } from './resources';
 import { MESH_VERTEX_FLOATS, MESH_VERTEX_LAYOUT_KEY } from './instance-data';
 import type { TypeGpuStandardMaterialDescriptor } from './types';
 
@@ -93,29 +87,6 @@ describe('TypeGPU resource descriptors', () => {
       node,
       'vertices',
       new Float32Array([
-        -1, 0, -1, 0, 1, 0, 0, 0,
-        1, 0, -1, 0, 1, 0, 1, 0,
-        0, 0, 1, 0, 1, 0, 0.5, 1
-      ])
-    );
-    setAttribute(node, 'bounds', { min: [-1, 0, -1], max: [1, 0, 1] });
-
-    expect(readInlineGeometry(node)).toBeNull();
-  });
-
-  it('rejects ambiguous legacy 8-float buffer geometry without a canonical layout declaration', () => {
-    const node = createElement('bufferGeometry');
-    setAttribute(node, 'key', 'ambiguous-legacy');
-    setAttribute(
-      node,
-      'vertices',
-      new Float32Array([
-        -1, 0, -1, 0, 1, 0, 0, 0,
-        1, 0, -1, 0, 1, 0, 1, 0,
-        0, 0, 1, 0, 1, 0, 0.5, 1,
-        -1, 0, -1, 0, 1, 0, 0, 0,
-        1, 0, -1, 0, 1, 0, 1, 0,
-        0, 0, 1, 0, 1, 0, 0.5, 1,
         -1, 0, -1, 0, 1, 0, 0, 0,
         1, 0, -1, 0, 1, 0, 1, 0,
         0, 0, 1, 0, 1, 0, 0.5, 1
@@ -268,102 +239,36 @@ describe('TypeGPU resource descriptors', () => {
     expect(firstDescriptor?.bindGroupKey).not.toBe(secondDescriptor?.bindGroupKey);
   });
 
-  it('collects reusable scene resources and resolves references', () => {
-    const root = createFragment();
-    const scene = createElement('scene');
-    const geometry = createElement('boxGeometry');
-    const texture = createElement('texture');
-    const sampler = createElement('sampler');
-    const material = createElement('phongMaterial');
+  it('ignores public id when deriving procedural geometry keys', () => {
+    const first = createElement('boxGeometry');
+    const second = createElement('boxGeometry');
 
-    setAttribute(geometry, 'id', 'cube');
-    setAttribute(texture, 'id', 'checker');
-    setAttribute(texture, 'src', '/textures/checker.png');
-    setAttribute(sampler, 'id', 'repeatLinear');
-    setAttribute(sampler, 'addressModeU', 'repeat');
-    setAttribute(sampler, 'addressModeV', 'repeat');
-    setAttribute(sampler, 'minFilter', 'linear');
-    setAttribute(sampler, 'magFilter', 'linear');
-    setAttribute(material, 'id', 'crate');
-    setAttribute(material, 'map', 'checker');
-    setAttribute(material, 'sampler', 'repeatLinear');
+    setAttribute(first, 'id', 'first-name');
+    setAttribute(second, 'id', 'second-name');
+    setAttribute(first, 'width', 2);
+    setAttribute(second, 'width', 2);
 
-    insert(scene, geometry, null);
-    insert(scene, texture, null);
-    insert(scene, sampler, null);
-    insert(scene, material, null);
-    insert(root, scene, null);
-
-    const resources = collectSceneResources(root);
-
-    expect(resources.geometries.get('cube')?.key).toBe('box:1:1:1');
-    expect(resources.textures.get('checker')).toMatchObject({
-      kind: 'url',
-      key: expect.stringMatching(/^texture:checker@rev:\d+$/),
-      src: '/textures/checker.png'
-    });
-    expect(resources.samplers.get('repeatLinear')?.key).toMatch(/^sampler:repeatLinear@rev:\d+$/);
-    expect(resources.materials.get('crate')).toMatchObject({
-      kind: 'phong',
-      textureKey: expect.stringMatching(/^texture:checker@rev:\d+$/),
-      samplerKey: expect.stringMatching(/^sampler:repeatLinear@rev:\d+$/)
-    });
-
-    expect(resolveGeometryReference('cube', resources)?.key).toBe('box:1:1:1');
-
-    const resolvedMaterial = resolveMaterialReference('crate', resources);
-    expect(resolvedMaterial?.textureKey).toMatch(/^texture:checker@rev:\d+$/);
-    expect(resources.liveResourceKeys.geometries.has('box:1:1:1')).toBe(true);
-    expect(resources.liveResourceKeys.materials.has(resolvedMaterial!.key!)).toBe(true);
-    expect([...resources.liveResourceKeys.textures].some((key) => key.startsWith('texture:checker@rev:'))).toBe(true);
-    expect([...resources.liveResourceKeys.samplers].some((key) => key.startsWith('sampler:repeatLinear@rev:'))).toBe(true);
+    expect(readInlineGeometry(first)?.key).toBe('box:2:1:1');
+    expect(readInlineGeometry(second)?.key).toBe('box:2:1:1');
   });
 
-  it('versions mutable reusable texture and buffer geometry identities', () => {
-    const root = createFragment();
-    const scene = createElement('scene');
-    const texture = createElement('texture');
-    const geometry = createElement('bufferGeometry');
-    const bounds = { min: [0, 0, 0], max: [1, 1, 1] };
+  it('reads buffer geometry without a public layoutKey', () => {
+    const vertices = new Float32Array([
+      -1, 0, -1, 0, 1, 0, 0, 0, 1, 1, 1, 1,
+      1, 0, -1, 0, 1, 0, 1, 0, 1, 1, 1, 1,
+      0, 0, 1, 0, 1, 0, 0.5, 1, 1, 1, 1, 1
+    ]);
+    const node = createElement('bufferGeometry');
 
-    setAttribute(texture, 'id', 'albedo');
-    setAttribute(texture, 'src', '/textures/a.png');
-    setAttribute(geometry, 'id', 'triangle');
-    setAttribute(geometry, 'key', 'triangle-buffer');
-    setAttribute(geometry, 'layoutKey', MESH_VERTEX_LAYOUT_KEY);
-    setAttribute(geometry, 'bounds', bounds);
-    setAttribute(
-      geometry,
-      'vertices',
-      new Float32Array([
-        0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1,
-        1, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1,
-        0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1
-      ])
-    );
-    insert(scene, texture, null);
-    insert(scene, geometry, null);
-    insert(root, scene, null);
+    setAttribute(node, 'key', 'terrain:v1');
+    setAttribute(node, 'vertices', vertices);
+    setAttribute(node, 'bounds', { min: [-1, 0, -1], max: [1, 0, 1] });
 
-    const first = collectSceneResources(root);
-    setAttribute(texture, 'src', '/textures/b.png');
-    setAttribute(
-      geometry,
-      'vertices',
-      new Float32Array([
-        0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 1,
-        2, 0, 0, 0, 1, 0, 1, 0, 1, 1, 1, 1,
-        0, 2, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1
-      ])
-    );
-    const second = collectSceneResources(root);
-
-    expect(second.textures.get('albedo')?.key).not.toBe(first.textures.get('albedo')?.key);
-    expect(second.textures.get('albedo')).toMatchObject({ src: '/textures/b.png' });
-    expect(second.geometries.get('triangle')?.key).not.toBe(
-      first.geometries.get('triangle')?.key
-    );
-    expect(second.geometries.get('triangle')?.key).toContain('triangle-buffer');
+    expect(readInlineGeometry(node)).toMatchObject({
+      key: 'terrain:v1@rev:3',
+      kind: 'buffer',
+      vertexCount: 3
+    });
   });
 });
 
