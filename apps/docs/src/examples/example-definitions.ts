@@ -7,7 +7,7 @@ export const exampleDefinitions = [
     description:
       'The official TypeGPU two-boxes scene expressed as vertex-colored geometry, orbit controls, and object drag.',
     typeGpuSourceUrl:
-      'https://github.com/software-mansion/TypeGPU/tree/main/apps/typegpu-docs/src/examples/rendering/two-boxes',
+      'https://docs.swmansion.com/TypeGPU/examples/#example=rendering--two-boxes',
     notes: 'Adapted from the official TypeGPU Two Boxes example for the svelte-typegpu custom renderer.',
     exportName: 'TwoBoxes',
     sourceUrl: new URL('./two-boxes/TwoBoxes.typegpu.svelte', import.meta.url),
@@ -27,7 +27,7 @@ export const exampleDefinitions = [
     description:
       'The official Phong teapot model loaded through the declarative model primitive and renderer lights.',
     typeGpuSourceUrl:
-      'https://github.com/software-mansion/TypeGPU/tree/main/apps/typegpu-docs/src/examples/rendering/phong-reflection',
+      'https://docs.swmansion.com/TypeGPU/examples/#example=rendering--phong-reflection',
     notes:
       'Adapted from the official TypeGPU Phong Reflection Model example using declarative OBJ loading and renderer-supported Phong material controls.',
     exportName: 'PhongReflection',
@@ -51,7 +51,7 @@ export const exampleDefinitions = [
     description:
       'The official simple shadow composition rebuilt with declarative shadow-casting lights and receivers.',
     typeGpuSourceUrl:
-      'https://github.com/software-mansion/TypeGPU/tree/main/apps/typegpu-docs/src/examples/rendering/simple-shadow',
+      'https://docs.swmansion.com/TypeGPU/examples/#example=rendering--simple-shadow',
     notes:
       'Adapted from the official TypeGPU Simple shadow example with the renderer directional shadow-map primitive.',
     exportName: 'SimpleShadow',
@@ -75,7 +75,7 @@ export const exampleDefinitions = [
     description:
       'The official TypeGPU Disco fullscreen fragment shader expressed as a declarative shader pass.',
     typeGpuSourceUrl:
-      'https://github.com/software-mansion/TypeGPU/tree/main/apps/typegpu-docs/src/examples/rendering/disco',
+      'https://docs.swmansion.com/TypeGPU/examples/#example=rendering--disco',
     notes:
       'Adapted from the motion-first official TypeGPU Disco example using a renderer shaderPass with time and resolution uniforms.',
     exportName: 'InteractiveOrbitField',

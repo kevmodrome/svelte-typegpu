@@ -77,7 +77,7 @@
         <p class="eyebrow">{selected.category}</p>
         <h1>{selected.title}</h1>
       </div>
-      <a class="source-link" href={selected.typeGpuSourceUrl}>Original TypeGPU source</a>
+      <a class="source-link" href={selected.typeGpuSourceUrl}>Original TypeGPU example</a>
     </header>
     <p class="example-description">{selected.description}</p>
     <div class="tag-row" aria-label="Example tags">

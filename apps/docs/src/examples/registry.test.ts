@@ -10,6 +10,15 @@ import {
 import { exampleDefinitions } from './example-definitions';
 import { examples, getExampleBySlug } from './registry';
 
+const officialExampleUrls = {
+  'two-boxes': 'https://docs.swmansion.com/TypeGPU/examples/#example=rendering--two-boxes',
+  'phong-reflection':
+    'https://docs.swmansion.com/TypeGPU/examples/#example=rendering--phong-reflection',
+  'simple-shadow': 'https://docs.swmansion.com/TypeGPU/examples/#example=rendering--simple-shadow',
+  'interactive-orbit-field':
+    'https://docs.swmansion.com/TypeGPU/examples/#example=rendering--disco'
+} as const;
+
 describe('docs example registry', () => {
   it('contains the curated TypeGPU adaptations in display order', () => {
     expect(examples.map((example) => example.slug)).toEqual([
@@ -26,9 +35,7 @@ describe('docs example registry', () => {
       expect(example.description).toMatch(/\S/);
       expect(example.category).toMatch(/\S/);
       expect(example.tags.length).toBeGreaterThan(0);
-      expect(example.typeGpuSourceUrl).toMatch(
-        /^https:\/\/github\.com\/software-mansion\/TypeGPU/
-      );
+      expect(example.typeGpuSourceUrl).toBe(officialExampleUrls[example.slug]);
       expect(example.notes).toMatch(/adapted/i);
       expect(example.code).toContain('<scene');
       expect(example.sourceFiles.length).toBe(example.sourceStats.svelteFileCount);
