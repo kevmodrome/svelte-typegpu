@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { createViewProjectionMatrix } from './camera-math';
 import {
   BOX_INSTANCE_FLOATS,
-  BOX_SPIN_OFFSET_OFFSET,
-  BOX_SPIN_SPEED_OFFSET,
   BOX_VERTEX_FLOATS,
   createBoxVertexData
 } from './box-data';
@@ -30,8 +28,6 @@ describe('TypeGPU box data', () => {
 
   it('aliases the packed mesh instance fields used by box batches', () => {
     expect(BOX_INSTANCE_FLOATS).toBe(24);
-    expect(BOX_SPIN_SPEED_OFFSET).toBe(11);
-    expect(BOX_SPIN_OFFSET_OFFSET).toBe(12);
   });
 
   it('creates a stable view projection matrix for the GPU uniform buffer', () => {

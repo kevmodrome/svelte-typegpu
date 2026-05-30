@@ -12,10 +12,10 @@ export const typegpuMeshVertexSchema = d.unstruct({
 
 export const typegpuMeshInstanceSchema = d.unstruct({
   position: d.location(4, d.float32x3),
-  phase: d.location(5, d.float32),
+  padding0: d.location(5, d.float32),
   color: d.location(6, d.float32x4),
   shape: d.location(7, d.float32x4),
-  spinOffset: d.location(8, d.float32),
+  padding1: d.location(8, d.float32),
   worldRotation: d.location(9, d.float32x3),
   material: d.location(10, d.float32x4),
   materialExtra: d.location(11, d.float32x4)
@@ -32,10 +32,10 @@ export const typegpuSceneUniformSchema = d
   .struct({
     view_projection: d.mat4x4f,
     time: d.f32,
-    scale: d.f32,
-    animation_speed: d.f32,
-    animation_offset: d.f32,
-    color_transform: d.vec4f
+    padding0: d.f32,
+    padding1: d.f32,
+    padding2: d.f32,
+    padding3: d.vec4f
   })
   .$name('SceneUniforms');
 

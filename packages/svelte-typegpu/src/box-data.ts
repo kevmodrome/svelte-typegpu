@@ -1,15 +1,8 @@
-import {
-  MESH_INSTANCE_FLOATS,
-  MESH_SPIN_OFFSET_OFFSET,
-  MESH_SPIN_SPEED_OFFSET,
-  MESH_VERTEX_FLOATS
-} from './instance-data';
+import { MESH_INSTANCE_FLOATS, MESH_VERTEX_FLOATS } from './instance-data';
 import type { TypeGpuGeometryData } from './types';
 
 export const BOX_VERTEX_FLOATS = MESH_VERTEX_FLOATS;
 export const BOX_INSTANCE_FLOATS = MESH_INSTANCE_FLOATS;
-export const BOX_SPIN_SPEED_OFFSET = MESH_SPIN_SPEED_OFFSET;
-export const BOX_SPIN_OFFSET_OFFSET = MESH_SPIN_OFFSET_OFFSET;
 export const BOX_VERTEX_COUNT = 36;
 
 const BOX_FACES: Array<{

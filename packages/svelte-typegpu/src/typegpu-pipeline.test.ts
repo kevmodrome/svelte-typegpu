@@ -28,8 +28,8 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     expect(wgsl).toContain('in.normal');
     expect(wgsl).toContain('in.material');
     expect(wgsl).toContain('in.material_extra');
-    expect(wgsl).toContain('color_transform');
-    expect(wgsl).toContain('rotate_hue');
+    expect(wgsl).not.toContain('color_transform');
+    expect(wgsl).not.toContain('rotate_hue');
 
     const requiredLightingShaderSources = [
       'light_count',
@@ -57,7 +57,7 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     expect(wgsl).not.toContain('var shadow =');
     expect(wgsl).toContain('in.uv');
     expect(wgsl).toContain('texel * in.color * in.vertex_color');
-    expect(wgsl).toContain('shifted_color * 0.08');
+    expect(wgsl).toContain('base_color * 0.08');
     expect(wgsl).toContain('texel.a * in.color.a * in.vertex_color.a * in.material.z');
     expect(wgsl).toContain('specular_exponent');
   });
@@ -69,8 +69,8 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     expect(wgsl).toContain('@group(1)');
     expect(wgsl).toContain('var<uniform> shadow');
     expect(wgsl).toContain('view_projection');
-    expect(wgsl).toContain('@group(0)');
-    expect(wgsl).toContain('var<uniform> scene');
+    expect(wgsl).not.toContain('@group(0)');
+    expect(wgsl).not.toContain('var<uniform> scene');
     expect(wgsl).not.toContain('@group(3)');
     expect(wgsl).not.toContain('texture_depth_2d');
     expect(wgsl).not.toContain('sampler_comparison');

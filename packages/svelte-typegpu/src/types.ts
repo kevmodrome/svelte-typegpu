@@ -282,8 +282,6 @@ export interface TypeGpuMeshDrawItem {
   transform: TypeGpuTransform;
   bounds: TypeGpuBounds;
   color: RgbaTuple;
-  phase: number;
-  spinSpeed: number;
   renderOrder: number;
   hitTest: 'none' | 'bounds' | 'mesh';
   pointerEvents: 'auto' | 'none';
@@ -422,9 +420,6 @@ export interface TypeGpuSceneState {
   cameraControllerNode: TypeGpuNode | null;
   cameraController: TypeGpuCameraController | null;
   renderSettings: TypeGpuRenderSettings;
-  scale: number;
-  animationSpeed: number;
-  colorShift: number;
   lights: TypeGpuLight[];
   lightsChanged: boolean;
   drawBatches: TypeGpuDrawBatch[];

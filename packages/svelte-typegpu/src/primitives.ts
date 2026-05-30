@@ -31,7 +31,6 @@ const customDescriptors = new Map<string, PrimitiveDescriptor>();
 
 const transformAttributes = new Set(['position', 'rotation', 'quaternion', 'scale', 'matrix']);
 const sceneAttributes = new Set(['clearColor', 'background', 'activeCamera']);
-const sceneUniformAttributes = new Set(['scale', 'animationSpeed', 'colorShift']);
 const cameraAttributes = new Set([
   'id',
   'active',
@@ -120,7 +119,6 @@ const cameraBridgeAttributes = new Map<string, Set<string>>([
   ]
 ]);
 const modelGeometryAttributes = new Set(['src', 'data']);
-const instanceDataAttributes = new Set(['phase', 'spinSpeed', 'color']);
 const pointerEvents = new Set([
   'click',
   'pointermove',
@@ -159,7 +157,6 @@ export function dirtyForAttribute(
   if (name === 'scene') {
     if (attribute === 'activeCamera') return Dirty.Camera;
     if (sceneAttributes.has(attribute)) return Dirty.RenderSettings;
-    if (sceneUniformAttributes.has(attribute)) return Dirty.RenderSettings;
     return Dirty.None;
   }
 
@@ -246,7 +243,6 @@ export function dirtyForAttribute(
     }
     if (attribute === 'castShadow') return Dirty.DrawBatches;
     if (attribute === 'receiveShadow') return Dirty.InstanceData;
-    if (instanceDataAttributes.has(attribute)) return mergeDirty(Dirty.InstanceData, Dirty.Interaction);
     if (
       attribute === 'pointerEvents' ||
       attribute === 'hitTest' ||

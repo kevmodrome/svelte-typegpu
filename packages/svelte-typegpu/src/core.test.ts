@@ -50,8 +50,6 @@ describe('TypeGPU renderer core', () => {
     setAttribute(pose, 'target', [0, 0, 0]);
     setAttribute(lens, 'fov', 50);
     setAttribute(first, 'position', [1, 2, 3]);
-    setAttribute(first, 'phase', 0.25);
-    setAttribute(first, 'spinSpeed', 1.4);
     setAttribute(firstGeometry, 'width', 20);
     setAttribute(firstGeometry, 'height', 5);
     setAttribute(firstGeometry, 'depth', 10);
@@ -59,10 +57,8 @@ describe('TypeGPU renderer core', () => {
     setAttribute(firstMaterial, 'roughness', 0.7);
     setAttribute(firstMaterial, 'metalness', 0.2);
     setAttribute(second, 'position', [-1, -2, -3]);
-    setAttribute(second, 'phase', 0.5);
     setAttribute(secondMaterial, 'color', [0.4, 0.5, 0.6, 1]);
     setAttribute(sphere, 'position', [7, 8, 9]);
-    setAttribute(sphere, 'phase', 0.75);
     setAttribute(sphereMaterial, 'color', [0.7, 0.8, 0.9, 1]);
 
     insert(camera, pose, null);
@@ -97,13 +93,13 @@ describe('TypeGPU renderer core', () => {
     expect(largeBoxBatch.geometry.key).toBe('box:20:5:10');
     expect(largeBoxBatch.instanceCount).toBe(1);
     expect(largeBoxBatch.instanceIds).toEqual([first.uid]);
-    expect(Array.from(largeBoxBatch.instances.slice(0, 4))).toEqual([1, 2, 3, 0.25]);
+    expect(Array.from(largeBoxBatch.instances.slice(0, 4))).toEqual([1, 2, 3, 0]);
     expect(largeBoxBatch.instances[4]).toBeCloseTo(0.1);
     expect(largeBoxBatch.instances[5]).toBeCloseTo(0.2);
     expect(largeBoxBatch.instances[6]).toBeCloseTo(0.3);
     expect(largeBoxBatch.instances[7]).toBe(1);
     expect(Array.from(largeBoxBatch.instances.slice(8, 11))).toEqual([1, 1, 1]);
-    expect(largeBoxBatch.instances[11]).toBeCloseTo(1.4);
+    expect(largeBoxBatch.instances[11]).toBe(0);
     expect(largeBoxBatch.instances[12]).toBe(0);
     expect(Array.from(largeBoxBatch.instances.slice(13, 16))).toEqual([0, 0, 0]);
     expect(largeBoxBatch.instances[16]).toBeCloseTo(0.7);
@@ -113,7 +109,7 @@ describe('TypeGPU renderer core', () => {
     expect(boxBatch.geometry.key).toBe('box:1:1:1');
     expect(boxBatch.instanceCount).toBe(1);
     expect(boxBatch.instanceIds).toEqual([second.uid]);
-    expect(Array.from(boxBatch.instances.slice(0, 4))).toEqual([-1, -2, -3, 0.5]);
+    expect(Array.from(boxBatch.instances.slice(0, 4))).toEqual([-1, -2, -3, 0]);
     expect(boxBatch.instances[4]).toBeCloseTo(0.4);
     expect(boxBatch.instances[5]).toBeCloseTo(0.5);
     expect(boxBatch.instances[6]).toBeCloseTo(0.6);
@@ -123,7 +119,7 @@ describe('TypeGPU renderer core', () => {
     expect(sphereBatch.geometry.key).toBe('sphere:0.5:16:8');
     expect(sphereBatch.instanceCount).toBe(1);
     expect(sphereBatch.instanceIds).toEqual([sphere.uid]);
-    expect(Array.from(sphereBatch.instances.slice(0, 4))).toEqual([7, 8, 9, 0.75]);
+    expect(Array.from(sphereBatch.instances.slice(0, 4))).toEqual([7, 8, 9, 0]);
     expect(sphereBatch.instances[4]).toBeCloseTo(0.7);
     expect(sphereBatch.instances[5]).toBeCloseTo(0.8);
     expect(sphereBatch.instances[6]).toBeCloseTo(0.9);
@@ -817,7 +813,7 @@ describe('TypeGPU renderer core', () => {
     expect(secondBoxBatch.dirtyRanges).toEqual([]);
   });
 
-  it('keeps global scene settings out of mesh instance data', () => {
+  it('ignores removed global scene animation settings', () => {
     const cache = createTypeGpuSceneCache();
     const root = createFragment();
     const scene = createElement('scene');
@@ -843,9 +839,9 @@ describe('TypeGPU renderer core', () => {
     const secondState = createSceneState(root, cache);
     const secondBoxBatch = drawBatch(secondState, 'mesh:box:standard:solid:white');
 
-    expect(secondState.scale).toBe(1.5);
-    expect(secondState.animationSpeed).toBe(0.35);
-    expect(secondState.colorShift).toBe(47);
+    expect('scale' in secondState).toBe(false);
+    expect('animationSpeed' in secondState).toBe(false);
+    expect('colorShift' in secondState).toBe(false);
     expect(secondBoxBatch.instances).toBe(firstBoxBatch.instances);
     expect(secondBoxBatch.instancesChanged).toBe(false);
     expect(secondBoxBatch.dirtyRanges).toEqual([]);
@@ -874,9 +870,9 @@ describe('TypeGPU renderer core', () => {
     const secondState = createSceneState(root, cache, { reuseDrawBatches: true });
 
     expect(readDrawBatches).not.toHaveBeenCalled();
-    expect(secondState.scale).toBe(1.5);
-    expect(secondState.animationSpeed).toBe(0.35);
-    expect(secondState.colorShift).toBe(47);
+    expect('scale' in secondState).toBe(false);
+    expect('animationSpeed' in secondState).toBe(false);
+    expect('colorShift' in secondState).toBe(false);
     expect(secondState.drawBatches).toHaveLength(firstState.drawBatches.length);
     expect(secondState.drawBatches[0].instances).toBe(firstState.drawBatches[0].instances);
     expect(secondState.drawBatches[0].instancesChanged).toBe(false);
@@ -1202,7 +1198,7 @@ describe('TypeGPU renderer core', () => {
 
     setAttribute(scene, 'scale', 1.5);
 
-    expect(scheduleSync).toHaveBeenLastCalledWith(root, scene, Dirty.RenderSettings);
+    expect(scheduleSync).not.toHaveBeenCalled();
   });
 
   it('passes updated light nodes to runtime sync scheduling', () => {

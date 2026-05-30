@@ -35,26 +35,6 @@ const rotateZ = tgpu
   }`
   .$name('rotateZ');
 
-const rotateHue = tgpu
-  .fn([d.vec3f, d.f32], d.vec3f)/* wgsl */ `(color, angle) {
-    let c = cos(angle);
-    let s = sin(angle);
-    let shifted = vec3(
-      color.r * (0.213 + c * 0.787 - s * 0.213) +
-        color.g * (0.715 - c * 0.715 - s * 0.715) +
-        color.b * (0.072 - c * 0.072 + s * 0.928),
-      color.r * (0.213 - c * 0.213 + s * 0.143) +
-        color.g * (0.715 + c * 0.285 + s * 0.140) +
-        color.b * (0.072 - c * 0.072 - s * 0.283),
-      color.r * (0.213 - c * 0.213 - s * 0.787) +
-        color.g * (0.715 - c * 0.715 + s * 0.715) +
-        color.b * (0.072 + c * 0.928 + s * 0.072)
-    );
-
-    return clamp(shifted, vec3(0.0), vec3(1.0));
-  }`
-  .$name('rotate_hue');
-
 export const meshVertexMain = tgpu
   .vertexFn({
     in: {
@@ -63,10 +43,10 @@ export const meshVertexMain = tgpu
       uv: d.vec2f,
       vertex_color: d.vec4f,
       instance_position: d.vec3f,
-      phase: d.f32,
+      padding0: d.f32,
       color: d.vec4f,
       shape: d.vec4f,
-      spin_offset: d.f32,
+      padding1: d.f32,
       world_rotation: d.vec3f,
       material: d.vec4f,
       material_extra: d.vec4f
@@ -82,22 +62,13 @@ export const meshVertexMain = tgpu
       material_extra: d.location(6, d.vec4f)
     }
   })/* wgsl */ `{
-    let spin = (
-      sceneBindGroupLayout.$.scene.time * sceneBindGroupLayout.$.scene.animation_speed +
-      sceneBindGroupLayout.$.scene.animation_offset
-    ) * shape.w + spin_offset;
-    let pulse = 0.9 + sin(spin + phase) * 0.05;
-    let spin_y = spin + phase;
-    let spin_x = spin * 0.65 + phase * 0.35;
-    let local_position = position * shape.xyz * sceneBindGroupLayout.$.scene.scale * pulse;
-    let animated_position = rotate_x(rotate_y(local_position, spin_y), spin_x);
-    let animated_normal = normalize(rotate_x(rotate_y(normal, spin_y), spin_x));
+    let local_position = position * shape.xyz;
     let rotated_position = rotate_z(
-      rotate_y(rotate_x(animated_position, world_rotation.x), world_rotation.y),
+      rotate_y(rotate_x(local_position, world_rotation.x), world_rotation.y),
       world_rotation.z
     );
     let rotated_normal = normalize(rotate_z(
-      rotate_y(rotate_x(animated_normal, world_rotation.x), world_rotation.y),
+      rotate_y(rotate_x(normal, world_rotation.x), world_rotation.y),
       world_rotation.z
     ));
     let world_position = rotated_position + instance_position;
@@ -122,26 +93,17 @@ export const shadowVertexMain = tgpu
     in: {
       position: d.vec3f,
       instance_position: d.vec3f,
-      phase: d.f32,
+      padding0: d.f32,
       shape: d.vec4f,
-      spin_offset: d.f32,
+      padding1: d.f32,
       world_rotation: d.vec3f
     },
     out: {
       position: d.builtin.position
     }
   })/* wgsl */ `{
-    let spin = (
-      sceneBindGroupLayout.$.scene.time * sceneBindGroupLayout.$.scene.animation_speed +
-      sceneBindGroupLayout.$.scene.animation_offset
-    ) * shape.w + spin_offset;
-    let pulse = 0.9 + sin(spin + phase) * 0.05;
-    let spin_y = spin + phase;
-    let spin_x = spin * 0.65 + phase * 0.35;
-    let local_position = position * shape.xyz * sceneBindGroupLayout.$.scene.scale * pulse;
-    let animated_position = rotate_x(rotate_y(local_position, spin_y), spin_x);
     let rotated_position = rotate_z(
-      rotate_y(rotate_x(animated_position, world_rotation.x), world_rotation.y),
+      rotate_y(rotate_x(position * shape.xyz, world_rotation.x), world_rotation.y),
       world_rotation.z
     );
     let world_position = rotated_position + instance_position;
@@ -155,7 +117,6 @@ export const shadowVertexMain = tgpu
     rotate_x: rotateX,
     rotate_y: rotateY,
     rotate_z: rotateZ,
-    sceneBindGroupLayout,
     shadowPassBindGroupLayout
   })
   .$name('shadowVertexMain');
@@ -393,15 +354,12 @@ export const meshFragmentMain = tgpu
       materialBindGroupLayout.$.baseColorSampler,
       in.uv
     );
-    let shifted_color = rotate_hue(
-      (texel * in.color * in.vertex_color).rgb,
-      sceneBindGroupLayout.$.scene.color_transform.x
-    );
+    let base_color = (texel * in.color * in.vertex_color).rgb;
     let output_alpha = clamp(texel.a * in.color.a * in.vertex_color.a * in.material.z, 0.0, 1.0);
     let light_count = min(lightingBindGroupLayout.$.lighting.count, 32u);
 
     if (light_count == 0u) {
-      return vec4(shifted_color * 0.82, output_alpha);
+      return vec4(base_color * 0.82, output_alpha);
     }
 
     var lighting_normal = vec3(0.0, 0.0, 1.0);
@@ -421,7 +379,7 @@ export const meshFragmentMain = tgpu
       let light_color = light.color_intensity.rgb * intensity;
 
       if (light.kind == 1u) {
-        lit_color = lit_color + shifted_color * light_color;
+        lit_color = lit_color + base_color * light_color;
       } else if (light.kind == 3u) {
         let light_direction = normalize(-light.direction_angle.xyz);
         let diffuse = max(dot(lighting_normal, light_direction), 0.0) * mix(1.0, 0.68, roughness);
@@ -456,7 +414,7 @@ export const meshFragmentMain = tgpu
 
         shadow_factor = select(1.0, sampled_shadow, shadow_enabled);
 
-        lit_color = lit_color + (shifted_color * diffuse + vec3(specular)) * light_color * shadow_factor;
+        lit_color = lit_color + (base_color * diffuse + vec3(specular)) * light_color * shadow_factor;
       } else if (light.kind == 4u || light.kind == 5u) {
         let to_light = light.position_range.xyz - in.world_position;
         let distance = max(length(to_light), 0.0001);
@@ -464,17 +422,15 @@ export const meshFragmentMain = tgpu
         let diffuse = max(dot(lighting_normal, light_direction), 0.0) * mix(1.0, 0.68, roughness);
         let attenuation = 1.0 / pow(max(distance, 1.0), max(light.params.x, 0.0001));
 
-        lit_color = lit_color + shifted_color * diffuse * light_color * attenuation;
+        lit_color = lit_color + base_color * diffuse * light_color * attenuation;
       }
     }
 
-    lit_color = max(lit_color, shifted_color * 0.08);
+    lit_color = max(lit_color, base_color * 0.08);
 
     return vec4(lit_color, output_alpha);
   }`
   .$uses({
-    rotate_hue: rotateHue,
-    sceneBindGroupLayout,
     materialBindGroupLayout,
     lightingBindGroupLayout,
     shadowBindGroupLayout
@@ -511,10 +467,10 @@ export function createMeshPipeline(
       uv: meshVertexLayout.attrib.uv,
       vertex_color: meshVertexLayout.attrib.color,
       instance_position: meshInstanceLayout.attrib.position,
-      phase: meshInstanceLayout.attrib.phase,
+      padding0: meshInstanceLayout.attrib.padding0,
       color: meshInstanceLayout.attrib.color,
       shape: meshInstanceLayout.attrib.shape,
-      spin_offset: meshInstanceLayout.attrib.spinOffset,
+      padding1: meshInstanceLayout.attrib.padding1,
       world_rotation: meshInstanceLayout.attrib.worldRotation,
       material: meshInstanceLayout.attrib.material,
       material_extra: meshInstanceLayout.attrib.materialExtra
@@ -556,9 +512,9 @@ export function createShadowPipeline(
       attribs: {
         position: meshVertexLayout.attrib.position,
         instance_position: meshInstanceLayout.attrib.position,
-        phase: meshInstanceLayout.attrib.phase,
+        padding0: meshInstanceLayout.attrib.padding0,
         shape: meshInstanceLayout.attrib.shape,
-        spin_offset: meshInstanceLayout.attrib.spinOffset,
+        padding1: meshInstanceLayout.attrib.padding1,
         world_rotation: meshInstanceLayout.attrib.worldRotation
       },
       vertex: shadowVertexMain,

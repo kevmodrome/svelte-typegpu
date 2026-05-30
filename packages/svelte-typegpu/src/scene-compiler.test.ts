@@ -169,6 +169,30 @@ describe('TypeGPU scene compiler', () => {
     expect(state.drawBatches).toHaveLength(0);
   });
 
+  it('ignores removed demo-specific scene and mesh animation props', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const mesh = createElement('mesh');
+    const geometry = createElement('boxGeometry');
+
+    setAttribute(scene, 'scale', 3);
+    setAttribute(scene, 'animationSpeed', 9);
+    setAttribute(scene, 'colorShift', 120);
+    setAttribute(mesh, 'phase', 4);
+    setAttribute(mesh, 'spinSpeed', 5);
+    setAttribute(mesh, 'color', [1, 0, 0, 1]);
+    insert(mesh, geometry, null);
+    insert(scene, mesh, null);
+    insert(root, scene, null);
+
+    const state = createSceneState(root, createTypeGpuSceneCache(), { dirty: Dirty.All });
+
+    expect('scale' in state).toBe(false);
+    expect('animationSpeed' in state).toBe(false);
+    expect('colorShift' in state).toBe(false);
+    expect(state.drawBatches[0].instanceCount).toBe(1);
+  });
+
   it('indexes declarative drag handlers and drag mode as interaction targets', () => {
     const root = createFragment();
     const scene = createElement('scene');

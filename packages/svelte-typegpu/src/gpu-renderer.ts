@@ -10,12 +10,7 @@ import tgpu, {
 } from 'typegpu';
 import { createFpsMeter } from './fps-meter';
 import { createViewProjectionMatrix } from './camera-math';
-import { createContinuityTracker } from './continuity';
 import { Dirty } from './dirty';
-import {
-  MESH_SPIN_OFFSET_OFFSET,
-  MESH_SPIN_SPEED_OFFSET
-} from './instance-data';
 import { packLightingState } from './lighting-data';
 import {
   add3,
@@ -67,7 +62,6 @@ import type {
   RgbaTuple,
   TypeGpuCameraSettings,
   TypeGpuDrawBatch,
-  TypeGpuInstanceDirtyRange,
   TypeGpuLight,
   TypeGpuRenderSettings,
   TypeGpuSceneState,
@@ -80,7 +74,6 @@ export { loadMaterialTextureImageSource, type LoadedTextureImage };
 // Keep the TypeGPU scene uniform buffer at 96 bytes, matching the explicit padding schema.
 export const SCENE_UNIFORM_FLOATS = TYPEGPU_SCENE_UNIFORM_FLOATS;
 
-const DEGREES_TO_RADIANS = Math.PI / 180;
 const MAX_DEVICE_PIXEL_RATIO = 1.5;
 const DEFAULT_SHADOW_CAMERA_RADIUS = 10;
 const DEFAULT_TYPEGPU_CAMERA: TypeGpuCameraSettings = {
@@ -181,12 +174,8 @@ export async function createTypeGpuRenderer({
 }
 
 class TypeGpuSceneRenderer implements TypeGpuRenderer {
-  #animationOffset = 0;
-  #animationSpeed = 1;
   #camera = { ...DEFAULT_TYPEGPU_CAMERA };
-  #colorShift = 0;
   #context: GPUCanvasContext;
-  #continuity = createContinuityTracker();
   #depthTexture: TypeGpuDepthTexture | null = null;
   #disposed = false;
   #drawBatches: TypeGpuDrawBatch[] = [];
@@ -205,7 +194,6 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #renderSize = { width: 0, height: 0 };
   #resizeObserver: ResizeObserver | null = null;
   #samplerResources: SamplerResourceCache;
-  #scale = 1;
   #sceneBindGroup: TgpuBindGroup<typeof sceneBindGroupLayout.entries>;
   #shaderPassBindGroup: TgpuBindGroup<typeof shaderPassBindGroupLayout.entries>;
   #shaderPasses: TypeGpuShaderPass[] = [];
@@ -296,9 +284,6 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       cameraControllerNode: null,
       cameraController: null,
       renderSettings: this.#renderSettings,
-      scale: 1,
-      animationSpeed: 1,
-      colorShift: 0,
       lights: [],
       lightsChanged: true,
       drawBatches: [],
@@ -325,13 +310,9 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
     this.setCamera(scene.camera);
     this.#updateRenderSettings(scene.renderSettings);
-    this.#scale = scene.scale;
-    this.#setAnimationSpeed(scene.animationSpeed);
-    this.#colorShift = scene.colorShift;
     this.#lights = scene.lights;
     this.#drawBatches = scene.drawBatches;
     this.#shaderPasses = scene.shaderPasses;
-    this.#continuity.prune(this.#drawBatches.flatMap((batch) => batch.instanceIds));
 
     if (scene.lightsChanged) {
       this.#lightingBuffer.write(packLightingState(scene.lights));
@@ -361,7 +342,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
             ? [{ start: 0, count: batch.instanceCount }]
             : [];
 
-        this.#instanceBuffers.upload(batch, this.#applyContinuity(batch, dirtyRanges));
+        this.#instanceBuffers.upload(batch, dirtyRanges);
       } else {
         instanceResource.instanceCount = batch.instanceCount;
       }
@@ -575,7 +556,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
     return {
       light,
-      viewProjection: createDirectionalShadowViewProjection(light, this.#drawBatches, this.#scale)
+      viewProjection: createDirectionalShadowViewProjection(light, this.#drawBatches)
     };
   }
 
@@ -658,35 +639,6 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     return pipeline;
   }
 
-  #setAnimationSpeed(nextSpeed: number): void {
-    if (this.#animationSpeed === nextSpeed) return;
-
-    this.#animationOffset += this.#time * (this.#animationSpeed - nextSpeed);
-    this.#animationSpeed = nextSpeed;
-  }
-
-  #applyContinuity(
-    batch: TypeGpuDrawBatch,
-    dirtyRanges: TypeGpuInstanceDirtyRange[]
-  ): TypeGpuInstanceDirtyRange[] {
-    for (const range of dirtyRanges) {
-      const end = Math.min(batch.instanceIds.length, range.start + range.count);
-
-      for (let index = range.start; index < end; index += 1) {
-        const offset = index * batch.floatsPerInstance;
-        const animationTime = this.#time * this.#animationSpeed + this.#animationOffset;
-
-        batch.instances[offset + MESH_SPIN_OFFSET_OFFSET] = this.#continuity.offsetFor({
-          key: batch.instanceIds[index],
-          rate: batch.instances[offset + MESH_SPIN_SPEED_OFFSET],
-          time: animationTime
-        });
-      }
-    }
-
-    return dirtyRanges;
-  }
-
   #resize(): void {
     const canvas = this.options.canvas;
     const dpr = Math.min(this.#maxDevicePixelRatio, window.devicePixelRatio || 1);
@@ -727,10 +679,6 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     }
 
     this.#uniformData[16] = this.#time;
-    this.#uniformData[17] = this.#scale;
-    this.#uniformData[18] = this.#animationSpeed;
-    this.#uniformData[19] = this.#animationOffset;
-    this.#uniformData[20] = this.#colorShift * DEGREES_TO_RADIANS;
     this.#uniformBuffer.write(arrayBufferFor(this.#uniformData));
   }
 
@@ -1000,10 +948,9 @@ function packShadowState(activeShadow: TypeGpuActiveShadow | null): ArrayBuffer 
 
 export function createDirectionalShadowViewProjection(
   light: TypeGpuLight,
-  drawBatches: TypeGpuDrawBatch[],
-  sceneScale = 1
+  drawBatches: TypeGpuDrawBatch[]
 ): Float32Array {
-  const bounds = shadowBoundsForDrawBatches(drawBatches, sceneScale);
+  const bounds = shadowBoundsForDrawBatches(drawBatches);
   const center = bounds
     ? ([
         (bounds.min[0] + bounds.max[0]) / 2,
@@ -1022,8 +969,7 @@ export function createDirectionalShadowViewProjection(
 }
 
 export function shadowBoundsForDrawBatches(
-  drawBatches: TypeGpuDrawBatch[],
-  sceneScale = 1
+  drawBatches: TypeGpuDrawBatch[]
 ): { min: Vector3Tuple; max: Vector3Tuple } | null {
   let min: Vector3Tuple | null = null;
   let max: Vector3Tuple | null = null;
@@ -1049,8 +995,7 @@ export function shadowBoundsForDrawBatches(
       const instanceBounds = conservativeShadowBoundsForInstance(
         localBounds,
         scale,
-        position,
-        sceneScale
+        position
       );
 
       if (!min || !max) {
@@ -1078,8 +1023,7 @@ export function shadowBoundsForDrawBatches(
 function conservativeShadowBoundsForInstance(
   bounds: { min: Vector3Tuple; max: Vector3Tuple },
   scale: Vector3Tuple,
-  position: Vector3Tuple,
-  sceneScale: number
+  position: Vector3Tuple
 ): { min: Vector3Tuple; max: Vector3Tuple } {
   let radius = 0;
 
@@ -1088,11 +1032,7 @@ function conservativeShadowBoundsForInstance(
       for (const z of [bounds.min[2], bounds.max[2]]) {
         radius = Math.max(
           radius,
-          Math.hypot(
-            x * scale[0] * sceneScale,
-            y * scale[1] * sceneScale,
-            z * scale[2] * sceneScale
-          )
+          Math.hypot(x * scale[0], y * scale[1], z * scale[2])
         );
       }
     }

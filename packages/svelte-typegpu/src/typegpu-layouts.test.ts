@@ -107,7 +107,8 @@ describe('TypeGPU layout schemas', () => {
   it('describes the scene uniforms with a padded TypeGPU bind group layout', () => {
     expect(TYPEGPU_SCENE_UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT).toBe(96);
     expect(d.sizeOf(typegpuSceneUniformSchema)).toBe(96);
-    expect(typegpuSceneUniformSchema.propTypes.color_transform).toBeDefined();
+    expect(typegpuSceneUniformSchema.propTypes.time).toBeDefined();
+    expect(typegpuSceneUniformSchema.propTypes.padding3).toBeDefined();
     expect(sceneBindGroupLayout.index).toBe(0);
     expect(sceneBindGroupLayout.entries.scene?.uniform).toBe(typegpuSceneUniformSchema);
   });

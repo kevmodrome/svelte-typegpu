@@ -34,13 +34,10 @@ describe('TypeGPU primitive descriptors', () => {
       dirtyForAttribute('scene', 'clearColor', undefined, [0, 0, 0, 1]),
       Dirty.RenderSettings
     );
-    expectExactDirty(dirtyForAttribute('scene', 'scale', 1, 1.5), Dirty.RenderSettings);
-    expectExactDirty(
-      dirtyForAttribute('scene', 'animationSpeed', 1, 0.5),
-      Dirty.RenderSettings
-    );
-    expectExactDirty(dirtyForAttribute('scene', 'colorShift', 0, 47), Dirty.RenderSettings);
-    const dirty = dirtyForAttribute('scene', 'scale', 1, 1.5);
+    expectExactDirty(dirtyForAttribute('scene', 'scale', 1, 1.5), Dirty.None);
+    expectExactDirty(dirtyForAttribute('scene', 'animationSpeed', 1, 0.5), Dirty.None);
+    expectExactDirty(dirtyForAttribute('scene', 'colorShift', 0, 47), Dirty.None);
+    const dirty = dirtyForAttribute('scene', 'clearColor', [0, 0, 0, 1], [1, 1, 1, 1]);
     expect(hasDirty(dirty, Dirty.DrawBatches)).toBe(false);
   });
 
@@ -114,21 +111,9 @@ describe('TypeGPU primitive descriptors', () => {
       Dirty.DrawBatches,
       Dirty.Interaction
     );
-    expectExactDirty(
-      dirtyForAttribute('mesh', 'phase', 0, 1),
-      Dirty.InstanceData,
-      Dirty.Interaction
-    );
-    expectExactDirty(
-      dirtyForAttribute('mesh', 'spinSpeed', 0, 1),
-      Dirty.InstanceData,
-      Dirty.Interaction
-    );
-    expectExactDirty(
-      dirtyForAttribute('mesh', 'color', [1, 1, 1, 1], [1, 0, 0, 1]),
-      Dirty.InstanceData,
-      Dirty.Interaction
-    );
+    expectExactDirty(dirtyForAttribute('mesh', 'phase', 0, 1), Dirty.None);
+    expectExactDirty(dirtyForAttribute('mesh', 'spinSpeed', 0, 1), Dirty.None);
+    expectExactDirty(dirtyForAttribute('mesh', 'color', [1, 1, 1, 1], [1, 0, 0, 1]), Dirty.None);
   });
 
   it('marks material replacement as a conservative material rebuild', () => {

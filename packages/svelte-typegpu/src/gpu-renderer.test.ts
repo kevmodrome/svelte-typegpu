@@ -627,7 +627,7 @@ describe('TypeGPU GPU renderer', () => {
     expect(Math.abs(leftPoint[1] - rightPoint[1])).toBeLessThan(0.05);
   });
 
-  it('uses conservative shadow bounds that include scene scale and rotations', () => {
+  it('uses conservative shadow bounds that include instance scale and rotations', () => {
     const batch = drawBatchFixture({
       geometryBounds: {
         min: [-5, -0.25, -0.25],
@@ -636,11 +636,11 @@ describe('TypeGPU GPU renderer', () => {
       rotation: [0, Math.PI / 2, 0]
     });
 
-    const bounds = shadowBoundsForDrawBatches([batch], 3);
+    const bounds = shadowBoundsForDrawBatches([batch]);
 
     expect(bounds).not.toBeNull();
-    expect(bounds!.min[2]).toBeLessThanOrEqual(-15);
-    expect(bounds!.max[2]).toBeGreaterThanOrEqual(15);
+    expect(bounds!.min[2]).toBeLessThanOrEqual(-5);
+    expect(bounds!.max[2]).toBeGreaterThanOrEqual(5);
   });
 
   it('seeds initial scene state with empty camera metadata', () => {

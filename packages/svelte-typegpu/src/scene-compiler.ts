@@ -145,9 +145,6 @@ export function createSceneState(
     cameraControllerNode: camera.controllerNode,
     cameraController: camera.controller,
     renderSettings: sceneSettings.renderSettings,
-    scale: sceneSettings.scale,
-    animationSpeed: sceneSettings.animationSpeed,
-    colorShift: sceneSettings.colorShift,
     lights,
     lightsChanged: recomputeLights,
     drawBatches,
@@ -280,8 +277,6 @@ function readMeshDrawItem(
     transform,
     bounds: transformBounds(localBounds, transform),
     color,
-    phase: numberArg(mesh.attributes.phase, 0),
-    spinSpeed: numberArg(mesh.attributes.spinSpeed, 0),
     renderOrder: numberArg(mesh.attributes.renderOrder, 0),
     hitTest: hitTestMode(mesh.attributes.hitTest),
     pointerEvents: mesh.attributes.pointerEvents === 'none' ? 'none' : 'auto',
@@ -349,8 +344,6 @@ function readModelDrawItems(
       transform,
       bounds: transformBounds(localBounds, transform),
       color,
-      phase: numberArg(modelNode.attributes.phase, 0),
-      spinSpeed: numberArg(modelNode.attributes.spinSpeed, 0),
       renderOrder: numberArg(modelNode.attributes.renderOrder, 0),
       hitTest: hitTestMode(modelNode.attributes.hitTest),
       pointerEvents: modelNode.attributes.pointerEvents === 'none' ? 'none' : 'auto',
@@ -383,9 +376,6 @@ function readModelMaterial(
 
 function readRenderSettings(root: TypeGpuNode): {
   renderSettings: TypeGpuRenderSettings;
-  scale: number;
-  animationSpeed: number;
-  colorShift: number;
   activeCamera: string | null;
 } {
   const scene = findScene(root);
@@ -396,9 +386,6 @@ function readRenderSettings(root: TypeGpuNode): {
       depth: scene?.attributes.depth === false ? false : true,
       alphaMode: scene?.attributes.alphaMode === 'opaque' ? 'opaque' : 'premultiplied'
     },
-    scale: numberArg(scene?.attributes.scale, 1),
-    animationSpeed: numberArg(scene?.attributes.animationSpeed, 1),
-    colorShift: numberArg(scene?.attributes.colorShift, 0),
     activeCamera: stringArg(scene?.attributes.activeCamera)
   };
 }
