@@ -189,10 +189,9 @@ describe('docs app source wiring', () => {
     expect(source).toContain('@media (max-width: 820px)');
   });
 
-  it('installs dynamic cross-document view transitions before first paint', () => {
+  it('sets the dark shell background before first paint without page transition scripts', () => {
     const indexSource = read('./index.ts');
     const shellSource = read('./html-shell.ts');
-    const transitionSource = read('./view-transitions.ts');
 
     expect(indexSource).toContain('htmlShell');
     expect(indexSource).toContain('htmlShell,');
@@ -200,36 +199,20 @@ describe('docs app source wiring', () => {
     expect(shellSource).toContain('<style>${criticalShellStyle}</style>');
     expect(shellSource).toContain('background:#080d0f');
     expect(shellSource.indexOf('<style>${criticalShellStyle}</style>')).toBeLessThan(
-      shellSource.indexOf('<script>${viewTransitionHeadScript}</script>')
-    );
-    expect(shellSource).toContain('<script>${viewTransitionHeadScript}</script>');
-    expect(shellSource.indexOf('<script>${viewTransitionHeadScript}</script>')).toBeLessThan(
       shellSource.indexOf('{{mochi.head}}')
     );
-    expect(shellSource).not.toContain('type="module"');
-    expect(shellSource).not.toContain('defer');
-    expect(transitionSource).toContain("window.addEventListener('pageswap'");
-    expect(transitionSource).toContain("window.addEventListener('pagereveal'");
-    expect(transitionSource).toContain('viewTransition.types.add');
-    expect(transitionSource).toContain('skipTransition');
+    expect(shellSource).not.toContain('viewTransitionHeadScript');
+    expect(shellSource).not.toContain('<script>');
   });
 
-  it('styles typed page transitions without animating reduced-motion users', () => {
+  it('does not enable CSS page transitions', () => {
     const source = read('./style.css');
 
-    expect(source).toContain('@view-transition');
-    expect(source).toContain('navigation: auto');
-    expect(source).toContain(':active-view-transition-type(docs-forward)');
-    expect(source).toContain(':active-view-transition-type(docs-back)');
-    expect(source).toContain(':active-view-transition-type(docs-example)');
-    expect(source).toContain('view-transition-name: docs-page');
-    expect(source).toContain('view-transition-name: docs-example');
-    expect(source).toContain('::view-transition {');
-    expect(source).toContain('background: var(--bg)');
-    expect(source).toContain('::view-transition-old(docs-page)');
-    expect(source).toContain('::view-transition-new(docs-page)');
+    expect(source).not.toContain('@view-transition');
+    expect(source).not.toContain(':active-view-transition-type');
+    expect(source).not.toContain('view-transition-name');
+    expect(source).not.toContain('::view-transition');
     expect(source).toContain('@media (prefers-reduced-motion: reduce)');
-    expect(source).toContain('::view-transition-group(*)');
   });
 
   it('gives the docs a distinctive shader workbench treatment', () => {

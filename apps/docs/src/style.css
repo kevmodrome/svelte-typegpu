@@ -23,14 +23,6 @@
     sans-serif;
 }
 
-@view-transition {
-  navigation: auto;
-}
-
-::view-transition {
-  background: var(--bg);
-}
-
 * {
   box-sizing: border-box;
 }
@@ -801,73 +793,6 @@ textarea {
     transform: rotate(135deg);
   }
 
-  html:active-view-transition-type(docs-forward),
-  html:active-view-transition-type(docs-back),
-  html:active-view-transition-type(docs-example) {
-    view-transition-name: none;
-  }
-
-  html:active-view-transition-type(docs-forward) .site-nav,
-  html:active-view-transition-type(docs-back) .site-nav {
-    view-transition-name: docs-nav;
-  }
-
-  html:active-view-transition-type(docs-forward) .site-main,
-  html:active-view-transition-type(docs-back) .site-main {
-    view-transition-name: docs-page;
-  }
-
-  html:active-view-transition-type(docs-example) .example-workbench {
-    view-transition-name: docs-example;
-  }
-
-  ::view-transition-group(docs-nav) {
-    animation-duration: 140ms;
-  }
-
-  ::view-transition-old(docs-nav),
-  ::view-transition-new(docs-nav) {
-    animation: none;
-    mix-blend-mode: normal;
-  }
-
-  ::view-transition-group(docs-page),
-  ::view-transition-group(docs-example) {
-    animation-duration: 240ms;
-    animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
-  }
-
-  ::view-transition-old(docs-page),
-  ::view-transition-new(docs-page),
-  ::view-transition-old(docs-example),
-  ::view-transition-new(docs-example) {
-    height: 100%;
-    mix-blend-mode: normal;
-  }
-
-  ::view-transition-old(docs-page) {
-    animation: docs-page-out-forward 180ms cubic-bezier(0.4, 0, 1, 1) both;
-  }
-
-  ::view-transition-new(docs-page) {
-    animation: docs-page-in-forward 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
-
-  html:active-view-transition-type(docs-back)::view-transition-old(docs-page) {
-    animation-name: docs-page-out-back;
-  }
-
-  html:active-view-transition-type(docs-back)::view-transition-new(docs-page) {
-    animation-name: docs-page-in-back;
-  }
-
-  ::view-transition-old(docs-example) {
-    animation: docs-example-out 160ms ease-out both;
-  }
-
-  ::view-transition-new(docs-example) {
-    animation: docs-example-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -877,14 +802,6 @@ textarea {
     transition: none;
   }
 
-  ::view-transition-group(*) {
-    animation-duration: 1ms !important;
-  }
-
-  ::view-transition-old(*),
-  ::view-transition-new(*) {
-    animation: none !important;
-  }
 }
 
 @keyframes grid-drift {
@@ -894,54 +811,6 @@ textarea {
 
   to {
     background-position: 88px 0, 0 88px, 0 0;
-  }
-}
-
-@keyframes docs-page-out-forward {
-  to {
-    opacity: 0;
-    transform: translateX(-18px);
-    filter: blur(4px);
-  }
-}
-
-@keyframes docs-page-in-forward {
-  from {
-    opacity: 0;
-    transform: translateX(22px);
-    filter: blur(8px);
-  }
-}
-
-@keyframes docs-page-out-back {
-  to {
-    opacity: 0;
-    transform: translateX(18px);
-    filter: blur(4px);
-  }
-}
-
-@keyframes docs-page-in-back {
-  from {
-    opacity: 0;
-    transform: translateX(-22px);
-    filter: blur(8px);
-  }
-}
-
-@keyframes docs-example-out {
-  to {
-    opacity: 0;
-    transform: translateY(8px) scale(0.992);
-    filter: blur(3px);
-  }
-}
-
-@keyframes docs-example-in {
-  from {
-    opacity: 0;
-    transform: translateY(14px) scale(0.992);
-    filter: blur(6px);
   }
 }
 
