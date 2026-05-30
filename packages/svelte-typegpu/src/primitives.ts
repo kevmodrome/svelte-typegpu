@@ -9,7 +9,6 @@ const aliases = new Map<string, string>([
   ['directional-light', 'directionalLight'],
   ['point-light', 'pointLight'],
   ['spot-light', 'spotLight'],
-  ['instanced-mesh', 'instancedMesh'],
   ['box-geometry', 'boxGeometry'],
   ['plane-geometry', 'planeGeometry'],
   ['sphere-geometry', 'sphereGeometry'],
@@ -60,7 +59,7 @@ const controlAttributes = new Set([
 ]);
 const geometryNames = new Set(['boxGeometry', 'planeGeometry', 'sphereGeometry', 'bufferGeometry']);
 const materialNames = new Set(['basicMaterial', 'phongMaterial', 'standardMaterial']);
-const meshNames = new Set(['mesh', 'instancedMesh', 'model']);
+const meshNames = new Set(['mesh', 'model']);
 const materialUniformAttributes = new Set([
   'color',
   'opacity',
@@ -121,15 +120,7 @@ const cameraBridgeAttributes = new Map<string, Set<string>>([
   ]
 ]);
 const modelGeometryAttributes = new Set(['src', 'data']);
-const instanceBatchAttributes = new Set(['instances', 'getKey']);
-const instanceDataAttributes = new Set([
-  'phase',
-  'spinSpeed',
-  'color',
-  'getTransform',
-  'getColor',
-  'getSpinSpeed'
-]);
+const instanceDataAttributes = new Set(['phase', 'spinSpeed', 'color']);
 const pointerEvents = new Set([
   'click',
   'pointermove',
@@ -253,9 +244,6 @@ export function dirtyForAttribute(
     if (name === 'model' && modelGeometryAttributes.has(attribute)) {
       return mergeDirty(Dirty.Geometry, Dirty.DrawBatches, Dirty.Interaction);
     }
-    if (attribute === 'geometry' || attribute === 'material' || instanceBatchAttributes.has(attribute)) {
-      return mergeDirty(Dirty.DrawBatches, Dirty.Interaction);
-    }
     if (attribute === 'castShadow') return Dirty.DrawBatches;
     if (attribute === 'receiveShadow') return Dirty.InstanceData;
     if (instanceDataAttributes.has(attribute)) return mergeDirty(Dirty.InstanceData, Dirty.Interaction);
@@ -291,7 +279,7 @@ export function dirtyForEventListener(nodeName: string | undefined, eventName: s
   const customDirty = customDescriptors.get(name)?.dirtyForEventListener?.(eventName);
   if (customDirty !== undefined) return customDirty;
 
-  return (name === 'mesh' || name === 'instancedMesh' || name === 'model') && pointerEvents.has(eventName)
+  return (name === 'mesh' || name === 'model') && pointerEvents.has(eventName)
     ? Dirty.Interaction
     : Dirty.None;
 }
@@ -313,7 +301,7 @@ function dirtyForTreeChange(nodeName: string | undefined): Dirty {
   if (name === 'sampler') return mergeDirty(Dirty.Tree, Dirty.Sampler, Dirty.BindGroup, Dirty.DrawBatches);
   if (name === 'shaderPass') return mergeDirty(Dirty.Tree, Dirty.ShaderPass);
   if (name === 'group') return mergeDirty(Dirty.Tree, Dirty.DrawBatches, Dirty.Interaction, Dirty.Lights);
-  if (name === 'mesh' || name === 'instancedMesh' || name === 'model') {
+  if (name === 'mesh' || name === 'model') {
     return mergeDirty(Dirty.Tree, Dirty.DrawBatches, Dirty.Interaction);
   }
 

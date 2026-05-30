@@ -25,7 +25,6 @@ describe('TypeGPU primitive descriptors', () => {
     expect(normalizePrimitiveName('basic-material')).toBe('basicMaterial');
     expect(normalizePrimitiveName('phong-material')).toBe('phongMaterial');
     expect(normalizePrimitiveName('standard-material')).toBe('standardMaterial');
-    expect(normalizePrimitiveName('instanced-mesh')).toBe('instancedMesh');
     expect(normalizePrimitiveName('shader-pass')).toBe('shaderPass');
     expect(normalizePrimitiveName('unknown-node')).toBe('unknown-node');
   });
@@ -132,34 +131,6 @@ describe('TypeGPU primitive descriptors', () => {
     );
   });
 
-  it('marks instanced mesh accessors conservatively', () => {
-    expectExactDirty(
-      dirtyForAttribute('instancedMesh', 'instances', [], [{}]),
-      Dirty.DrawBatches,
-      Dirty.Interaction
-    );
-    expectExactDirty(
-      dirtyForAttribute('instancedMesh', 'getKey', undefined, () => 'key'),
-      Dirty.DrawBatches,
-      Dirty.Interaction
-    );
-    expectExactDirty(
-      dirtyForAttribute('instancedMesh', 'getTransform', undefined, () => null),
-      Dirty.InstanceData,
-      Dirty.Interaction
-    );
-    expectExactDirty(
-      dirtyForAttribute('instancedMesh', 'getColor', undefined, () => null),
-      Dirty.InstanceData,
-      Dirty.Interaction
-    );
-    expectExactDirty(
-      dirtyForAttribute('instancedMesh', 'getSpinSpeed', undefined, () => 1),
-      Dirty.InstanceData,
-      Dirty.Interaction
-    );
-  });
-
   it('marks material replacement as a conservative material rebuild', () => {
     expectExactDirty(
       dirtyForAttribute('standardMaterial', 'material', {}, { color: [1, 0, 0, 1] }),
@@ -202,7 +173,6 @@ describe('TypeGPU primitive descriptors', () => {
   it('suppresses stable tuple values but not mutable object or callback values', () => {
     const position = [0, 0, 0];
     const material = { color: [1, 1, 1, 1] };
-    const accessor = () => null;
 
     expectExactDirty(dirtyForAttribute('mesh', 'position', position, position), Dirty.None);
     expectExactDirty(dirtyForAttribute('mesh', 'position', [0, 0, 0], [0, 0, 0]), Dirty.None);
@@ -214,11 +184,6 @@ describe('TypeGPU primitive descriptors', () => {
       Dirty.BindGroup,
       Dirty.Pipeline,
       Dirty.DrawBatches
-    );
-    expectExactDirty(
-      dirtyForAttribute('instancedMesh', 'getTransform', accessor, accessor),
-      Dirty.InstanceData,
-      Dirty.Interaction
     );
   });
 

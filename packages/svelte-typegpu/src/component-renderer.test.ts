@@ -11,7 +11,6 @@ describe('TypeGPU target primitive component rendering', () => {
     const Scene = compileTypeGpuSource(`
       <script>
         let { onClick } = $props();
-        const instances = [{ id: 'a' }, { id: 'b' }];
       </script>
 
       <scene clearColor={[0, 0, 0, 1]}>
@@ -19,20 +18,14 @@ describe('TypeGPU target primitive component rendering', () => {
         <orbitControls camera="main" target={[0, 0, 0]} minDistance={2} maxDistance={40} />
         <ambientLight intensity={0.2} />
         <directionalLight position={[1, 2, 3]} />
-        <resources>
-          <boxGeometry id="cube" width={1} height={2} depth={3} />
-          <texture id="checker" src="/textures/checker.svg" />
-          <sampler id="repeatLinear" addressModeU="repeat" addressModeV="repeat" />
-          <phongMaterial id="crate" map="checker" sampler="repeatLinear" color={[1, 0.8, 0.4, 1]} />
-        </resources>
-        <mesh geometry="cube" material="crate" position={[1, 2, 3]} onclick={onClick} />
-        <instancedMesh
-          geometry="cube"
-          material="crate"
-          instances={instances}
-          getKey={(item) => item.id}
-          getTransform={(item, index) => ({ position: [index, 0, 0], scale: [1, 1, 1] })}
-        />
+        <mesh position={[1, 2, 3]} onclick={onClick}>
+          <boxGeometry width={1} height={2} depth={3} />
+          <phongMaterial
+            map="/textures/checker.svg"
+            sampler={{ addressModeU: 'repeat', addressModeV: 'repeat' }}
+            color={[1, 0.8, 0.4, 1]}
+          />
+        </mesh>
       </scene>
     `);
     const root = createFragment();
@@ -42,13 +35,9 @@ describe('TypeGPU target primitive component rendering', () => {
     const scene = onlyElement(root);
     const camera = onlyNamed(scene, 'perspectiveCamera');
     const orbitControls = onlyNamed(scene, 'orbitControls');
-    const resources = onlyNamed(scene, 'resources');
-    const boxGeometry = onlyNamed(resources, 'boxGeometry');
-    const texture = onlyNamed(resources, 'texture');
-    const sampler = onlyNamed(resources, 'sampler');
-    const material = onlyNamed(resources, 'phongMaterial');
     const mesh = onlyNamed(scene, 'mesh');
-    const instancedMesh = onlyNamed(scene, 'instancedMesh');
+    const boxGeometry = onlyNamed(mesh, 'boxGeometry');
+    const material = onlyNamed(mesh, 'phongMaterial');
 
     expect(scene.attributes.clearColor).toEqual([0, 0, 0, 1]);
     expect(camera.attributes).toMatchObject({
@@ -63,43 +52,55 @@ describe('TypeGPU target primitive component rendering', () => {
       maxDistance: 40
     });
     expect(boxGeometry.attributes).toMatchObject({
-      id: 'cube',
       width: 1,
       height: 2,
       depth: 3
     });
-    expect(texture.attributes).toMatchObject({
-      id: 'checker',
-      src: '/textures/checker.svg'
-    });
-    expect(sampler.attributes).toMatchObject({
-      id: 'repeatLinear',
-      addressModeU: 'repeat',
-      addressModeV: 'repeat'
-    });
     expect(material.attributes).toMatchObject({
-      id: 'crate',
-      map: 'checker',
-      sampler: 'repeatLinear',
+      map: '/textures/checker.svg',
+      sampler: { addressModeU: 'repeat', addressModeV: 'repeat' },
       color: [1, 0.8, 0.4, 1]
     });
     expect(mesh.attributes).toMatchObject({
-      geometry: 'cube',
-      material: 'crate',
       position: [1, 2, 3]
     });
     expect(mesh.listeners.get('click')?.size).toBe(1);
-    expect(instancedMesh.attributes).toMatchObject({
-      geometry: 'cube',
-      material: 'crate'
-    });
-    expect(instancedMesh.attributes.instances).toEqual([{ id: 'a' }, { id: 'b' }]);
-    expect(
-      attributeFunction<(item: { id: string }, index: number) => string>(instancedMesh, 'getKey')(
-        { id: 'a' },
-        0
-      )
-    ).toBe('a');
+  });
+
+  it('renders each-loop component meshes as ordinary batchable mesh nodes', () => {
+    const Scene = compileTypeGpuSource(`
+      <script>
+        const cubes = [
+          { id: 'a', position: [0, 0, 0], color: [1, 0, 0, 1] },
+          { id: 'b', position: [1, 0, 0], color: [0, 1, 0, 1] },
+          { id: 'c', position: [2, 0, 0], color: [0, 0, 1, 1] }
+        ];
+      </script>
+
+      {#snippet Cube(cube)}
+        <mesh position={cube.position}>
+          <boxGeometry width={1} height={1} depth={1}></boxGeometry>
+          <standardMaterial color={cube.color}></standardMaterial>
+        </mesh>
+      {/snippet}
+
+      <scene>
+        {#each cubes as cube (cube.id)}
+          {@render Cube(cube)}
+        {/each}
+      </scene>
+    `);
+    const root = createFragment();
+
+    renderer.render(Scene, { target: root });
+
+    const scene = onlyElement(root);
+    const meshes = scene.children.filter((node) => node.name === 'mesh');
+
+    expect(meshes).toHaveLength(3);
+    for (const mesh of meshes) {
+      expect(mesh.children.map((child) => child.name)).toEqual(['boxGeometry', 'standardMaterial']);
+    }
   });
 
   it('renders public model nodes with url, data, and material children', () => {
@@ -172,17 +173,6 @@ function findChild(root: TypeGpuNode, name: string): TypeGpuNode | null {
     if (match) return match;
   }
   return null;
-}
-
-function attributeFunction<T extends (...args: any[]) => unknown>(
-  node: TypeGpuNode,
-  name: string
-): T {
-  const value = node.attributes[name];
-
-  expect(typeof value).toBe('function');
-
-  return value as T;
 }
 
 function compileTypeGpuSource(source: string) {

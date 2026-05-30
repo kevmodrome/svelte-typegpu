@@ -21,7 +21,6 @@ import type {
   RgbaTuple,
   TypeGpuDrawBatch,
   TypeGpuGeometryData,
-  TypeGpuInstanceId,
   TypeGpuInteractionIndex,
   TypeGpuInteractionTarget,
   TypeGpuLight,
@@ -237,8 +236,6 @@ function collectDrawItemsFromNode(
     };
   } else if (node.name === 'mesh') {
     childContext = readMeshDrawItem(node, context, items);
-  } else if (node.name === 'instancedMesh') {
-    childContext = readInstancedMeshDrawItems(node, context, items);
   } else if (node.name === 'model') {
     childContext = readModelDrawItems(node, context, items, modelCache);
   }
@@ -313,82 +310,6 @@ function readMeshMaterial(mesh: TypeGpuNode): MeshResourceResult<TypeGpuMaterial
   }
 
   return { node: null, value: defaultMaterial() };
-}
-
-function readInstancedMeshDrawItems(
-  instancedMesh: TypeGpuNode,
-  context: DrawItemWalkContext,
-  items: TypeGpuMeshDrawItem[]
-): DrawItemWalkContext {
-  const transform = composeTransforms(context.transform, readLocalTransform(instancedMesh));
-  const meshRevision = combineNodeRevision(context.revision, instancedMesh);
-
-  if (instancedMesh.attributes.visible === false) {
-    return { transform, revision: meshRevision };
-  }
-
-  const instances = Array.isArray(instancedMesh.attributes.instances)
-    ? instancedMesh.attributes.instances
-    : [];
-  if (instances.length === 0) {
-    return { transform, revision: meshRevision };
-  }
-
-  const geometry = readMeshGeometry(instancedMesh);
-  if (!geometry) {
-    return { transform, revision: meshRevision };
-  }
-
-  const material = readMeshMaterial(instancedMesh);
-  const effectiveMaterial = materialForGeometry(material.value, geometry.value);
-  const baseRevision = combineNodeRevision(
-    combineNodeRevision(meshRevision, geometry.node),
-    material.node
-  );
-  const localBounds = geometry.value.bounds ?? defaultBounds();
-  const defaultColor = rgbaArg(instancedMesh.attributes.color, effectiveMaterial.color);
-  const defaultSpinSpeed = numberArg(instancedMesh.attributes.spinSpeed, 0);
-  const getKey = callbackArg(instancedMesh.attributes.getKey);
-  const getTransform = callbackArg(instancedMesh.attributes.getTransform);
-  const getColor = callbackArg(instancedMesh.attributes.getColor);
-  const getSpinSpeed = callbackArg(instancedMesh.attributes.getSpinSpeed);
-
-  instances.forEach((instance, index) => {
-    const key = readInstanceKey(getKey, instancedMesh.uid, instance, index);
-    const instanceTransform = readInstanceTransform(getTransform?.(instance, index));
-    const itemTransform = composeTransforms(transform, instanceTransform);
-    const color = rgbaArg(getColor?.(instance, index), defaultColor);
-    const spinSpeed = numberArg(getSpinSpeed?.(instance, index), defaultSpinSpeed);
-
-    items.push({
-      id: key,
-      node: instancedMesh,
-      revision: valueRevision(baseRevision, [
-        key,
-        itemTransform.position,
-        itemTransform.rotation,
-        itemTransform.scale,
-        color,
-        spinSpeed
-      ]),
-      geometry: geometry.value,
-      material: effectiveMaterial,
-      transform: itemTransform,
-      bounds: transformBounds(localBounds, itemTransform),
-      color,
-      phase: numberArg(instancedMesh.attributes.phase, 0),
-      spinSpeed,
-      renderOrder: numberArg(instancedMesh.attributes.renderOrder, 0),
-      hitTest: hitTestMode(instancedMesh.attributes.hitTest),
-      pointerEvents: instancedMesh.attributes.pointerEvents === 'none' ? 'none' : 'auto',
-      drag: stringAttribute(instancedMesh.attributes.drag),
-      dragButton: dragButtonAttribute(instancedMesh.attributes.dragButton),
-      castShadow: castsDeclarativeShadow(instancedMesh.attributes.castShadow, effectiveMaterial, color),
-      receiveShadow: instancedMesh.attributes.receiveShadow === true
-    });
-  });
-
-  return { transform, revision: meshRevision };
 }
 
 function readModelDrawItems(
@@ -775,35 +696,6 @@ function findScene(root: TypeGpuNode): TypeGpuNode | null {
 
 function combineNodeRevision(seed: number, node: TypeGpuNode | null): number {
   return node ? (seed * 31 + node.uid) * 31 + node.revision : seed * 31;
-}
-
-function callbackArg(value: unknown): ((item: unknown, index: number) => unknown) | null {
-  return typeof value === 'function'
-    ? (value as (item: unknown, index: number) => unknown)
-    : null;
-}
-
-function readInstanceKey(
-  getKey: ((item: unknown, index: number) => unknown) | null,
-  nodeUid: number,
-  instance: unknown,
-  index: number
-): TypeGpuInstanceId {
-  const key = getKey?.(instance, index);
-  return typeof key === 'string' || typeof key === 'number' ? key : `${nodeUid}:${index}`;
-}
-
-function readInstanceTransform(value: unknown): TypeGpuTransform {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return IDENTITY_TRANSFORM;
-  }
-
-  const transform = value as Record<string, unknown>;
-  return {
-    position: vector3Arg(transform.position, IDENTITY_TRANSFORM.position),
-    rotation: vector3Arg(transform.rotation, IDENTITY_TRANSFORM.rotation),
-    scale: vector3Arg(transform.scale, IDENTITY_TRANSFORM.scale)
-  };
 }
 
 function vector3Arg(value: unknown, fallback: Vector3Tuple): Vector3Tuple {

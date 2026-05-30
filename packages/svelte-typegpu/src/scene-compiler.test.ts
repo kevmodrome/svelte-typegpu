@@ -129,6 +129,46 @@ describe('TypeGPU scene compiler', () => {
     expect(state.liveResourceKeys.geometries.size).toBe(0);
   });
 
+  it('batches repeated inline meshes without public instancedMesh', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+
+    for (let index = 0; index < 3; index += 1) {
+      const mesh = createElement('mesh');
+      const geometry = createElement('boxGeometry');
+      const material = createElement('standardMaterial');
+      setAttribute(mesh, 'position', [index, 0, 0]);
+      setAttribute(material, 'color', [index / 3, 0.5, 1, 1]);
+      insert(mesh, geometry, null);
+      insert(mesh, material, null);
+      insert(scene, mesh, null);
+    }
+
+    insert(root, scene, null);
+
+    const state = createSceneState(root, createTypeGpuSceneCache(), { dirty: Dirty.All });
+
+    expect(state.drawBatches).toHaveLength(1);
+    expect(state.drawBatches[0].geometryKey).toBe('box:1:1:1');
+    expect(state.drawBatches[0].instanceCount).toBe(3);
+  });
+
+  it('does not compile public instancedMesh nodes', () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const instanced = createElement('instancedMesh');
+    const geometry = createElement('boxGeometry');
+
+    setAttribute(instanced, 'instances', [{ id: 1 }]);
+    insert(instanced, geometry, null);
+    insert(scene, instanced, null);
+    insert(root, scene, null);
+
+    const state = createSceneState(root, createTypeGpuSceneCache(), { dirty: Dirty.All });
+
+    expect(state.drawBatches).toHaveLength(0);
+  });
+
   it('indexes declarative drag handlers and drag mode as interaction targets', () => {
     const root = createFragment();
     const scene = createElement('scene');
@@ -326,12 +366,14 @@ describe('TypeGPU scene compiler', () => {
     expect(state.shaderPasses).toHaveLength(0);
   });
 
-  it('compiles model and instancedMesh castShadow attributes into shadow batches', async () => {
+  it('compiles model and repeated mesh castShadow attributes into shadow batches', async () => {
     const root = createFragment();
     const scene = createElement('scene');
     const model = createElement('model');
-    const instanced = createElement('instancedMesh');
-    const geometry = createElement('boxGeometry');
+    const firstMesh = createElement('mesh');
+    const secondMesh = createElement('mesh');
+    const firstGeometry = createElement('boxGeometry');
+    const secondGeometry = createElement('boxGeometry');
     const loaded = loadedModelFixture('url:/models/caster.obj');
     const cache = createTypeGpuSceneCache({
       modelCache: createModelCache({
@@ -342,11 +384,14 @@ describe('TypeGPU scene compiler', () => {
 
     setAttribute(model, 'src', '/models/caster.obj');
     setAttribute(model, 'castShadow', true);
-    setAttribute(instanced, 'castShadow', true);
-    setAttribute(instanced, 'instances', [{ id: 'a' }, { id: 'b' }]);
-    insert(instanced, geometry, null);
+    setAttribute(firstMesh, 'castShadow', true);
+    setAttribute(secondMesh, 'castShadow', true);
+    setAttribute(secondMesh, 'position', [2, 0, 0]);
+    insert(firstMesh, firstGeometry, null);
+    insert(secondMesh, secondGeometry, null);
     insert(scene, model, null);
-    insert(scene, instanced, null);
+    insert(scene, firstMesh, null);
+    insert(scene, secondMesh, null);
     insert(root, scene, null);
 
     createSceneState(root, cache, { dirty: Dirty.All });
@@ -601,108 +646,6 @@ describe('TypeGPU scene compiler', () => {
     expect(second.drawBatches[0].instances[7]).toBeCloseTo(0.5);
     expect(second.drawBatches[0].instances[16]).toBeCloseTo(0.25);
     expect(second.drawBatches[0].instances[18]).toBeCloseTo(0.5);
-  });
-
-  it('compiles instancedMesh array data into one draw batch', () => {
-    const root = createFragment();
-    const scene = createElement('scene');
-    const geometry = createElement('boxGeometry');
-    const material = createElement('phongMaterial');
-    const instanced = createElement('instancedMesh');
-    const instances = [
-      { id: 'a', position: [0, 0, 0] as const, color: [1, 0, 0, 1] as const },
-      { id: 'b', position: [2, 0, 0] as const, color: [0, 1, 0, 1] as const }
-    ];
-
-    setAttribute(instanced, 'position', [1, 0, 0]);
-    setAttribute(instanced, 'instances', instances);
-    setAttribute(instanced, 'getKey', (item: (typeof instances)[number]) => item.id);
-    setAttribute(instanced, 'getTransform', (item: (typeof instances)[number]) => ({
-      position: item.position
-    }));
-    setAttribute(instanced, 'getColor', (item: (typeof instances)[number]) => item.color);
-    setAttribute(
-      instanced,
-      'getSpinSpeed',
-      (_item: (typeof instances)[number], index: number) => index + 1
-    );
-
-    insert(instanced, geometry, null);
-    insert(instanced, material, null);
-    insert(scene, instanced, null);
-    insert(root, scene, null);
-
-    const state = createSceneState(root, createTypeGpuSceneCache(), { dirty: Dirty.All });
-
-    expect(state.drawBatches).toHaveLength(1);
-    expect(state.drawBatches[0].geometryKey).toBe('box:1:1:1');
-    expect(state.drawBatches[0].instanceCount).toBe(2);
-    expect(state.drawBatches[0].instanceIds).toEqual(['a', 'b']);
-    expect(Array.from(state.drawBatches[0].instances.slice(0, 12))).toEqual([
-      1, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1
-    ]);
-    expect(Array.from(state.drawBatches[0].instances.slice(24, 36))).toEqual([
-      3, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 2
-    ]);
-  });
-
-  it('re-packs instancedMesh dirty ranges when callback-derived values change', () => {
-    const root = createFragment();
-    const scene = createElement('scene');
-    const geometry = createElement('boxGeometry');
-    const instanced = createElement('instancedMesh');
-    const cache = createTypeGpuSceneCache();
-    const instances = [
-      { id: 'a', position: [0, 0, 0] as [number, number, number] },
-      { id: 'b', position: [2, 0, 0] as [number, number, number] }
-    ];
-
-    setAttribute(instanced, 'instances', instances);
-    setAttribute(instanced, 'getKey', (item: (typeof instances)[number]) => item.id);
-    setAttribute(instanced, 'getTransform', (item: (typeof instances)[number]) => ({
-      position: item.position
-    }));
-
-    insert(instanced, geometry, null);
-    insert(scene, instanced, null);
-    insert(root, scene, null);
-
-    const first = createSceneState(root, cache, { dirty: Dirty.All });
-    instances[1].position = [4, 0, 0];
-    const second = createSceneState(root, cache, { dirty: Dirty.InstanceData });
-
-    expect(second.drawBatches[0].instances).toBe(first.drawBatches[0].instances);
-    expect(second.drawBatches[0].instancesChanged).toBe(true);
-    expect(second.drawBatches[0].dirtyRanges).toEqual([{ start: 1, count: 1 }]);
-    expect(second.drawBatches[0].instances[24]).toBe(4);
-  });
-
-  it('re-packs instancedMesh dirty ranges for tiny callback-derived position changes', () => {
-    const root = createFragment();
-    const scene = createElement('scene');
-    const geometry = createElement('boxGeometry');
-    const instanced = createElement('instancedMesh');
-    const cache = createTypeGpuSceneCache();
-    const instances = [{ id: 'a', position: [0, 0, 0] as [number, number, number] }];
-
-    setAttribute(instanced, 'instances', instances);
-    setAttribute(instanced, 'getKey', (item: (typeof instances)[number]) => item.id);
-    setAttribute(instanced, 'getTransform', (item: (typeof instances)[number]) => ({
-      position: item.position
-    }));
-
-    insert(instanced, geometry, null);
-    insert(scene, instanced, null);
-    insert(root, scene, null);
-
-    const first = createSceneState(root, cache, { dirty: Dirty.All });
-    instances[0].position = [0.000004, 0, 0];
-    const second = createSceneState(root, cache, { dirty: Dirty.InstanceData });
-
-    expect(second.drawBatches[0].instances).toBe(first.drawBatches[0].instances);
-    expect(second.drawBatches[0].instancesChanged).toBe(true);
-    expect(second.drawBatches[0].dirtyRanges).toEqual([{ start: 0, count: 1 }]);
-    expect(second.drawBatches[0].instances[0]).toBeCloseTo(0.000004);
   });
 
   it('compiles ready model cache entries into imported draw batches', async () => {
