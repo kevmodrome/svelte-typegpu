@@ -13,7 +13,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "mochi-framework": "0.3.2",
+    "mochi-framework": "0.5.0",
     "svelte": "https://pkg.pr.new/svelte@18042",
     "svelte-typegpu": "workspace:*",
     "typegpu": "^0.11.6"
