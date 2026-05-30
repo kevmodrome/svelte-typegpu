@@ -11,7 +11,7 @@
 <SiteShell {activePath} title={`${selected.title} - svelte-typegpu examples`} description="Live TypeGPU examples rewritten with the svelte-typegpu custom renderer.">
   <section class="doc-header compact">
     <p class="eyebrow">Examples</p>
-    <h1>TypeGPU examples, written as Svelte scene components.</h1>
+    <h1 class="examples-title">TypeGPU examples, written as<br class="desktop-title-break" /> Svelte scene components.</h1>
     <p>Each preview is a hydrated WebGPU island. The surrounding documentation and code stay server-rendered HTML.</p>
   </section>
   <ExampleWorkbench {examples} {selected} />

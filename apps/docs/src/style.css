@@ -338,6 +338,11 @@ textarea {
   font-size: 4.45rem;
 }
 
+.doc-header.compact .examples-title {
+  grid-column: 1 / -1;
+  max-width: 22ch;
+}
+
 .doc-header.compact p {
   margin: 0;
 }
@@ -1018,6 +1023,10 @@ textarea {
 
   .doc-header.compact h1 {
     font-size: 3.35rem;
+  }
+
+  .desktop-title-break {
+    display: none;
   }
 
   .example-header h1 {
