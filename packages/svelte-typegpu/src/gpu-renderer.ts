@@ -983,7 +983,7 @@ export function drawTypeGpuShaderPass({
   pass: GPURenderPassEncoder;
   shaderPassBindGroup: TgpuBindGroup<typeof shaderPassBindGroupLayout.entries>;
 }): void {
-  pipeline.with(pass).with(shaderPassBindGroup).draw(3);
+  pipeline.with(pass).with(shaderPassBindGroup).draw(6);
 }
 
 function packShadowState(activeShadow: TypeGpuActiveShadow | null): ArrayBuffer {

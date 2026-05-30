@@ -409,7 +409,7 @@ describe('TypeGPU GPU renderer', () => {
     });
   });
 
-  it('draws fullscreen shader passes through a TypeGPU full-screen triangle pipeline', () => {
+  it('draws fullscreen shader passes through the TypeGPU-compatible full-screen quad pipeline', () => {
     const { pipeline, calls } = createRecordingPipeline();
     const pass = { kind: 'main-render-pass' };
     const shaderPassBindGroup = { kind: 'shader-pass-uniform-bind-group' };
@@ -421,7 +421,7 @@ describe('TypeGPU GPU renderer', () => {
     });
 
     expect(calls).toEqual([[pass], [shaderPassBindGroup]]);
-    expect(pipeline.draw).toHaveBeenCalledWith(3);
+    expect(pipeline.draw).toHaveBeenCalledWith(6);
   });
 
   it('builds and draws a unified render queue ordered across meshes and shader passes', () => {

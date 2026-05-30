@@ -99,6 +99,8 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     expect(wgsl).toContain('var<uniform> uniforms');
     expect(wgsl).toContain('resolution');
     expect(wgsl).toContain('time');
-    expect(pipelineSource).toContain('common.fullScreenTriangle');
+    expect(pipelineSource).toContain('shaderPassVertexMain');
+    expect(pipelineSource).toContain('vec2f(-1.0, 1.0)');
+    expect(pipelineSource).toContain('vec2f(0.0, 1.0)');
   });
 });

@@ -58,6 +58,7 @@ describe('docs example registry', () => {
 
   it('includes the Disco shader-pass example built from renderer primitives', () => {
     const example = getExampleBySlug('interactive-orbit-field');
+    const disco = sourceBundleForSlug('interactive-orbit-field');
 
     expect(example.category).toBe('rendering');
     expect(example.tags).toEqual(expect.arrayContaining(['animation', 'shader', 'fullscreen']));
@@ -65,6 +66,13 @@ describe('docs example registry', () => {
     expect(example.code).toContain("uniforms={{ time: 'time', resolution: 'resolution' }}");
     expect(example.code).toContain('discoFragment');
     expect(example.code).not.toContain('<instancedMesh');
+    expect(disco).toContain('const aspectCorrected');
+    expect(disco).toContain('const palette');
+    expect(disco).toContain('const accumulate');
+    expect(disco).toContain('fract(aspectUv * (1.3 * sin(time))) - 0.5');
+    expect(disco).toContain('let mirroredUv');
+    expect(disco).toContain('let swirl = sin(radius * 10.0 - time * (1.2 + iterationF32 * 0.2))');
+    expect(disco).not.toContain('function createDiscoFragment');
   });
 
   it('mirrors the official examples through declarative renderer features', () => {

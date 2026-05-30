@@ -1,4 +1,4 @@
-import tgpu, { common, d, type TgpuRoot } from 'typegpu';
+import tgpu, { d, type TgpuRoot } from 'typegpu';
 import { DEPTH_FORMAT } from './render-constants';
 import {
   lightingBindGroupLayout,
@@ -159,6 +159,39 @@ export const shadowVertexMain = tgpu
     shadowPassBindGroupLayout
   })
   .$name('shadowVertexMain');
+
+export const shaderPassVertexMain = tgpu
+  .vertexFn({
+    in: { vertexIndex: d.builtin.vertexIndex },
+    out: {
+      position: d.builtin.position,
+      uv: d.vec2f
+    }
+  })/* wgsl */ `{
+    const pos = array<vec2f, 6>(
+      vec2f(-1.0, 1.0),
+      vec2f(-1.0, -1.0),
+      vec2f(1.0, -1.0),
+      vec2f(-1.0, 1.0),
+      vec2f(1.0, -1.0),
+      vec2f(1.0, 1.0)
+    );
+    const uv = array<vec2f, 6>(
+      vec2f(0.0, 1.0),
+      vec2f(0.0, 0.0),
+      vec2f(1.0, 0.0),
+      vec2f(0.0, 1.0),
+      vec2f(1.0, 0.0),
+      vec2f(1.0, 1.0)
+    );
+    var output: Out;
+
+    output.position = vec4f(pos[in.vertexIndex], 0.0, 1.0);
+    output.uv = uv[in.vertexIndex];
+
+    return output;
+  }`
+  .$name('shaderPassVertexMain');
 
 const evaluateShadow = tgpu
   .fn([d.u32, d.vec3f, d.vec3f, d.bool], d.f32)/* wgsl */ `(
@@ -551,7 +584,7 @@ export function createShaderPassPipeline(
   options: TypeGpuShaderPassPipelineOptions = {}
 ) {
   const descriptor = {
-    vertex: common.fullScreenTriangle,
+    vertex: shaderPassVertexMain,
     fragment: shaderPass.fragment,
     targets: {
       format,
