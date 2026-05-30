@@ -68,7 +68,8 @@ export const meshVertexMain = tgpu
       shape: d.vec4f,
       spin_offset: d.f32,
       world_rotation: d.vec3f,
-      material: d.vec4f
+      material: d.vec4f,
+      material_extra: d.vec4f
     },
     out: {
       position: d.builtin.position,
@@ -77,7 +78,8 @@ export const meshVertexMain = tgpu
       material: d.location(2, d.vec4f),
       world_position: d.location(3, d.vec3f),
       uv: d.location(4, d.vec2f),
-      vertex_color: d.location(5, d.vec4f)
+      vertex_color: d.location(5, d.vec4f),
+      material_extra: d.location(6, d.vec4f)
     }
   })/* wgsl */ `{
     let spin = (
@@ -108,6 +110,7 @@ export const meshVertexMain = tgpu
     output.world_position = world_position;
     output.uv = uv;
     output.vertex_color = vertex_color;
+    output.material_extra = material_extra;
 
     return output;
   }`
@@ -344,12 +347,14 @@ export const meshFragmentMain = tgpu
       material: d.location(2, d.vec4f),
       world_position: d.location(3, d.vec3f),
       uv: d.location(4, d.vec2f),
-      vertex_color: d.location(5, d.vec4f)
+      vertex_color: d.location(5, d.vec4f),
+      material_extra: d.location(6, d.vec4f)
     },
     out: d.vec4f
   })/* wgsl */ `{
     let roughness = clamp(in.material.x, 0.0, 1.0);
     let metalness = clamp(in.material.y, 0.0, 1.0);
+    let specular_exponent = select(mix(32.0, 8.0, roughness), in.material_extra.x, in.material_extra.x > 0.0);
     let texel = textureSample(
       materialBindGroupLayout.$.baseColorTexture,
       materialBindGroupLayout.$.baseColorSampler,
@@ -387,7 +392,7 @@ export const meshFragmentMain = tgpu
       } else if (light.kind == 3u) {
         let light_direction = normalize(-light.direction_angle.xyz);
         let diffuse = max(dot(lighting_normal, light_direction), 0.0) * mix(1.0, 0.68, roughness);
-        let specular = pow(max(dot(lighting_normal, light_direction), 0.0), mix(32.0, 8.0, roughness)) *
+        let specular = pow(max(dot(lighting_normal, light_direction), 0.0), specular_exponent) *
           mix(0.08, 0.32, metalness) * (1.0 - roughness * 0.75);
         var shadow_factor = 1.0;
 
@@ -478,7 +483,8 @@ export function createMeshPipeline(
       shape: meshInstanceLayout.attrib.shape,
       spin_offset: meshInstanceLayout.attrib.spinOffset,
       world_rotation: meshInstanceLayout.attrib.worldRotation,
-      material: meshInstanceLayout.attrib.material
+      material: meshInstanceLayout.attrib.material,
+      material_extra: meshInstanceLayout.attrib.materialExtra
     },
     vertex: meshVertexMain,
     fragment: meshFragmentMain,

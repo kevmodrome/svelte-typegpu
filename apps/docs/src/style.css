@@ -708,6 +708,13 @@ textarea {
   align-items: start;
 }
 
+.preview-with-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 14px;
+  align-items: stretch;
+}
+
 .preview-panel {
   position: relative;
   width: 100%;
@@ -769,6 +776,106 @@ textarea {
   background: rgb(11 15 13 / 86%);
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.example-controls {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid rgb(237 248 234 / 18%);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgb(120 214 207 / 8%), transparent 58%),
+    rgb(8 12 11 / 92%);
+  box-shadow: 0 0 0 1px rgb(120 214 207 / 9%) inset;
+}
+
+.example-controls h2 {
+  margin: 0 0 2px;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.control-row {
+  display: grid;
+  grid-template-columns: minmax(98px, 0.85fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.control-row > span {
+  min-width: 0;
+}
+
+.control-row input,
+.control-row select {
+  min-width: 0;
+}
+
+.control-row input[type="range"] {
+  accent-color: var(--mint);
+}
+
+.control-row input[type="color"] {
+  width: 44px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid rgb(237 248 234 / 22%);
+  border-radius: 6px;
+  background: transparent;
+}
+
+.control-row select {
+  grid-column: 2 / 4;
+  min-height: 34px;
+  border: 1px solid rgb(237 248 234 / 18%);
+  border-radius: 6px;
+  background: rgb(5 8 7);
+  color: var(--text);
+  font: inherit;
+}
+
+.control-row output,
+.vector-control output {
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.76rem;
+  font-weight: 850;
+  text-align: right;
+}
+
+.vector-control {
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.vector-control > span {
+  color: var(--muted);
+}
+
+.vector-control label {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) 44px;
+  gap: 8px;
+  align-items: center;
+}
+
+.vector-control small {
+  color: var(--subtle);
+}
+
+.checkbox-control input {
+  justify-self: start;
+  accent-color: var(--mint);
 }
 
 .example-note {
@@ -911,6 +1018,10 @@ textarea {
   }
 
   .source-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .preview-with-controls {
     grid-template-columns: 1fr;
   }
 }

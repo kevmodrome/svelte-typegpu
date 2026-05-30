@@ -82,12 +82,15 @@ describe('docs app source wiring', () => {
   it('hydrates the live preview but keeps the code panel static on the examples route', () => {
     const routeSource = read('./routes/Examples.svelte');
     const workbenchSource = read('./components/ExampleWorkbench.svelte');
+    const previewSource = read('./components/ExamplePreview.svelte');
 
     expect(routeSource).toContain('<ExampleWorkbench');
     expect(workbenchSource).toContain('<ExamplePreview');
     expect(workbenchSource).toContain('<ExamplePreview mochi:hydrate');
     expect(workbenchSource).not.toMatch(/<CodePanel[\s\S]*?mochi:hydrate/);
     expect(workbenchSource).toContain('files={selected.sourceFiles}');
+    expect(previewSource).toContain('Example controls');
+    expect(previewSource).toContain('controlStateForSlug');
   });
 
   it('renders source files as static anchor navigation instead of hydrated tabs', () => {
@@ -164,6 +167,45 @@ describe('docs app source wiring', () => {
     expect(source).toContain('TypeGPU LoC');
     expect(source).toContain('svelte-typegpu LoC');
     expect(source).toContain('less code');
+  });
+
+  it('mirrors official TypeGPU example controls in the hydrated preview', () => {
+    const previewSource = read('./components/ExamplePreview.svelte');
+    const phongSource = read('./examples/phong-reflection/PhongReflection.typegpu.svelte');
+    const simpleShadowSource = read('./examples/simple-shadow/SimpleShadow.typegpu.svelte');
+    const simpleShadowLightsSource = read('./examples/simple-shadow/ShadowLights.typegpu.svelte');
+    const discoSource = read('./examples/interactive-orbit-field/InteractiveOrbitField.typegpu.svelte');
+
+    for (const label of [
+      'light color',
+      'light direction',
+      'ambient color',
+      'ambient strength',
+      'specular exponent',
+      'camera X',
+      'light X',
+      'light Y',
+      'light Z',
+      'cuboid thickness',
+      'shadow map size',
+      'shadow map filtering',
+      'display mode',
+      'Pattern'
+    ]) {
+      expect(previewSource).toContain(label);
+    }
+
+    expect(phongSource).toContain('phongControls');
+    expect(phongSource).toContain('phongControls.lightDirection');
+    expect(phongSource).toContain('specularExponent={phongControls.specularExponent}');
+    expect(simpleShadowSource).toContain('simpleShadowControls');
+    expect(simpleShadowSource).toContain('simpleShadowControls.cameraX');
+    expect(simpleShadowSource).toContain('simpleShadowControls.cuboidThickness');
+    expect(simpleShadowSource).toContain('simpleShadowControls.shadowMapSize');
+    expect(simpleShadowLightsSource).toContain('shadowMapSize={shadowMapSize}');
+    expect(discoSource).toContain('discoControls');
+    expect(discoSource).toContain("discoControls.pattern === 'pattern1'");
+    expect(discoSource).toContain("discoControls.pattern === 'pattern7'");
   });
 
   it('generates aggregate source samples and LoC metadata', () => {

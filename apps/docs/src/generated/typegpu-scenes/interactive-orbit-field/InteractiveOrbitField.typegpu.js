@@ -4,7 +4,16 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
-import { discoFragment } from './disco-fragment.js';
+
+import {
+	discoFragment1,
+	discoFragment2,
+	discoFragment3,
+	discoFragment4,
+	discoFragment5,
+	discoFragment6,
+	discoFragment7
+} from './disco-fragment.js';
 
 var root = $.from_tree([
 	[
@@ -12,12 +21,29 @@ var root = $.from_tree([
 		null,
 		['perspectiveCamera', { id: 'main' }],
 		' ',
+		['shaderPass'],
+		' ',
+		['shaderPass'],
+		' ',
+		['shaderPass'],
+		' ',
+		['shaderPass'],
+		' ',
+		['shaderPass'],
+		' ',
+		['shaderPass'],
+		' ',
 		['shaderPass']
 	]
 ]);
 
-export default function InteractiveOrbitField_typegpu($$anchor) {
+export default function InteractiveOrbitField_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
+
+	$.push($$props, true);
+
+	const defaultDiscoControls = { pattern: 'pattern1' };
+	let discoControls = $.prop($$props, 'controls', 3, defaultDiscoControls);
 	var scene = root();
 
 	$.set_attribute(scene, 'clearColor', [0, 0, 0, 1]);
@@ -35,10 +61,57 @@ export default function InteractiveOrbitField_typegpu($$anchor) {
 	var shaderPass = $.sibling(perspectiveCamera, 2);
 
 	$.set_attribute(shaderPass, 'uniforms', { time: 'time', resolution: 'resolution' });
-	$.set_attribute(shaderPass, 'active', true);
 	$.set_attribute(shaderPass, 'renderOrder', 0);
+
+	var shaderPass_1 = $.sibling(shaderPass, 2);
+
+	$.set_attribute(shaderPass_1, 'uniforms', { time: 'time', resolution: 'resolution' });
+	$.set_attribute(shaderPass_1, 'renderOrder', 1);
+
+	var shaderPass_2 = $.sibling(shaderPass_1, 2);
+
+	$.set_attribute(shaderPass_2, 'uniforms', { time: 'time', resolution: 'resolution' });
+	$.set_attribute(shaderPass_2, 'renderOrder', 2);
+
+	var shaderPass_3 = $.sibling(shaderPass_2, 2);
+
+	$.set_attribute(shaderPass_3, 'uniforms', { time: 'time', resolution: 'resolution' });
+	$.set_attribute(shaderPass_3, 'renderOrder', 3);
+
+	var shaderPass_4 = $.sibling(shaderPass_3, 2);
+
+	$.set_attribute(shaderPass_4, 'uniforms', { time: 'time', resolution: 'resolution' });
+	$.set_attribute(shaderPass_4, 'renderOrder', 4);
+
+	var shaderPass_5 = $.sibling(shaderPass_4, 2);
+
+	$.set_attribute(shaderPass_5, 'uniforms', { time: 'time', resolution: 'resolution' });
+	$.set_attribute(shaderPass_5, 'renderOrder', 5);
+
+	var shaderPass_6 = $.sibling(shaderPass_5, 2);
+
+	$.set_attribute(shaderPass_6, 'uniforms', { time: 'time', resolution: 'resolution' });
+	$.set_attribute(shaderPass_6, 'renderOrder', 6);
 	$.reset(scene);
-	$.template_effect(() => $.set_attribute(shaderPass, 'fragment', discoFragment));
+
+	$.template_effect(() => {
+		$.set_attribute(shaderPass, 'fragment', discoFragment1);
+		$.set_attribute(shaderPass, 'active', discoControls().pattern === 'pattern1');
+		$.set_attribute(shaderPass_1, 'fragment', discoFragment2);
+		$.set_attribute(shaderPass_1, 'active', discoControls().pattern === 'pattern2');
+		$.set_attribute(shaderPass_2, 'fragment', discoFragment3);
+		$.set_attribute(shaderPass_2, 'active', discoControls().pattern === 'pattern3');
+		$.set_attribute(shaderPass_3, 'fragment', discoFragment4);
+		$.set_attribute(shaderPass_3, 'active', discoControls().pattern === 'pattern4');
+		$.set_attribute(shaderPass_4, 'fragment', discoFragment5);
+		$.set_attribute(shaderPass_4, 'active', discoControls().pattern === 'pattern5');
+		$.set_attribute(shaderPass_5, 'fragment', discoFragment6);
+		$.set_attribute(shaderPass_5, 'active', discoControls().pattern === 'pattern6');
+		$.set_attribute(shaderPass_6, 'fragment', discoFragment7);
+		$.set_attribute(shaderPass_6, 'active', discoControls().pattern === 'pattern7');
+	});
+
 	$.append($$anchor, scene);
+	$.pop();
 	$$pop_renderer();
 }

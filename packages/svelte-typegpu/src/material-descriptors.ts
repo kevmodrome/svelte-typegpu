@@ -34,6 +34,7 @@ export interface TypeGpuMaterialDescriptorInput {
   opacity?: unknown;
   roughness?: unknown;
   metalness?: unknown;
+  specularExponent?: unknown;
   map?: unknown;
   texture?: unknown;
   sampler?: unknown;
@@ -75,6 +76,7 @@ export function createMaterialDescriptor(
     opacity,
     roughness: numberArg(input.roughness, defaultRoughness(kind)),
     metalness: numberArg(input.metalness, defaultMetalness(kind)),
+    specularExponent: nonNegativeMaterialNumber(input.specularExponent, defaultSpecularExponent(kind)),
     textureKey,
     samplerKey,
     texture,
@@ -103,6 +105,7 @@ export function materialKeyFor(input: TypeGpuMaterialDescriptor): string {
     colorKey(input.color),
     `roughness:${input.roughness}`,
     `metalness:${input.metalness}`,
+    `specularExponent:${input.specularExponent}`,
     `opacity:${input.opacity}`,
     input.textureKey ?? 'solid:white',
     input.samplerKey ?? DEFAULT_SAMPLER.key,
@@ -230,6 +233,15 @@ function defaultRoughness(kind: TypeGpuMaterialKind): number {
 
 function defaultMetalness(kind: TypeGpuMaterialKind): number {
   return kind === 'standard' ? 0.05 : 0;
+}
+
+function defaultSpecularExponent(kind: TypeGpuMaterialKind): number {
+  return kind === 'phong' ? 8 : 0;
+}
+
+function nonNegativeMaterialNumber(value: unknown, fallback: number): number {
+  const resolved = numberArg(value, fallback);
+  return Number.isFinite(resolved) ? Math.max(0, resolved) : fallback;
 }
 
 function pipelineKeyFor(input: TypeGpuMaterialDescriptor): string {

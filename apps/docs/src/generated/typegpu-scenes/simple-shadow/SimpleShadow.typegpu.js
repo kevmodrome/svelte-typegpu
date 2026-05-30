@@ -42,8 +42,23 @@ var root = $.from_tree([
 	]
 ]);
 
-export default function SimpleShadow_typegpu($$anchor) {
+export default function SimpleShadow_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
+
+	$.push($$props, true);
+
+	const defaultSimpleShadowControls = {
+		cameraX: -4.9,
+		lightX: -0.5,
+		lightY: -0.7,
+		lightZ: -1,
+		cuboidThickness: 0.3,
+		shadowMapSize: 2048,
+		shadowMapFiltering: true,
+		displayMode: 'color'
+	};
+
+	let simpleShadowControls = $.prop($$props, 'controls', 3, defaultSimpleShadowControls);
 	var scene = root();
 
 	$.set_attribute(scene, 'clearColor', [0.1, 0.1, 0.1, 1]);
@@ -51,7 +66,6 @@ export default function SimpleShadow_typegpu($$anchor) {
 	var perspectiveCamera = $.child(scene);
 
 	$.set_attribute(perspectiveCamera, 'active', true);
-	$.set_attribute(perspectiveCamera, 'position', [0, 2, 5]);
 	$.set_attribute(perspectiveCamera, 'target', [0, 0, 0]);
 	$.set_attribute(perspectiveCamera, 'fov', 45);
 	$.set_attribute(perspectiveCamera, 'near', 0.1);
@@ -74,7 +88,6 @@ export default function SimpleShadow_typegpu($$anchor) {
 
 	$.set_attribute(boxGeometry, 'width', 1);
 	$.set_attribute(boxGeometry, 'height', 1);
-	$.set_attribute(boxGeometry, 'depth', 0.3);
 
 	var planeGeometry = $.sibling(boxGeometry, 2);
 
@@ -96,7 +109,31 @@ export default function SimpleShadow_typegpu($$anchor) {
 
 	var node = $.sibling(resources, 2);
 
-	$.without_renderer(() => ShadowLights(node, {}));
+	{
+		let $0 = $.derived(() => [
+			simpleShadowControls().lightX,
+			simpleShadowControls().lightY,
+			simpleShadowControls().lightZ
+		]);
+
+		$.without_renderer(() => ShadowLights(node, {
+			get lightDirection() {
+				return $.get($0);
+			},
+
+			get shadowMapSize() {
+				return simpleShadowControls().shadowMapSize;
+			},
+
+			get shadowMapFiltering() {
+				return simpleShadowControls().shadowMapFiltering;
+			},
+
+			get displayMode() {
+				return simpleShadowControls().displayMode;
+			}
+		}));
+	}
 
 	var mesh = $.sibling(node, 2);
 
@@ -108,6 +145,13 @@ export default function SimpleShadow_typegpu($$anchor) {
 
 	$.without_renderer(() => ShadowSubject(node_1, {}));
 	$.reset(scene);
+
+	$.template_effect(() => {
+		$.set_attribute(perspectiveCamera, 'position', [simpleShadowControls().cameraX, 2, 5]);
+		$.set_attribute(boxGeometry, 'depth', simpleShadowControls().cuboidThickness);
+	});
+
 	$.append($$anchor, scene);
+	$.pop();
 	$$pop_renderer();
 }

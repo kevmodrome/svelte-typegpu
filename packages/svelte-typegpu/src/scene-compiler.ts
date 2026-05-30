@@ -653,6 +653,9 @@ function mergeModelMaterial(
   if (attrs.color !== undefined) merged.color = override.color;
   if (attrs.roughness !== undefined) merged.roughness = override.roughness;
   if (attrs.metalness !== undefined) merged.metalness = override.metalness;
+  if (attrs.specularExponent !== undefined) {
+    merged.specularExponent = override.specularExponent;
+  }
   if (attrs.opacity !== undefined) merged.opacity = override.opacity;
   if (attrs.map !== undefined) {
     merged.map = override.map;

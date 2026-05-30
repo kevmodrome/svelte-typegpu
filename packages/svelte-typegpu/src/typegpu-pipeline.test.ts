@@ -27,6 +27,7 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     expect(wgsl).toContain('in.vertex_color');
     expect(wgsl).toContain('in.normal');
     expect(wgsl).toContain('in.material');
+    expect(wgsl).toContain('in.material_extra');
     expect(wgsl).toContain('color_transform');
     expect(wgsl).toContain('rotate_hue');
 
@@ -58,6 +59,7 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     expect(wgsl).toContain('texel * in.color * in.vertex_color');
     expect(wgsl).toContain('shifted_color * 0.08');
     expect(wgsl).toContain('texel.a * in.color.a * in.vertex_color.a * in.material.z');
+    expect(wgsl).toContain('specular_exponent');
   });
 
   it('resolves the depth-only shadow vertex shader with the shadow matrix bind group', () => {

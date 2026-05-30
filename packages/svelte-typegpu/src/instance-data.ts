@@ -2,7 +2,7 @@ import type { TypeGpuMeshDrawItem } from './types';
 
 export const MESH_VERTEX_FLOATS = 12;
 export const MESH_VERTEX_LAYOUT_KEY = 'position:normal:uv:color';
-export const MESH_INSTANCE_FLOATS = 20;
+export const MESH_INSTANCE_FLOATS = 24;
 export const MESH_SPIN_SPEED_OFFSET = 11;
 export const MESH_SPIN_OFFSET_OFFSET = 12;
 export const MESH_ROTATION_OFFSET = 13;
@@ -10,6 +10,8 @@ export const MESH_MATERIAL_PARAMS_OFFSET = 16;
 export const MESH_ROUGHNESS_OFFSET = MESH_MATERIAL_PARAMS_OFFSET;
 export const MESH_METALNESS_OFFSET = MESH_MATERIAL_PARAMS_OFFSET + 1;
 export const MESH_OPACITY_OFFSET = MESH_MATERIAL_PARAMS_OFFSET + 2;
+export const MESH_MATERIAL_EXTRA_OFFSET = 20;
+export const MESH_SPECULAR_EXPONENT_OFFSET = MESH_MATERIAL_EXTRA_OFFSET;
 export const MESH_HAS_TEXTURE_FLAG = 1;
 export const MESH_TRANSPARENT_FLAG = 2;
 export const MESH_DEPTH_WRITE_DISABLED_FLAG = 4;
@@ -40,6 +42,7 @@ export function packMeshInstance(
   instances[offset + MESH_METALNESS_OFFSET] = item.material.metalness;
   instances[offset + MESH_OPACITY_OFFSET] = item.material.opacity;
   instances[offset + MESH_MATERIAL_PARAMS_OFFSET + 3] = materialFlags(item);
+  instances[offset + MESH_SPECULAR_EXPONENT_OFFSET] = item.material.specularExponent ?? 0;
 }
 
 function materialFlags(item: TypeGpuMeshDrawItem): number {

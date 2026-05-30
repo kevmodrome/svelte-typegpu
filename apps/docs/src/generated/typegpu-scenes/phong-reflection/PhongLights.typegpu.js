@@ -7,20 +7,28 @@ import * as $ from 'svelte/internal/client';
 
 var root = $.from_tree([['ambientLight'], ' ', ['directionalLight']], 1);
 
-export default function PhongLights_typegpu($$anchor) {
+export default function PhongLights_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
+
+	let lightColor = $.prop($$props, 'lightColor', 19, () => [0.8, 0.8, 0.8]),
+		lightDirection = $.prop($$props, 'lightDirection', 19, () => [0, 7, -7]),
+		ambientColor = $.prop($$props, 'ambientColor', 19, () => [1, 0.7, 0]),
+		ambientStrength = $.prop($$props, 'ambientStrength', 3, 0.5);
+
 	var fragment = root();
 	var ambientLight = $.first_child(fragment);
-
-	$.set_attribute(ambientLight, 'color', [1, 0.7, 0]);
-	$.set_attribute(ambientLight, 'intensity', 0.5);
-
 	var directionalLight = $.sibling(ambientLight, 2);
 
-	$.set_attribute(directionalLight, 'position', [0, 7, -7]);
 	$.set_attribute(directionalLight, 'lookAt', [0, 0, 0]);
-	$.set_attribute(directionalLight, 'color', [0.8, 0.8, 0.8]);
 	$.set_attribute(directionalLight, 'intensity', 1);
+
+	$.template_effect(() => {
+		$.set_attribute(ambientLight, 'color', ambientColor());
+		$.set_attribute(ambientLight, 'intensity', ambientStrength());
+		$.set_attribute(directionalLight, 'position', lightDirection());
+		$.set_attribute(directionalLight, 'color', lightColor());
+	});
+
 	$.append($$anchor, fragment);
 	$$pop_renderer();
 }

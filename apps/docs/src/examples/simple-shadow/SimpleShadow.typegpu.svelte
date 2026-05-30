@@ -1,13 +1,39 @@
 <script lang="ts">
   import ShadowLights from './ShadowLights.typegpu.svelte';
   import ShadowSubject from './ShadowSubject.typegpu.svelte';
+
+  interface SimpleShadowControls {
+    cameraX: number;
+    lightX: number;
+    lightY: number;
+    lightZ: number;
+    cuboidThickness: number;
+    shadowMapSize: number;
+    shadowMapFiltering: boolean;
+    displayMode: string;
+  }
+
+  const defaultSimpleShadowControls: SimpleShadowControls = {
+    cameraX: -4.9,
+    lightX: -0.5,
+    lightY: -0.7,
+    lightZ: -1,
+    cuboidThickness: 0.3,
+    shadowMapSize: 2048,
+    shadowMapFiltering: true,
+    displayMode: 'color'
+  };
+
+  let {
+    controls: simpleShadowControls = defaultSimpleShadowControls
+  }: { controls?: SimpleShadowControls } = $props();
 </script>
 
 <scene clearColor={[0.1, 0.1, 0.1, 1]}>
   <perspectiveCamera
     id="main"
     active={true}
-    position={[0, 2, 5]}
+    position={[simpleShadowControls.cameraX, 2, 5]}
     target={[0, 0, 0]}
     fov={45}
     near={0.1}
@@ -25,7 +51,7 @@
   </perspectiveCamera>
 
   <resources>
-    <boxGeometry id="cuboid" width={1} height={1} depth={0.3}></boxGeometry>
+    <boxGeometry id="cuboid" width={1} height={1} depth={simpleShadowControls.cuboidThickness}></boxGeometry>
     <planeGeometry id="floor" width={5} height={5}></planeGeometry>
     <phongMaterial
       id="cuboid-material"
@@ -42,7 +68,16 @@
     ></phongMaterial>
   </resources>
 
-  <ShadowLights />
+  <ShadowLights
+    lightDirection={[
+      simpleShadowControls.lightX,
+      simpleShadowControls.lightY,
+      simpleShadowControls.lightZ
+    ]}
+    shadowMapSize={simpleShadowControls.shadowMapSize}
+    shadowMapFiltering={simpleShadowControls.shadowMapFiltering}
+    displayMode={simpleShadowControls.displayMode}
+  />
   <mesh
     geometry="floor"
     material="floor-material"

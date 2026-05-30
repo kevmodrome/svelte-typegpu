@@ -235,6 +235,7 @@ export interface TypeGpuMaterialDescriptorBase<K extends TypeGpuMaterialKind> {
   opacity: number;
   roughness: number;
   metalness: number;
+  specularExponent?: number;
   textureKey?: string;
   samplerKey?: string;
   texture?: TypeGpuTextureSource | null;

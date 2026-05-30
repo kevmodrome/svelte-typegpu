@@ -94,6 +94,11 @@ describe('TypeGPU layout schemas', () => {
           shaderLocation: 10,
           offset: MESH_ROUGHNESS_OFFSET * Float32Array.BYTES_PER_ELEMENT,
           format: 'float32x4'
+        },
+        {
+          shaderLocation: 11,
+          offset: 20 * Float32Array.BYTES_PER_ELEMENT,
+          format: 'float32x4'
         }
       ]
     });

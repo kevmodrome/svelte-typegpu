@@ -32,8 +32,20 @@ var root = $.from_tree([
 	]
 ]);
 
-export default function PhongReflection_typegpu($$anchor) {
+export default function PhongReflection_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
+
+	$.push($$props, true);
+
+	const defaultPhongControls = {
+		lightColor: [0.8, 0.8, 0.8],
+		lightDirection: [0, 7, -7],
+		ambientColor: [1, 0.7, 0],
+		ambientStrength: 0.5,
+		specularExponent: 8
+	};
+
+	let phongControls = $.prop($$props, 'controls', 3, defaultPhongControls);
 	var scene = root();
 
 	$.set_attribute(scene, 'clearColor', [28 / 255, 28 / 255, 28 / 255, 1]);
@@ -61,7 +73,23 @@ export default function PhongReflection_typegpu($$anchor) {
 
 	var node = $.sibling(perspectiveCamera, 2);
 
-	$.without_renderer(() => PhongLights(node, {}));
+	$.without_renderer(() => PhongLights(node, {
+		get lightColor() {
+			return phongControls().lightColor;
+		},
+
+		get lightDirection() {
+			return phongControls().lightDirection;
+		},
+
+		get ambientColor() {
+			return phongControls().ambientColor;
+		},
+
+		get ambientStrength() {
+			return phongControls().ambientStrength;
+		}
+	}));
 
 	var model = $.sibling(node, 2);
 
@@ -76,6 +104,8 @@ export default function PhongReflection_typegpu($$anchor) {
 	$.set_attribute(phongMaterial, 'metalness', 0);
 	$.reset(model);
 	$.reset(scene);
+	$.template_effect(() => $.set_attribute(phongMaterial, 'specularExponent', phongControls().specularExponent));
 	$.append($$anchor, scene);
+	$.pop();
 	$$pop_renderer();
 }

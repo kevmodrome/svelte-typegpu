@@ -84,12 +84,13 @@ describe('docs example registry', () => {
 
     expect(simpleShadow).toContain('castShadow');
     expect(simpleShadow).toContain('receiveShadow');
-    expect(simpleShadow).toContain('shadowMapSize={2048}');
-    expect(simpleShadow).toContain('shadowBias={1}');
-    expect(simpleShadow).toContain('shadowSlopeBias={4}');
+    expect(simpleShadow).toContain('shadowMapSize={simpleShadowControls.shadowMapSize}');
+    expect(simpleShadow).toContain('shadowBias={shadowBias}');
+    expect(simpleShadow).toContain('shadowSlopeBias={shadowSlopeBias}');
 
     expect(disco).toContain('<shaderPass');
-    expect(disco).toContain('fragment={discoFragment}');
+    expect(disco).toContain('fragment={discoFragment1}');
+    expect(disco).toContain('fragment={discoFragment7}');
     expect(disco).toContain("uniforms={{ time: 'time', resolution: 'resolution' }}");
   });
 

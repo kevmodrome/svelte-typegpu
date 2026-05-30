@@ -612,7 +612,7 @@ describe('TypeGPU scene compiler', () => {
     expect(Array.from(state.drawBatches[0].instances.slice(0, 12))).toEqual([
       1, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1
     ]);
-    expect(Array.from(state.drawBatches[0].instances.slice(20, 32))).toEqual([
+    expect(Array.from(state.drawBatches[0].instances.slice(24, 36))).toEqual([
       3, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 2
     ]);
   });
@@ -645,7 +645,7 @@ describe('TypeGPU scene compiler', () => {
     expect(second.drawBatches[0].instances).toBe(first.drawBatches[0].instances);
     expect(second.drawBatches[0].instancesChanged).toBe(true);
     expect(second.drawBatches[0].dirtyRanges).toEqual([{ start: 1, count: 1 }]);
-    expect(second.drawBatches[0].instances[20]).toBe(4);
+    expect(second.drawBatches[0].instances[24]).toBe(4);
   });
 
   it('re-packs instancedMesh dirty ranges for tiny callback-derived position changes', () => {

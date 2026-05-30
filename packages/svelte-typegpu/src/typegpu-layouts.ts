@@ -17,7 +17,8 @@ export const typegpuMeshInstanceSchema = d.unstruct({
   shape: d.location(7, d.float32x4),
   spinOffset: d.location(8, d.float32),
   worldRotation: d.location(9, d.float32x3),
-  material: d.location(10, d.float32x4)
+  material: d.location(10, d.float32x4),
+  materialExtra: d.location(11, d.float32x4)
 });
 
 export const meshVertexLayout = tgpu.vertexLayout(d.disarrayOf(typegpuMeshVertexSchema), 'vertex');

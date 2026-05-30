@@ -61,7 +61,13 @@ const controlAttributes = new Set([
 const geometryNames = new Set(['boxGeometry', 'planeGeometry', 'sphereGeometry', 'bufferGeometry']);
 const materialNames = new Set(['basicMaterial', 'phongMaterial', 'standardMaterial']);
 const meshNames = new Set(['mesh', 'instancedMesh', 'model']);
-const materialUniformAttributes = new Set(['color', 'opacity', 'roughness', 'metalness']);
+const materialUniformAttributes = new Set([
+  'color',
+  'opacity',
+  'roughness',
+  'metalness',
+  'specularExponent'
+]);
 const materialBindAttributes = new Set(['map', 'sampler']);
 const materialPipelineAttributes = new Set([
   'transparent',

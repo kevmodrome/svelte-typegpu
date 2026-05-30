@@ -7,24 +7,38 @@ import * as $ from 'svelte/internal/client';
 
 var root = $.from_tree([['ambientLight'], ' ', ['directionalLight']], 1);
 
-export default function ShadowLights_typegpu($$anchor) {
+export default function ShadowLights_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
+
+	let lightDirection = $.prop($$props, 'lightDirection', 19, () => [-0.5, -0.7, -1]),
+		shadowMapSize = $.prop($$props, 'shadowMapSize', 3, 2048),
+		shadowMapFiltering = $.prop($$props, 'shadowMapFiltering', 3, true),
+		displayMode = $.prop($$props, 'displayMode', 3, 'color');
+
+	const shadowBias = $.derived(() => shadowMapFiltering() ? 1 : 0.35);
+	const shadowSlopeBias = $.derived(() => shadowMapFiltering() ? 4 : 1.2);
+	const lightIntensity = $.derived(() => displayMode() === 'light depth' ? 0.55 : 1.25);
+	const ambientIntensity = $.derived(() => displayMode() === 'shadow' || displayMode() === 'inverse shadow' ? 0.02 : 0.1);
 	var fragment = root();
 	var ambientLight = $.first_child(fragment);
 
 	$.set_attribute(ambientLight, 'color', [1, 1, 1]);
-	$.set_attribute(ambientLight, 'intensity', 0.1);
 
 	var directionalLight = $.sibling(ambientLight, 2);
 
-	$.set_attribute(directionalLight, 'position', [0, 4, 4]);
 	$.set_attribute(directionalLight, 'lookAt', [0, 0, 0]);
 	$.set_attribute(directionalLight, 'color', [1, 1, 1]);
-	$.set_attribute(directionalLight, 'intensity', 1.25);
 	$.set_attribute(directionalLight, 'castShadow', true);
-	$.set_attribute(directionalLight, 'shadowMapSize', 2048);
-	$.set_attribute(directionalLight, 'shadowBias', 1);
-	$.set_attribute(directionalLight, 'shadowSlopeBias', 4);
+
+	$.template_effect(() => {
+		$.set_attribute(ambientLight, 'intensity', $.get(ambientIntensity));
+		$.set_attribute(directionalLight, 'position', lightDirection());
+		$.set_attribute(directionalLight, 'intensity', $.get(lightIntensity));
+		$.set_attribute(directionalLight, 'shadowMapSize', shadowMapSize());
+		$.set_attribute(directionalLight, 'shadowBias', $.get(shadowBias));
+		$.set_attribute(directionalLight, 'shadowSlopeBias', $.get(shadowSlopeBias));
+	});
+
 	$.append($$anchor, fragment);
 	$$pop_renderer();
 }

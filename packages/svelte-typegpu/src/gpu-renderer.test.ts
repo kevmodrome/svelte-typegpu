@@ -45,7 +45,7 @@ describe('TypeGPU GPU renderer', () => {
   });
 
   it('uses the mesh instance layout expected by the render pipeline', () => {
-    expect(MESH_INSTANCE_FLOATS).toBe(20);
+    expect(MESH_INSTANCE_FLOATS).toBe(24);
     expect(MESH_ROTATION_OFFSET).toBe(13);
   });
 

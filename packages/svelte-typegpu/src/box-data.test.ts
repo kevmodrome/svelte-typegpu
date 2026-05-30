@@ -29,7 +29,7 @@ describe('TypeGPU box data', () => {
   });
 
   it('aliases the packed mesh instance fields used by box batches', () => {
-    expect(BOX_INSTANCE_FLOATS).toBe(20);
+    expect(BOX_INSTANCE_FLOATS).toBe(24);
     expect(BOX_SPIN_SPEED_OFFSET).toBe(11);
     expect(BOX_SPIN_OFFSET_OFFSET).toBe(12);
   });

@@ -58,4 +58,13 @@ describe('TypeGPU material helpers', () => {
     expect(material.pipelineKey).toContain('blend:alpha');
     expect(material.pipelineKey).not.toContain('url:/textures/a.png');
   });
+
+  it('reads Phong specular exponent as a material parameter', () => {
+    const material = createMaterialDescriptor('phong', {
+      specularExponent: 8
+    });
+
+    expect(material.specularExponent).toBe(8);
+    expect(material.key).toContain('specularExponent:8');
+  });
 });
