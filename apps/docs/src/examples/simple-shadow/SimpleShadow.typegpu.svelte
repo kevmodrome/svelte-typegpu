@@ -70,13 +70,13 @@
     <planeGeometry id="floor" width={5} height={5}></planeGeometry>
     <phongMaterial
       id="cuboid-material"
-      color={[0.9, 0.5, 0.34, 1]}
+      color={[0.8, 0.7, 0.7, 1]}
       roughness={0.38}
       metalness={0}
     ></phongMaterial>
     <phongMaterial
       id="floor-material"
-      color={[0.82, 0.86, 0.92, 1]}
+      color={[0.5, 0.4, 0.7, 1]}
       roughness={0.68}
       metalness={0}
       cullMode="none"

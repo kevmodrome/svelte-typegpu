@@ -85,8 +85,8 @@ describe('docs example registry', () => {
     expect(simpleShadow).toContain('castShadow');
     expect(simpleShadow).toContain('receiveShadow');
     expect(simpleShadow).toContain('shadowMapSize={simpleShadowControls.shadowMapSize}');
-    expect(simpleShadow).toContain('shadowBias={shadowBias}');
-    expect(simpleShadow).toContain('shadowSlopeBias={shadowSlopeBias}');
+    expect(simpleShadow).toContain('shadowBias={TYPEGPU_SHADOW_DEPTH_BIAS}');
+    expect(simpleShadow).toContain('shadowSlopeBias={TYPEGPU_SHADOW_SLOPE_BIAS}');
 
     expect(disco).toContain('<shaderPass');
     expect(disco).toContain('fragment={discoFragment1}');

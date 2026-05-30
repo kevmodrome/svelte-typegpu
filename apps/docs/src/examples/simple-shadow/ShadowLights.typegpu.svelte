@@ -1,4 +1,7 @@
 <script lang="ts">
+  const TYPEGPU_SHADOW_DEPTH_BIAS = 1 / 1_000_000;
+  const TYPEGPU_SHADOW_SLOPE_BIAS = 4;
+
   let {
     lightDirection = [-0.5, -0.7, -1],
     shadowMapSize = 2048,
@@ -11,8 +14,6 @@
     displayMode?: string;
   } = $props();
 
-  const shadowBias = $derived(shadowMapFiltering ? 1 : 0.35);
-  const shadowSlopeBias = $derived(shadowMapFiltering ? 4 : 1.2);
   const lightPosition = $derived(
     [-lightDirection[0], -lightDirection[1], -lightDirection[2]] as [number, number, number]
   );
@@ -28,6 +29,6 @@
   intensity={lightIntensity}
   castShadow={true}
   shadowMapSize={shadowMapSize}
-  shadowBias={shadowBias}
-  shadowSlopeBias={shadowSlopeBias}
+  shadowBias={TYPEGPU_SHADOW_DEPTH_BIAS}
+  shadowSlopeBias={TYPEGPU_SHADOW_SLOPE_BIAS}
 ></directionalLight>

@@ -99,13 +99,13 @@ export default function SimpleShadow_typegpu($$anchor, $$props) {
 
 	var phongMaterial = $.sibling(planeGeometry, 2);
 
-	$.set_attribute(phongMaterial, 'color', [0.9, 0.5, 0.34, 1]);
+	$.set_attribute(phongMaterial, 'color', [0.8, 0.7, 0.7, 1]);
 	$.set_attribute(phongMaterial, 'roughness', 0.38);
 	$.set_attribute(phongMaterial, 'metalness', 0);
 
 	var phongMaterial_1 = $.sibling(phongMaterial, 2);
 
-	$.set_attribute(phongMaterial_1, 'color', [0.82, 0.86, 0.92, 1]);
+	$.set_attribute(phongMaterial_1, 'color', [0.5, 0.4, 0.7, 1]);
 	$.set_attribute(phongMaterial_1, 'roughness', 0.68);
 	$.set_attribute(phongMaterial_1, 'metalness', 0);
 	$.reset(resources);
