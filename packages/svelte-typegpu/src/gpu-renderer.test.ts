@@ -609,6 +609,24 @@ describe('TypeGPU GPU renderer', () => {
     expect(shadowDepthForPoint(matrix, [0, 0, 0])).toBeCloseTo(receiverDepth);
   });
 
+  it('keeps the directional shadow projection continuous near vertical light directions', () => {
+    const leftOfUp = createDirectionalShadowViewProjection(
+      lightFixture({ direction: [0.22, -0.7, 0] }),
+      [drawBatchFixture()],
+      1
+    );
+    const rightOfUp = createDirectionalShadowViewProjection(
+      lightFixture({ direction: [0.24, -0.7, 0] }),
+      [drawBatchFixture()],
+      1
+    );
+    const leftPoint = shadowClipPoint(leftOfUp, [0.5, 0, 0.5]);
+    const rightPoint = shadowClipPoint(rightOfUp, [0.5, 0, 0.5]);
+
+    expect(Math.abs(leftPoint[0] - rightPoint[0])).toBeLessThan(0.05);
+    expect(Math.abs(leftPoint[1] - rightPoint[1])).toBeLessThan(0.05);
+  });
+
   it('uses conservative shadow bounds that include scene scale and rotations', () => {
     const batch = drawBatchFixture({
       geometryBounds: {
@@ -682,6 +700,20 @@ describe('TypeGPU GPU renderer', () => {
     ]);
   });
 });
+
+function shadowClipPoint(
+  matrix: Float32Array,
+  point: [number, number, number]
+): [number, number, number] {
+  const [x, y, z] = point;
+  const w = matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15];
+
+  return [
+    (matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12]) / w,
+    (matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13]) / w,
+    (matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14]) / w
+  ];
+}
 
 function urlTexture(src: string): TypeGpuTextureSource {
   return {

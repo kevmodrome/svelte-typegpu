@@ -1014,7 +1014,7 @@ export function createDirectionalShadowViewProjection(
   const radius = bounds ? shadowRadiusForBounds(bounds) : DEFAULT_SHADOW_CAMERA_RADIUS;
   const direction = normalize3(light.direction, [0, -1, 0]);
   const eye = add3(center, scale3(direction, -radius * 2));
-  const up: Vector3Tuple = Math.abs(direction[1]) > 0.95 ? [0, 0, 1] : [0, 1, 0];
+  const up: Vector3Tuple = Math.abs(direction[2]) > 0.95 ? [0, 1, 0] : [0, 0, 1];
   const view = lookAtMatrix(eye, center, up);
   const projection = orthographicDepthZeroToOneMatrix(-radius, radius, -radius, radius, 0.1, radius * 4);
 
