@@ -766,6 +766,39 @@ textarea {
   touch-action: none;
 }
 
+.fps-badge {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 3;
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 76px;
+  padding: 8px 10px;
+  border: 1px solid rgb(189 244 231 / 24%);
+  border-radius: 8px;
+  background: rgb(7 12 11 / 74%);
+  box-shadow: 0 0 0 1px rgb(120 214 207 / 10%) inset;
+  color: var(--paper);
+  pointer-events: none;
+}
+
+.fps-badge span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.fps-badge strong {
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
 .preview-status {
   position: absolute;
   inset: auto 14px 14px;

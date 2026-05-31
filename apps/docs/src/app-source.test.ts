@@ -42,6 +42,18 @@ describe('docs app source wiring', () => {
     expect(source).toContain('Unable to start this preview');
   });
 
+  it('shows the live preview FPS from the TypeGPU root', () => {
+    const previewSource = read('./components/ExamplePreview.svelte');
+    const styleSource = read('./style.css');
+
+    expect(previewSource).toContain('let fps = $state<number | null>(null)');
+    expect(previewSource).toContain('onFps: (value) => (fps = value)');
+    expect(previewSource).toContain('aria-label="Preview frames per second"');
+    expect(previewSource).toContain('{fps === null ?');
+    expect(styleSource).toContain('.fps-badge');
+    expect(styleSource).toContain('position: absolute');
+  });
+
   it('renders generated Shiki tokens without raw HTML injection', () => {
     const source = read('./components/CodePanel.svelte');
 

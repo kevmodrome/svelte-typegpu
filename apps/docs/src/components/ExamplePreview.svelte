@@ -13,6 +13,7 @@
   let host: HTMLDivElement;
   let error = $state<string | null>(null);
   let ready = $state(false);
+  let fps = $state<number | null>(null);
   let phongControls = $state({
     lightColor: [0.8, 0.8, 0.8] as [number, number, number],
     lightDirection: [0, 7, -7] as [number, number, number],
@@ -80,7 +81,8 @@
       maxDevicePixelRatio: 1.5,
       clearColor: [0.045, 0.05, 0.055, 1],
       depth: true,
-      alphaMode: 'premultiplied'
+      alphaMode: 'premultiplied',
+      onFps: (value) => (fps = value)
     })
       .then((nextRoot) => {
         if (cancelled) {
@@ -179,6 +181,10 @@
 <div class:preview-with-controls={hasControls}>
   <section class="preview-panel" aria-label={`${label} live preview`}>
     <div class="preview-host" bind:this={host} data-ready={ready}></div>
+    <div class="fps-badge" aria-label="Preview frames per second">
+      <span>FPS</span>
+      <strong>{fps === null ? '...' : fps}</strong>
+    </div>
     {#if error}
       <div class="preview-status" role="status">{error}</div>
     {:else if !ready}
