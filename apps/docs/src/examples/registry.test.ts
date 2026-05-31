@@ -38,6 +38,11 @@ describe('docs example registry', () => {
       expect(example.typeGpuSourceUrl).toBe(officialExampleUrls[example.slug]);
       expect(example.notes).toMatch(/adapted/i);
       expect(example.code).toContain('<scene');
+      expect(example.code).not.toContain('<resources>');
+      expect(example.code).not.toContain('<instancedMesh');
+      expect(example.code).not.toMatch(/\sgeometry="[^"]+"/);
+      expect(example.code).not.toMatch(/\smaterial="[^"]+"/);
+      expect(example.code).not.toContain('layoutKey=');
       expect(example.sourceFiles.length).toBe(example.sourceStats.svelteFileCount);
       expect(example.sourceFiles[0]?.filename).toMatch(/\.(svelte|ts)$/);
       expect(example.sourceFiles[0]?.source).toContain('<scene');
@@ -82,7 +87,7 @@ describe('docs example registry', () => {
     const disco = sourceBundleForSlug('interactive-orbit-field');
 
     expect(twoBoxes).toContain('<bufferGeometry');
-    expect(twoBoxes).toContain('layoutKey="position:normal:uv:color"');
+    expect(twoBoxes).not.toContain('layoutKey=');
     expect(twoBoxes).toContain('drag="rotate"');
     expect(twoBoxes).toContain('ondragmove=');
     expect(twoBoxes).toContain('rotateBothBoxes');

@@ -34,41 +34,10 @@ var root = $.from_tree([
 		],
 		' ',
 		[
-			'resources',
-			null,
-			[
-				'bufferGeometry',
-				{
-					id: 'left-box-geometry',
-					key: 'two-boxes:left',
-					layoutKey: 'position:normal:uv:color'
-				}
-			],
-			' ',
-			[
-				'bufferGeometry',
-				{
-					id: 'right-box-geometry',
-					key: 'two-boxes:right',
-					layoutKey: 'position:normal:uv:color'
-				}
-			],
-			' ',
-			[
-				'bufferGeometry',
-				{
-					id: 'floor-geometry',
-					key: 'two-boxes:floor',
-					layoutKey: 'position:normal:uv:color'
-				}
-			],
-			' ',
-			['basicMaterial', { id: 'vertex-colors', cullMode: 'none' }]
-		],
-		' ',
-		[
 			'mesh',
-			{ geometry: 'floor-geometry', material: 'vertex-colors' }
+			null,
+			['bufferGeometry', { key: 'two-boxes:floor' }],
+			['basicMaterial', { cullMode: 'none' }]
 		],
 		' ',,
 	]
@@ -82,13 +51,17 @@ export default function TwoBoxes_typegpu($$anchor, $$props) {
 	const boxes = [
 		{
 			id: 'left-box',
-			geometry: 'left-box-geometry',
+			geometryKey: 'two-boxes:left',
+			vertices: leftBoxVertices,
+			bounds: boxBounds,
 			position: [-2, 0, 0]
 		},
 
 		{
 			id: 'right-box',
-			geometry: 'right-box-geometry',
+			geometryKey: 'two-boxes:right',
+			vertices: rightBoxVertices,
+			bounds: boxBounds,
 			position: [2, 0, 0]
 		}
 	];
@@ -124,28 +97,33 @@ export default function TwoBoxes_typegpu($$anchor, $$props) {
 	$.reset(controls);
 	$.reset(perspectiveCamera);
 
-	var resources = $.sibling(perspectiveCamera, 2);
-	var bufferGeometry = $.child(resources);
-	var bufferGeometry_1 = $.sibling(bufferGeometry, 2);
-	var bufferGeometry_2 = $.sibling(bufferGeometry_1, 2);
-	var basicMaterial = $.sibling(bufferGeometry_2, 2);
-
-	$.set_attribute(basicMaterial, 'color', [1, 1, 1, 1]);
-	$.reset(resources);
-
-	var mesh = $.sibling(resources, 2);
+	var mesh = $.sibling(perspectiveCamera, 2);
 
 	$.set_attribute(mesh, 'position', [0, -2, 0]);
 	$.set_attribute(mesh, 'scale', [5, 1, 5]);
+
+	var bufferGeometry = $.child(mesh);
+	var basicMaterial = $.sibling(bufferGeometry);
+
+	$.set_attribute(basicMaterial, 'color', [1, 1, 1, 1]);
+	$.reset(mesh);
 
 	var node = $.sibling(mesh, 2);
 
 	$.each(node, 17, () => boxes, (box) => box.id, ($$anchor, box) => {
 		$.without_renderer(() => SceneBox($$anchor, {
-			get geometry() {
-				return $.get(box).geometry;
+			get geometryKey() {
+				return $.get(box).geometryKey;
 			},
-			material: 'vertex-colors',
+
+			get vertices() {
+				return $.get(box).vertices;
+			},
+
+			get bounds() {
+				return $.get(box).bounds;
+			},
+
 			get position() {
 				return $.get(box).position;
 			},
@@ -160,12 +138,8 @@ export default function TwoBoxes_typegpu($$anchor, $$props) {
 	$.reset(scene);
 
 	$.template_effect(() => {
-		$.set_attribute(bufferGeometry, 'vertices', leftBoxVertices);
-		$.set_attribute(bufferGeometry, 'bounds', boxBounds);
-		$.set_attribute(bufferGeometry_1, 'vertices', rightBoxVertices);
-		$.set_attribute(bufferGeometry_1, 'bounds', boxBounds);
-		$.set_attribute(bufferGeometry_2, 'vertices', floorVertices);
-		$.set_attribute(bufferGeometry_2, 'bounds', floorBounds);
+		$.set_attribute(bufferGeometry, 'vertices', floorVertices);
+		$.set_attribute(bufferGeometry, 'bounds', floorBounds);
 	});
 
 	$.append($$anchor, scene);

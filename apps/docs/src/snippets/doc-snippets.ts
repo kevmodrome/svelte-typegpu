@@ -26,13 +26,12 @@ export const docSnippetDefinitions = [
       '',
       '<scene clearColor={[0.067, 0.078, 0.102, 1]}>',
       '  <perspectiveCamera id="main" active={true} position={[4, 3, 6]} target={[0, 0, 0]} fov={45}></perspectiveCamera>',
-      '  <resources>',
-      '    <boxGeometry id="box" width={1} height={1} depth={1}></boxGeometry>',
-      '    <standardMaterial id="warm" {color}></standardMaterial>',
-      '  </resources>',
       '  <ambientLight color={[1, 1, 1]} intensity={0.25}></ambientLight>',
       '  <directionalLight rotation={[-0.8, 0.4, 0]} intensity={1.4}></directionalLight>',
-      '  <mesh geometry="box" material="warm" position={[0, 1, 0]}></mesh>',
+      '  <mesh position={[0, 1, 0]}>',
+      '    <boxGeometry width={1} height={1} depth={1}></boxGeometry>',
+      '    <standardMaterial {color}></standardMaterial>',
+      '  </mesh>',
       '</scene>'
     ].join('\n')
   },

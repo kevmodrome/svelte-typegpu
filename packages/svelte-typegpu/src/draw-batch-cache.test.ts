@@ -126,8 +126,6 @@ function drawItem({
     },
     bounds: geometry.bounds!,
     color: [1, 1, 1, 1],
-    phase: 0.25,
-    spinSpeed: 0.5,
     renderOrder,
     hitTest: 'bounds',
     pointerEvents: 'auto',

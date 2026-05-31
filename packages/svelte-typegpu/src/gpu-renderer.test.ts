@@ -595,8 +595,7 @@ describe('TypeGPU GPU renderer', () => {
   it('computes WebGPU 0..1 shadow depths consistently for caster and receiver points', () => {
     const matrix = createDirectionalShadowViewProjection(
       lightFixture({ direction: [0, -1, 0] }),
-      [drawBatchFixture()],
-      1
+      [drawBatchFixture()]
     );
     const casterDepth = shadowDepthForPoint(matrix, [0, 1, 0]);
     const receiverDepth = shadowDepthForPoint(matrix, [0, 0, 0]);
@@ -612,13 +611,11 @@ describe('TypeGPU GPU renderer', () => {
   it('keeps the directional shadow projection continuous near vertical light directions', () => {
     const leftOfUp = createDirectionalShadowViewProjection(
       lightFixture({ direction: [0.22, -0.7, 0] }),
-      [drawBatchFixture()],
-      1
+      [drawBatchFixture()]
     );
     const rightOfUp = createDirectionalShadowViewProjection(
       lightFixture({ direction: [0.24, -0.7, 0] }),
-      [drawBatchFixture()],
-      1
+      [drawBatchFixture()]
     );
     const leftPoint = shadowClipPoint(leftOfUp, [0.5, 0, 0.5]);
     const rightPoint = shadowClipPoint(rightOfUp, [0.5, 0, 0.5]);

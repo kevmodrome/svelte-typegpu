@@ -162,9 +162,6 @@ function sceneState({
             keyboard: keyboard === true ? keyboardControls : keyboard
           }
         : null,
-    scale: 1,
-    animationSpeed: 1,
-    colorShift: 0,
     lights: [],
     lightsChanged: false,
     drawBatches: [],

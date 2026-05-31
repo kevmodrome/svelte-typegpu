@@ -4,7 +4,6 @@ export const MAX_CUBE_COUNT = 10_000;
 export interface CubeInstance {
   id: number;
   position: [number, number, number];
-  phase: number;
 }
 
 export interface SceneCameraSettings {
@@ -24,7 +23,7 @@ export function createCubeField(count: number): CubeInstance[] {
   const safeCount = clampCubeCount(count);
 
   if (safeCount === 1) {
-    return [{ id: 0, position: [0, 0, 0], phase: 0 }];
+    return [{ id: 0, position: [0, 0, 0] }];
   }
 
   const side = Math.ceil(Math.cbrt(safeCount));
@@ -41,8 +40,7 @@ export function createCubeField(count: number): CubeInstance[] {
         roundGrid((x - center) * GRID_SPACING),
         roundGrid((y - center) * GRID_SPACING),
         roundGrid((z - center) * GRID_SPACING)
-      ],
-      phase: roundPhase(id * 0.1)
+      ]
     };
   });
 }
@@ -67,8 +65,4 @@ export function sceneCameraForCount(count: number): SceneCameraSettings {
 
 function roundGrid(value: number): number {
   return Math.round(value * 100) / 100;
-}
-
-function roundPhase(value: number): number {
-  return Math.round(value * 10) / 10;
 }

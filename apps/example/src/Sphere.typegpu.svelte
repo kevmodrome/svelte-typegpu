@@ -3,27 +3,23 @@
 
   interface Props {
     position: Vector3Tuple;
-    phase?: number;
     color?: RgbaTuple;
     map?: string;
     radius?: number;
     width?: number;
     height?: number;
     depth?: number;
-    spinSpeed?: number;
     onclick?: () => void;
   }
 
   let {
     position,
-    phase = 0,
     color = [1, 1, 1, 1],
     map = undefined,
     radius = 0.5,
     width = radius * 2,
     height = radius * 2,
     depth = radius * 2,
-    spinSpeed = 0,
     onclick = () => {}
   }: Props = $props();
 
@@ -39,8 +35,6 @@
   tabindex="0"
   aria-label="Change sphere color"
   {position}
-  {phase}
-  {spinSpeed}
   onclick={onclick}
   onkeydown={activateFromKeyboard}
 >

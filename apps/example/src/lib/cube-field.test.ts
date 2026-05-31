@@ -18,15 +18,14 @@ describe('cube field', () => {
     expect(createCubeField(1)).toEqual([
       {
         id: 0,
-        position: [0, 0, 0],
-        phase: 0
+        position: [0, 0, 0]
       }
     ]);
 
     const field = createCubeField(8);
     expect(field).toHaveLength(8);
-    expect(field[0]).toEqual({ id: 0, position: [-0.28, -0.28, -0.28], phase: 0 });
-    expect(field[7]).toEqual({ id: 7, position: [0.28, 0.28, 0.28], phase: 0.7 });
+    expect(field[0]).toEqual({ id: 0, position: [-0.28, -0.28, -0.28] });
+    expect(field[7]).toEqual({ id: 7, position: [0.28, 0.28, 0.28] });
   });
 
   it('moves the camera back for multi-cube stress tests', () => {

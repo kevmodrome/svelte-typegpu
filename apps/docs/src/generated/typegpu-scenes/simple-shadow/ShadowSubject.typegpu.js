@@ -5,14 +5,9 @@ import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
 
-var root = $.from_tree(
-	[
-		['mesh', { geometry: 'cuboid', material: 'cuboid-material' }]
-	],
-	4
-);
+var root = $.from_tree([['mesh', null, ['boxGeometry'], ['phongMaterial']]], 4);
 
-export default function ShadowSubject_typegpu($$anchor) {
+export default function ShadowSubject_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
 	var mesh = root();
 
@@ -21,6 +16,23 @@ export default function ShadowSubject_typegpu($$anchor) {
 	$.set_attribute(mesh, 'scale', [1, 1, 1]);
 	$.set_attribute(mesh, 'castShadow', true);
 	$.set_attribute(mesh, 'receiveShadow', true);
+
+	var boxGeometry = $.child(mesh);
+
+	$.set_attribute(boxGeometry, 'width', 1);
+	$.set_attribute(boxGeometry, 'height', 1);
+
+	var phongMaterial = $.sibling(boxGeometry);
+
+	$.set_attribute(phongMaterial, 'roughness', 0.38);
+	$.set_attribute(phongMaterial, 'metalness', 0);
+	$.reset(mesh);
+
+	$.template_effect(() => {
+		$.set_attribute(boxGeometry, 'depth', $$props.cuboidThickness);
+		$.set_attribute(phongMaterial, 'color', $$props.color);
+	});
+
 	$.append($$anchor, mesh);
 	$$pop_renderer();
 }

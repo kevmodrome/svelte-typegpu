@@ -23,21 +23,14 @@ var root = $.from_tree([
 				]
 			]
 		],
-		' ',
-		[
-			'resources',
-			null,
-			['boxGeometry', { id: 'cuboid' }],
-			' ',
-			['planeGeometry', { id: 'floor' }],
-			' ',
-			['phongMaterial', { id: 'cuboid-material' }],
-			' ',
-			['phongMaterial', { id: 'floor-material', cullMode: 'none' }]
-		],
 		' ',,
 		' ',
-		['mesh', { geometry: 'floor', material: 'floor-material' }],
+		[
+			'mesh',
+			null,
+			['planeGeometry'],
+			['phongMaterial', { cullMode: 'none' }]
+		],
 		' ',,
 	]
 ]);
@@ -86,31 +79,7 @@ export default function SimpleShadow_typegpu($$anchor, $$props) {
 	$.reset(controls);
 	$.reset(perspectiveCamera);
 
-	var resources = $.sibling(perspectiveCamera, 2);
-	var boxGeometry = $.child(resources);
-
-	$.set_attribute(boxGeometry, 'width', 1);
-	$.set_attribute(boxGeometry, 'height', 1);
-
-	var planeGeometry = $.sibling(boxGeometry, 2);
-
-	$.set_attribute(planeGeometry, 'width', 5);
-	$.set_attribute(planeGeometry, 'height', 5);
-
-	var phongMaterial = $.sibling(planeGeometry, 2);
-
-	$.set_attribute(phongMaterial, 'color', [0.8, 0.7, 0.7, 1]);
-	$.set_attribute(phongMaterial, 'roughness', 0.38);
-	$.set_attribute(phongMaterial, 'metalness', 0);
-
-	var phongMaterial_1 = $.sibling(phongMaterial, 2);
-
-	$.set_attribute(phongMaterial_1, 'color', [0.5, 0.4, 0.7, 1]);
-	$.set_attribute(phongMaterial_1, 'roughness', 0.68);
-	$.set_attribute(phongMaterial_1, 'metalness', 0);
-	$.reset(resources);
-
-	var node = $.sibling(resources, 2);
+	var node = $.sibling(perspectiveCamera, 2);
 
 	{
 		let $0 = $.derived(() => [
@@ -144,15 +113,32 @@ export default function SimpleShadow_typegpu($$anchor, $$props) {
 	$.set_attribute(mesh, 'castShadow', true);
 	$.set_attribute(mesh, 'receiveShadow', true);
 
+	var planeGeometry = $.child(mesh);
+
+	$.set_attribute(planeGeometry, 'width', 5);
+	$.set_attribute(planeGeometry, 'height', 5);
+
+	var phongMaterial = $.sibling(planeGeometry);
+
+	$.set_attribute(phongMaterial, 'color', [0.5, 0.4, 0.7, 1]);
+	$.set_attribute(phongMaterial, 'roughness', 0.68);
+	$.set_attribute(phongMaterial, 'metalness', 0);
+	$.reset(mesh);
+
 	var node_1 = $.sibling(mesh, 2);
 
-	$.without_renderer(() => ShadowSubject(node_1, {}));
+	$.without_renderer(() => ShadowSubject(node_1, {
+		get cuboidThickness() {
+			return simpleShadowControls().cuboidThickness;
+		},
+		color: [0.8, 0.7, 0.7, 1]
+	}));
+
 	$.reset(scene);
 
 	$.template_effect(() => {
 		$.set_attribute(perspectiveCamera, 'position', simpleShadowControls().cameraPosition);
 		$.set_attribute(perspectiveCamera, 'target', simpleShadowControls().cameraTarget);
-		$.set_attribute(boxGeometry, 'depth', simpleShadowControls().cuboidThickness);
 	});
 
 	$.event('camerachange', controls, function (...$$args) {

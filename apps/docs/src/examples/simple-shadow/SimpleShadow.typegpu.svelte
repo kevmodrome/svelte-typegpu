@@ -37,7 +37,6 @@
     shadowMapFiltering: true,
     displayMode: 'color'
   };
-
   let {
     controls: simpleShadowControls = defaultSimpleShadowControls,
     onCameraChange = () => {}
@@ -65,24 +64,6 @@
     </controls>
   </perspectiveCamera>
 
-  <resources>
-    <boxGeometry id="cuboid" width={1} height={1} depth={simpleShadowControls.cuboidThickness}></boxGeometry>
-    <planeGeometry id="floor" width={5} height={5}></planeGeometry>
-    <phongMaterial
-      id="cuboid-material"
-      color={[0.8, 0.7, 0.7, 1]}
-      roughness={0.38}
-      metalness={0}
-    ></phongMaterial>
-    <phongMaterial
-      id="floor-material"
-      color={[0.5, 0.4, 0.7, 1]}
-      roughness={0.68}
-      metalness={0}
-      cullMode="none"
-    ></phongMaterial>
-  </resources>
-
   <ShadowLights
     lightDirection={[
       simpleShadowControls.lightX,
@@ -93,12 +74,14 @@
     shadowMapFiltering={simpleShadowControls.shadowMapFiltering}
     displayMode={simpleShadowControls.displayMode}
   />
-  <mesh
-    geometry="floor"
-    material="floor-material"
-    position={[0, 0, 0]}
-    castShadow={true}
-    receiveShadow={true}
-  ></mesh>
-  <ShadowSubject />
+  <mesh position={[0, 0, 0]} castShadow={true} receiveShadow={true}>
+    <planeGeometry width={5} height={5}></planeGeometry>
+    <phongMaterial
+      color={[0.5, 0.4, 0.7, 1]}
+      roughness={0.68}
+      metalness={0}
+      cullMode="none"
+    ></phongMaterial>
+  </mesh>
+  <ShadowSubject cuboidThickness={simpleShadowControls.cuboidThickness} color={[0.8, 0.7, 0.7, 1]} />
 </scene>

@@ -47,15 +47,13 @@ A TypeGPU scene is written as Svelte markup:
     far={100}
   ></perspectiveCamera>
 
-  <resources>
-    <boxGeometry id="box" width={1} height={1} depth={1}></boxGeometry>
-    <standardMaterial id="warm" {color} roughness={0.3} metalness={0.1}></standardMaterial>
-  </resources>
-
   <ambientLight color={[1, 1, 1]} intensity={0.25}></ambientLight>
   <directionalLight rotation={[-0.8, 0.4, 0]} intensity={1.4}></directionalLight>
 
-  <mesh geometry="box" material="warm" {position}></mesh>
+  <mesh {position}>
+    <boxGeometry width={1} height={1} depth={1}></boxGeometry>
+    <standardMaterial {color} roughness={0.3} metalness={0.1}></standardMaterial>
+  </mesh>
 </scene>
 ```
 

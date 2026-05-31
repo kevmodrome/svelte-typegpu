@@ -25,8 +25,6 @@ export interface CameraChangeDetail {
 }
 
 export interface SceneControls {
-  spinEnabled: boolean;
-  spinSpeed: number;
   cubeScale: number;
   cubeCount: number;
   hue: number;
@@ -35,8 +33,6 @@ export interface SceneControls {
 }
 
 export const DEFAULT_SCENE_CONTROLS: SceneControls = {
-  spinEnabled: true,
-  spinSpeed: 1,
   cubeScale: 1,
   cubeCount: 1,
   hue: 330,
@@ -46,8 +42,6 @@ export const DEFAULT_SCENE_CONTROLS: SceneControls = {
 
 export function clampSceneControls(controls: SceneControls): SceneControls {
   return {
-    spinEnabled: controls.spinEnabled,
-    spinSpeed: clamp(controls.spinSpeed, 0, 2),
     cubeScale: clamp(controls.cubeScale, 0.45, 2.2),
     cubeCount: clampCubeCount(controls.cubeCount),
     hue: normalizeHue(controls.hue),
@@ -61,8 +55,6 @@ export function clampSceneControls(controls: SceneControls): SceneControls {
 export function copySceneControls(target: SceneControls, source: SceneControls): void {
   const next = clampSceneControls(source);
 
-  target.spinEnabled = next.spinEnabled;
-  target.spinSpeed = next.spinSpeed;
   target.cubeScale = next.cubeScale;
   target.cubeCount = next.cubeCount;
   target.hue = next.hue;

@@ -9,8 +9,6 @@ export interface CubeQuadrant {
   id: string;
   position: Vector3Tuple;
   scale: number;
-  spinSpeed: number;
-  phase: number;
   instances: QuadrantCubeInstance[];
 }
 
@@ -18,17 +16,15 @@ interface CubeQuadrantConfig {
   id: string;
   signs: [number, number];
   scale: number;
-  spinSpeed: number;
-  phase: number;
   colorOffset: number;
 }
 
 const QUADRANT_ID_STEP = 1_000_000;
 const CUBE_QUADRANTS: CubeQuadrantConfig[] = [
-  { id: 'slow-small', signs: [-1, -1], scale: 0.7, spinSpeed: 0.35, phase: 0, colorOffset: 0 },
-  { id: 'steady-base', signs: [1, -1], scale: 0.9, spinSpeed: 0.8, phase: 0.7, colorOffset: 24 },
-  { id: 'brisk-wide', signs: [-1, 1], scale: 1.1, spinSpeed: 1.25, phase: 1.4, colorOffset: 48 },
-  { id: 'fast-large', signs: [1, 1], scale: 1.3, spinSpeed: 1.75, phase: 2.1, colorOffset: 72 }
+  { id: 'small', signs: [-1, -1], scale: 0.7, colorOffset: 0 },
+  { id: 'base', signs: [1, -1], scale: 0.9, colorOffset: 24 },
+  { id: 'wide', signs: [-1, 1], scale: 1.1, colorOffset: 48 },
+  { id: 'large', signs: [1, 1], scale: 1.3, colorOffset: 72 }
 ];
 
 export function createCubeQuadrants(count: number, floorSize: number): CubeQuadrant[] {
@@ -39,8 +35,6 @@ export function createCubeQuadrants(count: number, floorSize: number): CubeQuadr
     id: quadrant.id,
     position: [quadrant.signs[0] * offset, 0, quadrant.signs[1] * offset],
     scale: quadrant.scale,
-    spinSpeed: quadrant.spinSpeed,
-    phase: quadrant.phase,
     instances: createQuadrantInstances(counts[index], index, quadrant.colorOffset)
   }));
 }

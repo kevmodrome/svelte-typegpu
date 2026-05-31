@@ -17,7 +17,6 @@
   let controls = $state(clampSceneControls(DEFAULT_SCENE_CONTROLS));
   let fps = $state(0);
   let color = $derived(formatHueColor(controls.hue));
-  let spinLabel = $derived(controls.spinEnabled ? 'Pause' : 'Resume');
 
   function shiftHue() {
     controls.hue = nextHue(controls.hue);
@@ -99,12 +98,6 @@
       </div>
       <button class="compact-command" type="button" onclick={shiftHue}>Shift</button>
     </div>
-
-    <label class="control-row">
-      <span>Spin</span>
-      <input type="range" min="0" max="2" step="0.05" bind:value={controls.spinSpeed} />
-      <output>{controls.spinSpeed.toFixed(2)}x</output>
-    </label>
 
     <label class="control-row">
       <span>Scale</span>
@@ -211,12 +204,5 @@
       <output>{controls.cubeCount.toLocaleString()}</output>
     </div>
 
-    <div class="button-row">
-      <button type="button" class:active={!controls.spinEnabled} onclick={() => (controls.spinEnabled = !controls.spinEnabled)}>
-        {spinLabel}
-      </button>
-      <button type="button" onclick={() => (controls.spinSpeed = 0.35)}>Slow</button>
-      <button type="button" onclick={() => (controls.spinSpeed = 1.65)}>Fast</button>
-    </div>
   </section>
 </main>

@@ -47,7 +47,6 @@ export default function InteractiveOrbitField_typegpu($$anchor, $$props) {
 	var scene = root();
 
 	$.set_attribute(scene, 'clearColor', [0, 0, 0, 1]);
-	$.set_attribute(scene, 'animationSpeed', 1);
 
 	var perspectiveCamera = $.child(scene);
 

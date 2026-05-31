@@ -1,7 +1,7 @@
 type Vec2 = [number, number];
 type Vec3 = [number, number, number];
 type Rgba = [number, number, number, number];
-type Bounds = { min: Vec3; max: Vec3 };
+export type GeometryBounds = { min: Vec3; max: Vec3 };
 
 const cubeFaces: { normal: Vec3; vertices: Vec3[]; uvs: Vec2[] }[] = [
   {
@@ -140,12 +140,12 @@ const floorFace = {
   ] as Vec2[]
 };
 
-export const boxBounds: Bounds = {
+export const boxBounds: GeometryBounds = {
   min: [-1, -1, -1],
   max: [1, 1, 1]
 };
 
-export const floorBounds: Bounds = {
+export const floorBounds: GeometryBounds = {
   min: [-1, 0, -1],
   max: [1, 0, 1]
 };

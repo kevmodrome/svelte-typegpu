@@ -14,7 +14,6 @@ describe('scene controls', () => {
     expect(
       clampSceneControls({
         ...DEFAULT_SCENE_CONTROLS,
-        spinSpeed: 4,
         cubeScale: -1,
         cubeCount: 20_000,
         hue: 725,
@@ -29,7 +28,6 @@ describe('scene controls', () => {
       })
     ).toEqual({
       ...DEFAULT_SCENE_CONTROLS,
-      spinSpeed: 2,
       cubeScale: 0.45,
       cubeCount: 10_000,
       hue: 5,
@@ -143,7 +141,6 @@ describe('scene controls', () => {
 
     copySceneControls(target, {
       ...target,
-      spinSpeed: 4,
       hue: 725,
       mouseSensitivity: 0,
       camera: {
@@ -153,7 +150,6 @@ describe('scene controls', () => {
       }
     });
 
-    expect(target.spinSpeed).toBe(2);
     expect(target.hue).toBe(5);
     expect(target.mouseSensitivity).toBe(0.1);
     expect(target.camera).toBe(camera);

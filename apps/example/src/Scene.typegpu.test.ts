@@ -71,7 +71,6 @@ describe('TypeGPU demo scene authoring API', () => {
     const onCameraChange = vi.fn();
     const controls: SceneControls = {
       ...DEFAULT_SCENE_CONTROLS,
-      spinSpeed: 1.25,
       cubeScale: 1.35,
       cubeCount: 10,
       hue: 120,
@@ -198,7 +197,7 @@ describe('TypeGPU demo scene authoring API', () => {
     expect(onCameraChange).toHaveBeenCalledWith(cameraChange);
   });
 
-  it('routes pause and scale changes through tweened scene values', () => {
+  it('routes scale changes through tweened scene values', () => {
     const root = createFragment();
     const Tween = {
       of: vi.fn((readTarget: () => number) => ({
@@ -215,8 +214,6 @@ describe('TypeGPU demo scene authoring API', () => {
     const Scene = loadTypeGpuSceneComponent(source, { Tween });
     const controls: SceneControls = {
       ...DEFAULT_SCENE_CONTROLS,
-      spinEnabled: false,
-      spinSpeed: 1.5,
       cubeScale: 1.9
     };
 

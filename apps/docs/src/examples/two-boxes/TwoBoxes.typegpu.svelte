@@ -2,6 +2,7 @@
   import SceneBox from './SceneBox.typegpu.svelte';
   import {
     boxBounds,
+    type GeometryBounds,
     floorBounds,
     floorVertices,
     leftBoxVertices,
@@ -12,17 +13,23 @@
 
   const boxes: {
     id: string;
-    geometry: string;
+    geometryKey: string;
+    vertices: Float32Array;
+    bounds: GeometryBounds;
     position: Vector3Tuple;
   }[] = [
     {
       id: 'left-box',
-      geometry: 'left-box-geometry',
+      geometryKey: 'two-boxes:left',
+      vertices: leftBoxVertices,
+      bounds: boxBounds,
       position: [-2, 0, 0]
     },
     {
       id: 'right-box',
-      geometry: 'right-box-geometry',
+      geometryKey: 'two-boxes:right',
+      vertices: rightBoxVertices,
+      bounds: boxBounds,
       position: [2, 0, 0]
     }
   ];
@@ -55,42 +62,20 @@
     </controls>
   </perspectiveCamera>
 
-  <resources>
+  <mesh position={[0, -2, 0]} scale={[5, 1, 5]}>
     <bufferGeometry
-      id="left-box-geometry"
-      key="two-boxes:left"
-      vertices={leftBoxVertices}
-      bounds={boxBounds}
-      layoutKey="position:normal:uv:color"
-    ></bufferGeometry>
-    <bufferGeometry
-      id="right-box-geometry"
-      key="two-boxes:right"
-      vertices={rightBoxVertices}
-      bounds={boxBounds}
-      layoutKey="position:normal:uv:color"
-    ></bufferGeometry>
-    <bufferGeometry
-      id="floor-geometry"
       key="two-boxes:floor"
       vertices={floorVertices}
       bounds={floorBounds}
-      layoutKey="position:normal:uv:color"
     ></bufferGeometry>
-    <basicMaterial id="vertex-colors" color={[1, 1, 1, 1]} cullMode="none"></basicMaterial>
-  </resources>
-
-  <mesh
-    geometry="floor-geometry"
-    material="vertex-colors"
-    position={[0, -2, 0]}
-    scale={[5, 1, 5]}
-  ></mesh>
+    <basicMaterial color={[1, 1, 1, 1]} cullMode="none"></basicMaterial>
+  </mesh>
 
   {#each boxes as box (box.id)}
     <SceneBox
-      geometry={box.geometry}
-      material="vertex-colors"
+      geometryKey={box.geometryKey}
+      vertices={box.vertices}
+      bounds={box.bounds}
       position={box.position}
       quaternion={boxRotation}
       onDragMove={rotateBothBoxes}

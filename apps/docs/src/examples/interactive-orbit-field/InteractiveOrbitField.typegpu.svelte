@@ -20,7 +20,7 @@
   let { controls: discoControls = defaultDiscoControls }: { controls?: DiscoControls } = $props();
 </script>
 
-<scene clearColor={[0, 0, 0, 1]} animationSpeed={1}>
+<scene clearColor={[0, 0, 0, 1]}>
   <perspectiveCamera
     id="main"
     active={true}
