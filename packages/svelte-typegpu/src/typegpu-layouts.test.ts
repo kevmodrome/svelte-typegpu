@@ -182,7 +182,7 @@ describe('TypeGPU layout schemas', () => {
   });
 
   it('describes a separate contiguous shadow-pass uniform bind group', () => {
-    expect(shadowPassBindGroupLayout.index).toBe(1);
+    expect(shadowPassBindGroupLayout.index).toBe(0);
     expect(shadowPassBindGroupLayout.entries.shadow?.uniform).toBe(typegpuShadowSchema);
     expect('shadowMap' in shadowPassBindGroupLayout.entries).toBe(false);
     expect('shadowSampler' in shadowPassBindGroupLayout.entries).toBe(false);

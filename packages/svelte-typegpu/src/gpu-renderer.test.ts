@@ -543,14 +543,12 @@ describe('TypeGPU GPU renderer', () => {
   it('binds only the shadow-pass uniform group while drawing the shadow depth pass', () => {
     const { pipeline, calls } = createRecordingPipeline();
     const pass = { kind: 'shadow-pass' };
-    const sceneBindGroup = { kind: 'scene-bind-group' };
     const shadowPassBindGroup = { kind: 'shadow-pass-uniform-bind-group' };
     const sampledShadowBindGroup = { kind: 'shadow-sampled-bind-group' };
 
     drawTypeGpuShadowBatch({
       pipeline: pipeline as never,
       pass: pass as never,
-      sceneBindGroup: sceneBindGroup as never,
       shadowPassBindGroup: shadowPassBindGroup as never,
       geometryResource: {
         key: 'box',
@@ -567,7 +565,6 @@ describe('TypeGPU GPU renderer', () => {
     });
 
     expect(calls.map((call) => call[0])).toContain(pass);
-    expect(calls.map((call) => call[0])).toContain(sceneBindGroup);
     expect(calls.map((call) => call[0])).toContain(shadowPassBindGroup);
     expect(calls.map((call) => call[0])).not.toContain(sampledShadowBindGroup);
     expect(calls).not.toContainEqual([undefined]);

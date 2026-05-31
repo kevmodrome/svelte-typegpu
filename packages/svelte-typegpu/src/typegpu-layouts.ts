@@ -112,7 +112,7 @@ export const shadowPassBindGroupLayout = tgpu
   .bindGroupLayout({
     shadow: { uniform: typegpuShadowSchema, visibility: ['vertex'] }
   })
-  .$idx(1)
+  .$idx(0)
   .$name('TypeGPU shadow pass bind group layout');
 
 export const TYPEGPU_SHADER_PASS_UNIFORM_FLOATS = 4;

@@ -66,10 +66,10 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     const wgsl = tgpu.resolve([shadowVertexMain], { names: 'strict' });
 
     expect(wgsl).toContain('@vertex fn shadowVertexMain');
-    expect(wgsl).toContain('@group(1)');
+    expect(wgsl).toContain('@group(0)');
     expect(wgsl).toContain('var<uniform> shadow');
     expect(wgsl).toContain('view_projection');
-    expect(wgsl).not.toContain('@group(0)');
+    expect(wgsl).not.toContain('@group(1)');
     expect(wgsl).not.toContain('var<uniform> scene');
     expect(wgsl).not.toContain('@group(3)');
     expect(wgsl).not.toContain('texture_depth_2d');

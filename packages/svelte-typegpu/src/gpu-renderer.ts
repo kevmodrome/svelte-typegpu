@@ -421,7 +421,6 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
             drawTypeGpuShadowBatch({
               pipeline: shadowPipeline,
               pass,
-              sceneBindGroup: this.#sceneBindGroup,
               shadowPassBindGroup: this.#shadowPassBindGroup,
               geometryResource,
               instanceResource,
@@ -889,7 +888,6 @@ function drawTypeGpuMaterialBatch({
 export function drawTypeGpuShadowBatch({
   pipeline,
   pass,
-  sceneBindGroup,
   shadowPassBindGroup,
   geometryResource,
   instanceResource,
@@ -897,7 +895,6 @@ export function drawTypeGpuShadowBatch({
 }: {
   pipeline: TypeGpuShadowPipeline;
   pass: GPURenderPassEncoder;
-  sceneBindGroup: TgpuBindGroup<typeof sceneBindGroupLayout.entries>;
   shadowPassBindGroup: TgpuBindGroup<typeof shadowPassBindGroupLayout.entries>;
   geometryResource: TypeGpuVertexBufferResource;
   instanceResource: TypeGpuInstanceBufferResource;
@@ -907,7 +904,6 @@ export function drawTypeGpuShadowBatch({
 
   const shadowPipeline = pipeline
     .with(pass)
-    .with(sceneBindGroup)
     .with(shadowPassBindGroup)
     .with(meshVertexLayout, geometryResource.vertexBuffer.buffer)
     .with(meshInstanceLayout, instanceResource.buffer.buffer);
