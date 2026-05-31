@@ -22,11 +22,7 @@
     onCameraChange?: (detail: CameraChangeDetail) => void;
   }
 
-  const FEATURE_CUBE_SPIN_RATE = 1.35;
-  const FEATURE_SPHERE_SPIN_RATE = 1.7;
   const SCALE_TWEEN_MS = 180;
-  const SPIN_TWEEN_BASE_MS = 320;
-  const SPIN_TWEEN_PER_UNIT_MS = 100;
 
   let {
     controls,
@@ -41,17 +37,9 @@
     duration: () => (prefersReducedMotion.current ? 0 : SCALE_TWEEN_MS),
     easing: sineInOut
   });
-  let smoothAnimationSpeed = Tween.of(() => (controls.spinEnabled ? controls.spinSpeed : 0), {
-    duration: (from, to) =>
-      prefersReducedMotion.current
-        ? 0
-        : SPIN_TWEEN_BASE_MS + Math.abs(to - from) * SPIN_TWEEN_PER_UNIT_MS,
-    easing: sineInOut
-  });
   let sceneScale = $derived(smoothScale.current);
-  let animationSpeed = $derived(smoothAnimationSpeed.current);
   let featureOffset = $derived(Math.max(1.4, frame.floorSize * 0.18));
-  let featureScale = $derived(Math.max(0.55, cubeSize * 2.2));
+  let featureScale = $derived(Math.max(0.55, cubeSize * 2.2) * sceneScale);
 
   function cubeKey(box: QuadrantCubeInstance): number {
     return box.id;
@@ -60,7 +48,11 @@
   function cubeTransform(box: QuadrantCubeInstance): InstanceTransform {
     return {
       position: box.position,
-      scale: [cubeSize, cubeSize, cubeSize]
+      scale: [
+        cubeSize * sceneScale,
+        cubeSize * sceneScale,
+        cubeSize * sceneScale
+      ]
     };
   }
 
@@ -73,12 +65,7 @@
   }
 </script>
 
-<scene
-  scale={sceneScale}
-  {animationSpeed}
-  colorShift={controls.hue}
-  clearColor={[0.067, 0.078, 0.102, 1]}
->
+<scene clearColor={[0.067, 0.078, 0.102, 1]}>
   <perspectiveCamera
     id="main"
     active={true}
@@ -110,24 +97,6 @@
     </controls>
   </perspectiveCamera>
 
-  <resources>
-    <boxGeometry id="cube" width={1} height={1} depth={1}></boxGeometry>
-    <texture id="checker" src="/textures/checker.svg"></texture>
-    <sampler id="repeatLinear" addressModeU="repeat" addressModeV="repeat"></sampler>
-    <phongMaterial
-      id="fieldMaterial"
-      color={[1, 1, 1, 1]}
-      map="checker"
-      sampler="repeatLinear"
-    ></phongMaterial>
-    <standardMaterial
-      id="featureMaterial"
-      color={[0.94, 0.9, 0.82, 1]}
-      roughness={0.18}
-      metalness={0.28}
-    ></standardMaterial>
-  </resources>
-
   <ambientLight color={[1, 1, 1]} intensity={0.18}></ambientLight>
   <hemisphereLight
     skyColor={[0.48, 0.62, 1]}
@@ -156,7 +125,6 @@
     color={demoColorForIndex(3, 24)}
     position={[-featureOffset, featureScale * 0.7, -featureOffset]}
     scale={[featureScale, featureScale * 0.7, featureScale]}
-    spinSpeed={FEATURE_CUBE_SPIN_RATE}
     onActivate={onShapeClick}
   />
 
@@ -164,7 +132,6 @@
     ariaLabel="Change featured sphere color"
     position={[featureOffset, featureScale * 0.8, featureOffset]}
     color={demoColorForIndex(7, 38)}
-    spinSpeed={FEATURE_SPHERE_SPIN_RATE}
     onActivate={onShapeClick}
   />
 </scene>

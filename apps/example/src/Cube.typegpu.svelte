@@ -6,7 +6,6 @@
     position: Vector3Tuple;
     scale: Vector3Tuple;
     color: RgbaTuple;
-    spinSpeed: number;
     onActivate?: () => void;
   }
 
@@ -15,7 +14,6 @@
     position,
     scale,
     color,
-    spinSpeed,
     onActivate = () => {}
   }: Props = $props();
 
@@ -30,12 +28,11 @@
   role="button"
   tabindex="0"
   aria-label={ariaLabel}
-  geometry="cube"
-  material="featureMaterial"
-  {color}
   {position}
   {scale}
-  {spinSpeed}
   onclick={onActivate}
   onkeydown={activateFromKeyboard}
-></mesh>
+>
+  <boxGeometry width={1} height={1} depth={1}></boxGeometry>
+  <standardMaterial {color} roughness={0.18} metalness={0.28}></standardMaterial>
+</mesh>

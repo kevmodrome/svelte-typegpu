@@ -18,15 +18,16 @@
   let { quadrant, getKey, getTransform, getColor }: Props = $props();
 </script>
 
-<instancedMesh
-  geometry="cube"
-  material="fieldMaterial"
-  position={quadrant.position}
-  scale={quadrant.scale}
-  instances={quadrant.instances}
-  {getKey}
-  {getTransform}
-  {getColor}
-  phase={quadrant.phase}
-  spinSpeed={quadrant.spinSpeed}
-></instancedMesh>
+<group position={quadrant.position} scale={quadrant.scale}>
+  {#each quadrant.instances as box, index (getKey(box, index))}
+    {@const transform = getTransform(box, index)}
+    <mesh position={transform.position} rotation={transform.rotation} scale={transform.scale}>
+      <boxGeometry width={1} height={1} depth={1}></boxGeometry>
+      <phongMaterial
+        color={getColor(box, index)}
+        map="/textures/checker.svg"
+        sampler={{ addressModeU: 'repeat', addressModeV: 'repeat' }}
+      ></phongMaterial>
+    </mesh>
+  {/each}
+</group>
