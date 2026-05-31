@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { codeToTokens } from 'shiki';
@@ -12,6 +12,9 @@ const sceneOutDir = path.join(generatedRoot, 'typegpu-scenes');
 const rendererPath = resolveRendererPath();
 const { exampleDefinitions } = await import(
   new URL('../src/examples/example-definitions.ts', import.meta.url).href
+);
+const { exampleSourceTexts } = await import(
+  new URL('./example-source-texts.ts', import.meta.url).href
 );
 const { docSnippetDefinitions } = await import(
   new URL('../src/snippets/doc-snippets.ts', import.meta.url).href
@@ -28,11 +31,10 @@ const sceneExports: string[] = [];
 
 for (const definition of exampleDefinitions) {
   const sourcePath = fileURLToPath(definition.sourceUrl);
-  const source = readFileSync(sourcePath, 'utf8');
-  const sourceFiles = definition.sourceFiles.map((sourceUrl) => ({
+  const sourceFiles = definition.sourceFiles.map((sourceUrl, index) => ({
     label: sourceFileLabel(sourceUrl),
     path: fileURLToPath(sourceUrl),
-    source: readFileSync(sourceUrl, 'utf8')
+    source: sourceTextFor(definition.slug, index)
   }));
   const sceneDirectory = path.join(sceneOutDir, definition.slug);
 
@@ -151,6 +153,16 @@ writeFileSync(
 
 writeFileSync(path.join(sceneOutDir, 'index.ts'), [header('compiled typegpu scenes'), ...sceneExports, ''].join('\n'));
 await writeDocSnippetSamples();
+
+function sourceTextFor(slug: string, index: number): string {
+  const source = exampleSourceTexts[slug as keyof typeof exampleSourceTexts]?.[index];
+
+  if (typeof source !== 'string') {
+    throw new Error(`Missing imported source text for ${slug} source file ${index}`);
+  }
+
+  return source;
+}
 
 function writeGeneratedSourceFile(
   sourceFile: { label: string; path: string; source: string },

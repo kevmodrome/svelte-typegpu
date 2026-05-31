@@ -20,7 +20,7 @@ describe('docs app source wiring', () => {
       devDependencies?: Record<string, string>;
     };
 
-    expect(manifest.scripts?.['generate:typegpu']).toContain('node --disable-warning=ExperimentalWarning --experimental-strip-types');
+    expect(manifest.scripts?.['generate:typegpu']).toContain('bun');
     expect(manifest.scripts?.['generate:typegpu']).toContain('scripts/compile-typegpu-scenes.ts');
     expect(manifest.dependencies?.typegpu).toBe('^0.11.6');
     expect(manifest.devDependencies?.bun).toBe('1.3.14');
@@ -236,12 +236,15 @@ describe('docs app source wiring', () => {
 
   it('generates aggregate source samples and LoC metadata', () => {
     const source = read('../scripts/compile-typegpu-scenes.ts');
+    const sourceTextImports = read('../scripts/example-source-texts.ts');
 
     expect(source).toContain('sourceFiles');
     expect(source).toContain('typeGpuSourceFiles');
     expect(source).toContain('exampleSourceStats');
     expect(source).toContain('exampleSourceFiles');
     expect(source).toContain('countSourceLines');
+    expect(source).toContain('exampleSourceTexts');
+    expect(sourceTextImports).toContain('with { type: \'text\' }');
   });
 
   it('defines stable preview and responsive example layouts', () => {

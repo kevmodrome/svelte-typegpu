@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "generate:typegpu": "node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/compile-typegpu-scenes.ts",
+    "generate:typegpu": "bun scripts/compile-typegpu-scenes.ts",
     "predev": "pnpm run generate:typegpu",
     "dev": "MODE=development bun src/index.ts",
     "prebuild": "pnpm run generate:typegpu",
