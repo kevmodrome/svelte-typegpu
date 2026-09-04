@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { mount, onMount, unmount } from 'svelte';
   import Scene from './Scene.typegpu.svelte';
   import type { CameraChangeDetail, SceneControls } from './lib/scene-controls';
   import renderer, { createTypeGpuRoot, type TypeGpuRoot } from 'svelte-typegpu';
@@ -24,7 +24,7 @@
   onMount(() => {
     let cancelled = false;
     let root: TypeGpuRoot | null = null;
-    let instance: { unmount(): void } | null = null;
+    let instance: ReturnType<typeof mount> | null = null;
 
     createTypeGpuRoot({
       target: host,
@@ -42,7 +42,8 @@
         }
 
         root = nextRoot;
-        instance = renderer.render(Scene, {
+        instance = mount(Scene, {
+          renderer,
           target: root,
           props: {
             controls,
@@ -60,7 +61,7 @@
 
     return () => {
       cancelled = true;
-      instance?.unmount();
+      if (instance) void unmount(instance);
       root?.dispose();
     };
   });

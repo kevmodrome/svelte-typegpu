@@ -1,17 +1,23 @@
-import type renderer from 'svelte-typegpu';
+import type { Component } from 'svelte';
 import type { ExampleSlug } from './example-definitions';
 import {
-  InteractiveOrbitField,
+  DiscoShaderPass,
+  Gravity,
+  MultipleSmokyTriangles,
   PhongReflection,
   SimpleShadow,
+  SmokyTriangle,
   TwoBoxes
 } from '../generated/typegpu-scenes';
 
-type TypeGpuSceneComponent = Parameters<typeof renderer.render>[0];
+type TypeGpuSceneComponent = Component<any>;
 
 export const sceneComponents = {
   'two-boxes': TwoBoxes,
   'phong-reflection': PhongReflection,
   'simple-shadow': SimpleShadow,
-  'interactive-orbit-field': InteractiveOrbitField
+  'disco-shader-pass': DiscoShaderPass,
+  'smoky-triangle': SmokyTriangle,
+  'multiple-smoky-triangles': MultipleSmokyTriangles,
+  gravity: Gravity
 } satisfies Record<ExampleSlug, TypeGpuSceneComponent>;

@@ -86,7 +86,7 @@ describe('TypeGPU GPU renderer', () => {
     expect(cacheSource).toContain('pipelineResourceKeyFor(batch, depth)');
     expect(cacheSource).toContain('meshPipelineOptionsFor(batch, depth)');
     expect(rendererSource).toContain('pipelineResourceKeyFor(batch, scene.renderSettings.depth)');
-    expect(rendererSource).toContain('this.#pipelineForBatch(batch, this.#renderSettings.depth)');
+    expect(rendererSource).toContain('this.#pipelines.getOrCreate(batch, this.#renderSettings.depth)');
   });
 
   it('keeps pipeline descriptors aligned with material pipeline state', () => {
@@ -102,6 +102,10 @@ describe('TypeGPU GPU renderer', () => {
     expect(cacheSource).toContain('depthWrite:${material.depthWrite !== false}');
     expect(cacheSource).toContain('depthTest:${material.depthTest !== false}');
     expect(cacheSource).toContain("cull:${material.cullMode ?? 'back'}");
+    expect(cacheSource).toContain("import { perlin3d } from '@typegpu/noise'");
+    expect(cacheSource).toContain('perlin3d.staticCache');
+    expect(cacheSource).toContain('this.root.pipe(this.#perlin3dCache.inject())');
+    expect(rendererSource).toContain('this.#pipelines.dispose()');
   });
 
   it('uses bind-group identity for material resource caching and pruning', () => {
@@ -382,31 +386,82 @@ describe('TypeGPU GPU renderer', () => {
     expect(source).not.toContain('device.createRenderPipeline');
   });
 
-  it('packs fullscreen shader pass built-in uniforms as time and resolution', () => {
+  it('packs fullscreen shader pass built-in uniforms and reactive value slots', () => {
     const data = new Float32Array(
       packShaderPassUniforms({
         time: 1.25,
         width: 640,
-        height: 360
+        height: 360,
+        uniforms: {
+          value0: 0.25,
+          value1: [0.5, 0.75],
+          value2: [0.125, 0.375, 0.625],
+          value3: [0.2, 0.4, 0.6, 0.8]
+        }
       })
     );
 
-    expect(Array.from(data)).toEqual([1.25, 0, 640, 360]);
+    expect(Array.from(data)).toEqual(Array.from(Float32Array.of(
+      1.25, 0, 640, 360,
+      0.25, 0, 0, 0,
+      0.5, 0.75, 0, 0,
+      0.125, 0.375, 0.625, 0,
+      0.2, 0.4, 0.6, 0.8,
+      0, 0, 0, 0,
+      0, 0, 0, 0,
+      0, 0, 0, 0,
+      0, 0, 0, 0
+    )));
   });
 
-  it('normalizes only the supported shader pass built-in uniforms', () => {
+  it('normalizes supported shader pass built-ins and reactive value slots', () => {
     expect(
       normalizeShaderPassUniforms({
         time: 'time',
         resolution: 'resolution',
+        value0: 0.25,
+        value1: [0.5, 0.75],
+        value2: [0.125, 0.375, 0.625],
+        value3: [0.2, 0.4, 0.6, 0.8],
+        value8: [1, 1, 1, 1],
         customTime: 'time',
         timeAlias: 'resolution',
         ignored: 'custom'
       })
     ).toEqual({
       time: 'time',
-      resolution: 'resolution'
+      resolution: 'resolution',
+      value0: [0.25, 0, 0, 0],
+      value1: [0.5, 0.75, 0, 0],
+      value2: [0.125, 0.375, 0.625, 0],
+      value3: [0.2, 0.4, 0.6, 0.8]
     });
+  });
+
+  it('keeps shader pass pipeline keys independent from reactive uniform values', () => {
+    const fragment = shaderPassFixture({ key: 'uniform-slots' }).fragment;
+    const first = shaderPassFixture({
+      key: 'uniform-slots',
+      fragment,
+      uniforms: {
+        time: 'time',
+        resolution: 'resolution',
+        value0: [1, 0, 0, 1]
+      }
+    });
+    const second = shaderPassFixture({
+      key: 'uniform-slots',
+      fragment,
+      uniforms: {
+        time: 'time',
+        resolution: 'resolution',
+        value0: [0, 0, 1, 1]
+      }
+    });
+
+    expect(shaderPassPipelineResourceKey(first, true)).toBe(
+      shaderPassPipelineResourceKey(second, true)
+    );
   });
 
   it('draws fullscreen shader passes through the TypeGPU-compatible full-screen quad pipeline', () => {
@@ -531,12 +586,20 @@ describe('TypeGPU GPU renderer', () => {
       }
     };
 
-    writeShaderPassFrameUniforms(buffer, { time: 0.5, renderSize: { width: 320, height: 180 } });
-    writeShaderPassFrameUniforms(buffer, { time: 0.75, renderSize: { width: 640, height: 360 } });
+    writeShaderPassFrameUniforms(buffer, {
+      time: 0.5,
+      renderSize: { width: 320, height: 180 },
+      uniforms: { value0: [1, 0, 0, 1] }
+    });
+    writeShaderPassFrameUniforms(buffer, {
+      time: 0.75,
+      renderSize: { width: 640, height: 360 },
+      uniforms: { value1: [0, 0, 1, 1] }
+    });
 
     expect(writes).toEqual([
-      [0.5, 0, 320, 180],
-      [0.75, 0, 640, 360]
+      [0.5, 0, 320, 180, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      [0.75, 0, 640, 360, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
     ]);
   });
 
@@ -831,7 +894,7 @@ function drawBatchFixture({
       blendMode: 'opaque',
       map: null,
       ...material
-    },
+    } as TypeGpuDrawBatch['material'],
     castShadow: true,
     renderOrder,
     floatsPerInstance: MESH_INSTANCE_FLOATS,

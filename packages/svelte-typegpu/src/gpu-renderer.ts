@@ -128,6 +128,11 @@ interface TypeGpuActiveShadow {
   viewProjection: Float32Array;
 }
 
+interface ShaderPassResource {
+  buffer: TypeGpuShaderPassUniformBuffer;
+  bindGroup: TgpuBindGroup<typeof shaderPassBindGroupLayout.entries>;
+}
+
 export interface TypeGpuRenderer {
   setScene(scene: TypeGpuSceneState): void;
   setCamera(camera: TypeGpuCameraSettings): void;
@@ -190,15 +195,14 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #materialResources: MaterialResourceCache;
   #pipelines: PipelineResourceCache;
   #projectionDirty = true;
+  #renderQueue: TypeGpuRenderQueueItem[] = [];
   #renderSettings: TypeGpuRenderSettings;
   #renderSize = { width: 0, height: 0 };
   #resizeObserver: ResizeObserver | null = null;
   #samplerResources: SamplerResourceCache;
   #sceneBindGroup: TgpuBindGroup<typeof sceneBindGroupLayout.entries>;
-  #shaderPassBindGroup: TgpuBindGroup<typeof shaderPassBindGroupLayout.entries>;
-  #shaderPasses: TypeGpuShaderPass[] = [];
+  #shaderPassResources = new Map<TypeGpuShaderPass['node'], ShaderPassResource>();
   #shaderPassPipelines = new Map<string, TypeGpuShaderPassPipeline>();
-  #shaderPassUniformBuffer: TypeGpuShaderPassUniformBuffer;
   #shadowBindGroup: TgpuBindGroup<typeof shadowBindGroupLayout.entries>;
   #shadowBuffer: TypeGpuShadowUniformBuffer;
   #shadowMapSize = 0;
@@ -243,13 +247,6 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       lighting: this.#lightingBuffer
     });
     this.#sceneBindGroup = root.createBindGroup(sceneBindGroupLayout, { scene: this.#uniformBuffer });
-    this.#shaderPassUniformBuffer = root
-      .createBuffer(typegpuShaderPassUniformSchema)
-      .$usage('uniform')
-      .$name('TypeGPU shader pass uniforms');
-    this.#shaderPassBindGroup = root.createBindGroup(shaderPassBindGroupLayout, {
-      uniforms: this.#shaderPassUniformBuffer
-    });
     this.#shadowBuffer = root.createBuffer(typegpuShadowSchema)
       .$usage('uniform')
       .$name('TypeGPU shadow uniforms');
@@ -308,16 +305,37 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   setScene(scene: TypeGpuSceneState): void {
     if (this.#disposed) return;
 
+    const depthChanged = this.#renderSettings.depth !== scene.renderSettings.depth;
     this.setCamera(scene.camera);
     this.#updateRenderSettings(scene.renderSettings);
     this.#lights = scene.lights;
     this.#drawBatches = scene.drawBatches;
-    this.#shaderPasses = scene.shaderPasses;
 
     if (scene.lightsChanged) {
       this.#lightingBuffer.write(packLightingState(scene.lights));
     }
 
+    if (scene.drawBatchesChanged) this.#syncMeshResources(scene);
+    if (scene.drawBatchesChanged || depthChanged) this.#syncPipelines(scene);
+
+    if (scene.shaderPassesChanged || depthChanged) {
+      pruneShaderPassPipelineCache(this.#shaderPassPipelines, scene.shaderPasses, scene.renderSettings.depth);
+    }
+    if (scene.shaderPassesChanged) {
+      const liveNodes = new Set(scene.shaderPasses.map((shaderPass) => shaderPass.node));
+      for (const [node, resource] of this.#shaderPassResources) {
+        if (liveNodes.has(node)) continue;
+        resource.buffer.destroy();
+        this.#shaderPassResources.delete(node);
+      }
+    }
+    if (scene.drawBatchesChanged || scene.shaderPassesChanged) {
+      this.#renderQueue = createTypeGpuRenderQueue(scene.drawBatches, scene.shaderPasses);
+    }
+    this.invalidate();
+  }
+
+  #syncMeshResources(scene: TypeGpuSceneState): void {
     for (const batch of scene.drawBatches) {
       this.#geometryResources.getOrCreate(batch);
       this.#textureResources.getOrLoad(batch.material.map ?? batch.material.texture ?? null);
@@ -331,7 +349,6 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
         addressModeW: 'repeat'
       });
       this.#materialResources.getOrCreate(batch.material);
-      this.#pipelines.getOrCreate(batch, scene.renderSettings.depth);
 
       const instanceResource = this.#instanceBuffers.getOrCreate(batch);
 
@@ -358,6 +375,13 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     );
     this.#textureResources.prune(scene.liveResourceKeys.textures);
     this.#samplerResources.prune(scene.liveResourceKeys.samplers);
+    this.#instanceBuffers.prune(new Set(scene.drawBatches.map((batch) => batch.key)));
+  }
+
+  #syncPipelines(scene: TypeGpuSceneState): void {
+    for (const batch of scene.drawBatches) {
+      this.#pipelines.getOrCreate(batch, scene.renderSettings.depth);
+    }
     this.#pipelines.prune(
       new Set(
         scene.drawBatches
@@ -365,13 +389,6 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
           .map((batch) => pipelineResourceKeyFor(batch, scene.renderSettings.depth))
       )
     );
-    pruneShaderPassPipelineCache(
-      this.#shaderPassPipelines,
-      scene.shaderPasses,
-      scene.renderSettings.depth
-    );
-    this.#instanceBuffers.prune(new Set(scene.drawBatches.map((batch) => batch.key)));
-    this.invalidate();
   }
 
   setCamera(camera: TypeGpuCameraSettings): void {
@@ -397,7 +414,6 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
     this.#resize();
     this.#writeUniforms();
-    this.#writeShaderPassUniforms();
     const activeShadow = this.#activeShadow();
 
     this.#prepareShadowResources(activeShadow);
@@ -437,12 +453,12 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       clearColor: this.#renderSettings.clearColor,
       depthTexture: this.#renderSettings.depth ? this.#depthTexture : null,
       draw: (pass) => {
-        drawTypeGpuRenderQueue(createTypeGpuRenderQueue(this.#drawBatches, this.#shaderPasses), {
+        drawTypeGpuRenderQueue(this.#renderQueue, {
           drawMesh: (batch) => {
             const geometryResource = this.#geometryResources.getOrCreate(batch);
             const instanceResource = this.#instanceBuffers.getOrCreate(batch);
             const materialResource = this.#materialResources.getOrCreate(batch.material);
-            const pipeline = this.#pipelineForBatch(batch, this.#renderSettings.depth);
+            const pipeline = this.#pipelines.getOrCreate(batch, this.#renderSettings.depth);
 
             if (!instanceResource.buffer || instanceResource.instanceCount === 0) return;
 
@@ -459,10 +475,16 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
             });
           },
           drawShaderPass: (shaderPass) => {
+            const resource = this.#shaderPassResourceFor(shaderPass);
+            writeShaderPassFrameUniforms(resource.buffer, {
+              time: this.#time,
+              renderSize: this.#renderSize,
+              uniforms: shaderPass.uniforms
+            });
             drawTypeGpuShaderPass({
               pipeline: this.#shaderPassPipelineFor(shaderPass),
               pass,
-              shaderPassBindGroup: this.#shaderPassBindGroup
+              shaderPassBindGroup: resource.bindGroup
             });
           }
         });
@@ -492,10 +514,13 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#geometryResources.dispose();
     this.#instanceBuffers.dispose();
     this.#materialResources.dispose();
+    this.#pipelines.dispose();
     this.#textureResources.dispose();
     this.#shaderPassPipelines.clear();
     this.#lightingBuffer.destroy();
-    this.#shaderPassUniformBuffer.destroy();
+    for (const resource of this.#shaderPassResources.values()) resource.buffer.destroy();
+    this.#shaderPassResources.clear();
+    this.#renderQueue = [];
     this.#shadowBuffer.destroy();
     this.#uniformBuffer.destroy();
     this.root.destroy();
@@ -615,16 +640,6 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     return this.#shadowPipeline;
   }
 
-  #pipelineForBatch(batch: TypeGpuDrawBatch, depth: boolean): TypeGpuMeshPipeline {
-    const pipelineKey = batch.pipelineKey;
-
-    if (!pipelineKey) {
-      return this.#pipelines.getOrCreate(batch, depth);
-    }
-
-    return this.#pipelines.getOrCreate(batch, depth);
-  }
-
   #shaderPassPipelineFor(shaderPass: TypeGpuShaderPass): TypeGpuShaderPassPipeline {
     const key = shaderPassPipelineResourceKey(shaderPass, this.#renderSettings.depth);
     const existing = this.#shaderPassPipelines.get(key);
@@ -681,11 +696,19 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#uniformBuffer.write(arrayBufferFor(this.#uniformData));
   }
 
-  #writeShaderPassUniforms(): void {
-    writeShaderPassFrameUniforms(this.#shaderPassUniformBuffer, {
-      time: this.#time,
-      renderSize: this.#renderSize
-    });
+  #shaderPassResourceFor(shaderPass: TypeGpuShaderPass): ShaderPassResource {
+    const existing = this.#shaderPassResources.get(shaderPass.node);
+    if (existing) return existing;
+
+    const buffer = this.root.createBuffer(typegpuShaderPassUniformSchema)
+      .$usage('uniform')
+      .$name(`TypeGPU shader pass uniforms ${shaderPass.key}`);
+    const resource = {
+      buffer,
+      bindGroup: this.root.createBindGroup(shaderPassBindGroupLayout, { uniforms: buffer })
+    };
+    this.#shaderPassResources.set(shaderPass.node, resource);
+    return resource;
   }
 }
 

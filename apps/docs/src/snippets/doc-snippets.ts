@@ -39,7 +39,7 @@ export const docSnippetDefinitions = [
     id: 'quickstartInstall',
     filename: 'terminal',
     lang: 'bash',
-    code: 'pnpm add svelte@https://pkg.pr.new/svelte@18042 svelte-typegpu'
+    code: 'pnpm add svelte@https://pkg.svelte.dev/svelte/c/17e37a51bc539cdb6a923b424e5746fc6505ba89 svelte-typegpu'
   },
   {
     id: 'quickstartVite',
@@ -53,10 +53,11 @@ const typeGpuRenderer = fileURLToPath(import.meta.resolve('svelte-typegpu/svelte
 export default {
   plugins: [
     svelte({
-      compilerOptions: { runes: true },
-      dynamicCompileOptions({ filename }) {
-        if (filename.endsWith('.typegpu.svelte')) {
-          return { experimental: { customRenderer: typeGpuRenderer } };
+      compilerOptions: {
+        runes: true,
+        experimental: {
+          customRenderer: ({ filename }) =>
+            filename.endsWith('.typegpu.svelte') ? typeGpuRenderer : null
         }
       }
     })
@@ -69,17 +70,19 @@ export default {
     lang: 'svelte',
     code: [
       '<script lang="ts">',
-      "  import { onMount } from 'svelte';",
+      "  import { mount, onMount, unmount } from 'svelte';",
       "  import renderer, { createTypeGpuRoot } from 'svelte-typegpu';",
       "  import Scene from './Scene.typegpu.svelte';",
       '  let host: HTMLDivElement;',
       '  onMount(() => {',
+      '    let disposed = false;',
       '    let cleanup = () => {};',
       "    createTypeGpuRoot({ target: host, frameloop: 'always' }).then((root) => {",
-      '      const instance = renderer.render(Scene, { target: root });',
-      '      cleanup = () => { instance.unmount(); root.dispose(); };',
+      '      if (disposed) { root.dispose(); return; }',
+      '      const instance = mount(Scene, { renderer, target: root });',
+      '      cleanup = () => { void unmount(instance); root.dispose(); };',
       '    });',
-      '    return () => cleanup();',
+      '    return () => { disposed = true; cleanup(); };',
       '  });',
       '</script>',
       '<div bind:this={host}></div>'

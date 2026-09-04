@@ -57,6 +57,17 @@ describe('TypeGPU draw batch cache', () => {
     expect(second[0].dirtyRanges).toEqual([]);
   });
 
+  it('automatically batches matching draw items into one instanced draw', () => {
+    const [batch] = createDrawBatchCache().read([
+      drawItem({ id: 'component:cube:0' }),
+      drawItem({ id: 'component:cube:1' }),
+      drawItem({ id: 'inline:cube:2' })
+    ]);
+
+    expect(batch.instanceCount).toBe(3);
+    expect(batch.instanceIds).toEqual(['component:cube:0', 'component:cube:1', 'inline:cube:2']);
+  });
+
   it('emits dirty ranges when individual revisions change', () => {
     const cache = createDrawBatchCache();
     const first = cache.read([

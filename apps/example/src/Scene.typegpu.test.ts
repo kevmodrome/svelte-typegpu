@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { compile } from 'svelte/compiler';
+import { mount, unmount, type Component } from 'svelte';
 import * as svelteClient from 'svelte/internal/client';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sceneCameraForCount } from './lib/cube-field';
 import { createCubeQuadrants } from './lib/cube-quadrants';
 import { demoColorForIndex } from './lib/demo-colors';
@@ -18,6 +19,11 @@ import {
   type TypeGpuNode
 } from 'svelte-typegpu/testing';
 import renderer from 'svelte-typegpu';
+
+const instances: ReturnType<typeof mount>[] = [];
+afterEach(async () => {
+  await Promise.all(instances.splice(0).map((instance) => unmount(instance)));
+});
 
 const typeGpuRendererPath = fileURLToPath(
   import.meta.resolve('svelte-typegpu/svelte-renderer')
@@ -82,10 +88,11 @@ describe('TypeGPU demo scene authoring API', () => {
       }
     };
 
-    renderer.render(Scene, {
+    instances.push(mount(Scene, {
+      renderer,
       target: root,
       props: { controls, onShapeClick, onCameraChange }
-    });
+    }));
 
     const scene = onlyElement(root, 'scene');
     const camera = onlyNamed(scene, 'perspectiveCamera');
@@ -217,10 +224,11 @@ describe('TypeGPU demo scene authoring API', () => {
       cubeScale: 1.9
     };
 
-    renderer.render(Scene, {
+    instances.push(mount(Scene, {
+      renderer,
       target: root,
       props: { controls }
-    });
+    }));
 
     const scene = onlyElement(root, 'scene');
 
@@ -337,5 +345,5 @@ function loadTypeGpuComponent(
     svelteClient,
     renderer,
     ...dependencyNames.map((name) => dependencies[name])
-  ) as Parameters<typeof renderer.render>[0];
+  ) as Component<any>;
 }

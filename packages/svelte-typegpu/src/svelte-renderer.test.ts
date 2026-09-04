@@ -66,6 +66,64 @@ function loadedModel(key: string): TypeGpuLoadedModel {
 }
 
 describe('TypeGPU Svelte renderer runtime', () => {
+  it('discards queued syncs and ignores new work after idempotent disposal', async () => {
+    const root = createFragment();
+    const renderer = fakeRenderer();
+    const runtime = createTypeGpuRuntimeForTest(root, new FakeCanvas() as unknown as HTMLCanvasElement, renderer);
+
+    runtime.scheduleSync(root);
+    runtime.dispose();
+    runtime.dispose();
+    await Promise.resolve();
+    runtime.scheduleSync(root);
+    await Promise.resolve();
+
+    expect(renderer.setScene).not.toHaveBeenCalled();
+    expect(renderer.dispose).toHaveBeenCalledOnce();
+  });
+
+  it('ignores model settlement after disposal', async () => {
+    const root = createFragment();
+    const model = createElement('model');
+    setAttribute(model, 'src', '/late.glb');
+    insert(root, model, null);
+    let resolveLoad!: (model: TypeGpuLoadedModel) => void;
+    const renderer = fakeRenderer();
+    const runtime = createTypeGpuRuntimeForTest(root, new FakeCanvas() as unknown as HTMLCanvasElement, renderer, {
+      loadUrl: () => new Promise((resolve) => { resolveLoad = resolve; })
+    });
+
+    runtime.scheduleSync(root);
+    await Promise.resolve();
+    runtime.dispose();
+    resolveLoad(loadedModel('late'));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(renderer.setScene).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['depth', false],
+    ['alphaMode', 'opaque']
+  ])('synchronizes a reactive scene %s change', async (attribute, value) => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    insert(root, scene, null);
+    const renderer = fakeRenderer();
+    const runtime = createTypeGpuRuntimeForTest(root, new FakeCanvas() as unknown as HTMLCanvasElement, renderer);
+    root.runtime = runtime;
+    runtime.scheduleSync(root);
+    await Promise.resolve();
+
+    setAttribute(scene, attribute as string, value);
+    await Promise.resolve();
+
+    expect(renderer.setScene).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(renderer.setScene).mock.lastCall?.[0].renderSettings).toMatchObject({ [attribute as string]: value });
+    runtime.dispose();
+  });
+
   it('does not route a click after orbit dragging the canvas', async () => {
     const root = createFragment();
     const scene = createElement('scene');

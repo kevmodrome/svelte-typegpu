@@ -28,7 +28,6 @@ export default function SceneBox_typegpu($$anchor, $$props) {
 
 	$.template_effect(() => {
 		$.set_attribute(mesh, 'position', $$props.position);
-		$.set_attribute(mesh, 'quaternion', $$props.quaternion);
 		$.set_attribute(bufferGeometry, 'key', $$props.geometryKey);
 		$.set_attribute(bufferGeometry, 'vertices', $$props.vertices);
 		$.set_attribute(bufferGeometry, 'bounds', $$props.bounds);

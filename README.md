@@ -61,7 +61,7 @@ Mount it into a WebGPU canvas root from ordinary Svelte code:
 
 ```svelte
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { mount, onMount, unmount } from 'svelte';
   import renderer, { createTypeGpuRoot } from 'svelte-typegpu';
   import Scene from './Scene.typegpu.svelte';
 
@@ -77,9 +77,9 @@ Mount it into a WebGPU canvas root from ordinary Svelte code:
         return;
       }
 
-      const instance = renderer.render(Scene, { target: root });
+      const instance = mount(Scene, { renderer, target: root });
       cleanup = () => {
-        instance.unmount();
+        void unmount(instance);
         root.dispose();
       };
     });
@@ -119,10 +119,12 @@ preview build and must configure `.typegpu.svelte` files to use the
 `svelte-typegpu/svelte-renderer` custom renderer:
 
 ```bash
-pnpm add svelte@https://pkg.pr.new/svelte@18042 svelte-typegpu
+pnpm add svelte@https://pkg.svelte.dev/svelte/c/17e37a51bc539cdb6a923b424e5746fc6505ba89 svelte-typegpu
 ```
 
-This repository also uses that `pkg.pr.new` URL for development and CI instead
-of a local Svelte checkout.
+This repository pins the official preview for PR commit
+`17e37a51bc539cdb6a923b424e5746fc6505ba89` (Svelte 5.57.0) in development and CI.
+The published Svelte peer range alone does not provide the experimental API;
+applications must install this preview until the PR lands.
 
 The example app shows the current Vite setup in `apps/example/vite.config.ts`.

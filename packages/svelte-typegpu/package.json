@@ -45,15 +45,16 @@
     "access": "public"
   },
   "peerDependencies": {
-    "svelte": ">=5.55.9 <6"
+    "svelte": ">=5.57.0 <6"
   },
   "dependencies": {
+    "@typegpu/noise": "^0.11.0",
     "typegpu": "^0.11.6"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
     "@webgpu/types": "^0.1.70",
-    "svelte": "https://pkg.pr.new/svelte@18042",
+    "svelte": "https://pkg.svelte.dev/svelte/c/17e37a51bc539cdb6a923b424e5746fc6505ba89",
     "typescript": "^5.9.3",
     "vitest": "^4.0.14"
   }

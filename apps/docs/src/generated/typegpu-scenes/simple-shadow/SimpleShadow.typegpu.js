@@ -88,7 +88,7 @@ export default function SimpleShadow_typegpu($$anchor, $$props) {
 			simpleShadowControls().lightZ
 		]);
 
-		$.without_renderer(() => ShadowLights(node, {
+		ShadowLights(node, {
 			get lightDirection() {
 				return $.get($0);
 			},
@@ -104,7 +104,7 @@ export default function SimpleShadow_typegpu($$anchor, $$props) {
 			get displayMode() {
 				return simpleShadowControls().displayMode;
 			}
-		}));
+		});
 	}
 
 	var mesh = $.sibling(node, 2);
@@ -127,12 +127,12 @@ export default function SimpleShadow_typegpu($$anchor, $$props) {
 
 	var node_1 = $.sibling(mesh, 2);
 
-	$.without_renderer(() => ShadowSubject(node_1, {
+	ShadowSubject(node_1, {
 		get cuboidThickness() {
 			return simpleShadowControls().cuboidThickness;
 		},
 		color: [0.8, 0.7, 0.7, 1]
-	}));
+	});
 
 	$.reset(scene);
 

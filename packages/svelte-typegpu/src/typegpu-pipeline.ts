@@ -1,4 +1,4 @@
-import tgpu, { d, type TgpuRoot } from 'typegpu';
+import tgpu, { d, type TgpuRoot, type WithBinding } from 'typegpu';
 import { DEPTH_FORMAT } from './render-constants';
 import {
   lightingBindGroupLayout,
@@ -9,7 +9,7 @@ import {
   shadowBindGroupLayout,
   shadowPassBindGroupLayout
 } from './typegpu-layouts';
-import type { TypeGpuMaterialDescriptor, TypeGpuShaderPass } from './types';
+import type { TypeGpuMaterialDescriptor, TypeGpuMeshFragment, TypeGpuShaderPass } from './types';
 
 const rotateX = tgpu
   .fn([d.vec3f, d.f32], d.vec3f)/* wgsl */ `(position, angle) {
@@ -359,7 +359,7 @@ export const meshFragmentMain = tgpu
     let light_count = min(lightingBindGroupLayout.$.lighting.count, 32u);
 
     if (light_count == 0u) {
-      return vec4(base_color * 0.82, output_alpha);
+      return vec4f(base_color.r, base_color.g, base_color.b, output_alpha);
     }
 
     var lighting_normal = vec3(0.0, 0.0, 1.0);
@@ -428,7 +428,7 @@ export const meshFragmentMain = tgpu
 
     lit_color = max(lit_color, base_color * 0.08);
 
-    return vec4(lit_color, output_alpha);
+    return vec4f(lit_color.r, lit_color.g, lit_color.b, output_alpha);
   }`
   .$uses({
     materialBindGroupLayout,
@@ -443,6 +443,7 @@ export interface TypeGpuMeshPipelineOptions {
   cullMode?: GPUCullMode;
   depthWrite?: boolean;
   depthTest?: boolean;
+  fragment?: TypeGpuMeshFragment;
 }
 
 export interface TypeGpuShadowPipelineOptions {
@@ -456,7 +457,7 @@ export interface TypeGpuShaderPassPipelineOptions {
 }
 
 export function createMeshPipeline(
-  root: TgpuRoot,
+  root: TgpuRoot | WithBinding,
   format: GPUTextureFormat,
   options: TypeGpuMeshPipelineOptions = {}
 ) {
@@ -476,7 +477,7 @@ export function createMeshPipeline(
       material_extra: meshInstanceLayout.attrib.materialExtra
     },
     vertex: meshVertexMain,
-    fragment: meshFragmentMain,
+    fragment: options.fragment ?? meshFragmentMain,
     targets: {
       format,
       blend: blendStateFor(options.blendMode)

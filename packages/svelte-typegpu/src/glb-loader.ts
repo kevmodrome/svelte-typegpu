@@ -42,6 +42,7 @@ export interface GltfJson {
 }
 
 export interface GltfNode {
+  name?: string;
   mesh?: number;
   children?: number[];
   matrix?: number[];
@@ -51,6 +52,7 @@ export interface GltfNode {
 }
 
 export interface GltfMesh {
+  name?: string;
   primitives?: GltfPrimitive[];
 }
 
@@ -214,10 +216,23 @@ function collectNodePrimitives(
     const primitives = isRecord(mesh) && Array.isArray(mesh.primitives)
       ? mesh.primitives
       : [];
+    const primitiveName =
+      typeof node.name === 'string'
+        ? node.name
+        : isRecord(mesh) && typeof mesh.name === 'string'
+          ? mesh.name
+          : undefined;
 
     for (const primitive of primitives) {
       if (!isRecord(primitive)) continue;
-      const loaded = readPrimitive(container, modelKey, primitive, nextPrimitiveIndex(), worldMatrix);
+      const loaded = readPrimitive(
+        container,
+        modelKey,
+        primitive,
+        nextPrimitiveIndex(),
+        worldMatrix,
+        primitiveName
+      );
       if (loaded) meshes.push(loaded);
     }
   }
@@ -235,7 +250,8 @@ function readPrimitive(
   modelKey: string,
   primitive: GltfPrimitive,
   primitiveIndex: number,
-  worldMatrix: Matrix4
+  worldMatrix: Matrix4,
+  name?: string
 ): TypeGpuLoadedModelMesh | null {
   if ((primitive.mode ?? GL_TRIANGLES) !== GL_TRIANGLES) return null;
   if (!primitive.attributes || typeof primitive.attributes.POSITION !== 'number') return null;
@@ -279,6 +295,7 @@ function readPrimitive(
   if (!vertexData) return null;
 
   return {
+    name,
     geometry: {
       key: `${modelKey}:primitive:${primitiveIndex}`,
       kind: 'imported',

@@ -4,4 +4,7 @@
 export { default as TwoBoxes } from './two-boxes/TwoBoxes.typegpu.js';
 export { default as PhongReflection } from './phong-reflection/PhongReflection.typegpu.js';
 export { default as SimpleShadow } from './simple-shadow/SimpleShadow.typegpu.js';
-export { default as InteractiveOrbitField } from './interactive-orbit-field/InteractiveOrbitField.typegpu.js';
+export { default as DiscoShaderPass } from './disco-shader-pass/DiscoShaderPass.typegpu.js';
+export { default as SmokyTriangle } from './smoky-triangle/SmokyTriangle.typegpu.js';
+export { default as MultipleSmokyTriangles } from './multiple-smoky-triangles/MultipleSmokyTriangles.typegpu.js';
+export { default as Gravity } from './gravity/Gravity.typegpu.js';

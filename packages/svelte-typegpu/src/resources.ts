@@ -14,7 +14,21 @@ import type {
   Vector3Tuple
 } from './types';
 
+const inlineGeometryCache = new WeakMap<TypeGpuNode, {
+  revision: number;
+  geometry: TypeGpuGeometryData | null;
+}>();
+
 export function readInlineGeometry(node: TypeGpuNode): TypeGpuGeometryData | null {
+  const previous = inlineGeometryCache.get(node);
+  if (previous?.revision === node.revision) return previous.geometry;
+
+  const geometry = readGeometryAttributes(node);
+  inlineGeometryCache.set(node, { revision: node.revision, geometry });
+  return geometry;
+}
+
+function readGeometryAttributes(node: TypeGpuNode): TypeGpuGeometryData | null {
   if (node.name === 'boxGeometry') {
     return createBoxGeometryData(
       dimensionArg(node.attributes.width, 1),
@@ -47,10 +61,12 @@ export function readInlineGeometry(node: TypeGpuNode): TypeGpuGeometryData | nul
       return null;
     }
 
+    const explicitKey = stringArg(node.attributes.key);
+    const indices = indicesArg(node.attributes.indices);
     return createBufferGeometryData({
-      key: versionedKey(stringArg(node.attributes.key) ?? `buffer:${node.uid}`, node),
+      key: versionedKey(explicitKey ?? autoBufferGeometryKey(vertices, indices), node),
       vertices,
-      indices: indicesArg(node.attributes.indices),
+      indices,
       bounds,
       topology: node.attributes.topology === 'triangle-list' ? 'triangle-list' : undefined
     });
@@ -100,4 +116,20 @@ function indicesArg(value: unknown): Uint16Array | Uint32Array | undefined {
 
 function versionedKey(base: string, node: TypeGpuNode): string {
   return `${base}@rev:${node.revision}`;
+}
+
+const bufferGeometryIds = new WeakMap<ArrayBufferView, number>();
+let nextBufferGeometryId = 1;
+
+function autoBufferGeometryKey(vertices: Float32Array, indices?: Uint16Array | Uint32Array): string {
+  return `buffer:auto:${bufferIdentity(vertices)}:indices:${indices ? bufferIdentity(indices) : 'none'}`;
+}
+
+function bufferIdentity(data: ArrayBufferView): number {
+  const cached = bufferGeometryIds.get(data);
+  if (cached) return cached;
+
+  const next = nextBufferGeometryId++;
+  bufferGeometryIds.set(data, next);
+  return next;
 }

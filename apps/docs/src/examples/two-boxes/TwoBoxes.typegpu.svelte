@@ -1,10 +1,9 @@
 <script lang="ts">
+  import Floor from './Floor.typegpu.svelte';
   import SceneBox from './SceneBox.typegpu.svelte';
   import {
     boxBounds,
     type GeometryBounds,
-    floorBounds,
-    floorVertices,
     leftBoxVertices,
     rightBoxVertices
   } from './box-geometry';
@@ -62,23 +61,17 @@
     </controls>
   </perspectiveCamera>
 
-  <mesh position={[0, -2, 0]} scale={[5, 1, 5]}>
-    <bufferGeometry
-      key="two-boxes:floor"
-      vertices={floorVertices}
-      bounds={floorBounds}
-    ></bufferGeometry>
-    <basicMaterial color={[1, 1, 1, 1]} cullMode="none"></basicMaterial>
-  </mesh>
+  <group quaternion={boxRotation}>
+    <Floor />
 
-  {#each boxes as box (box.id)}
-    <SceneBox
-      geometryKey={box.geometryKey}
-      vertices={box.vertices}
-      bounds={box.bounds}
-      position={box.position}
-      quaternion={boxRotation}
-      onDragMove={rotateBothBoxes}
-    />
-  {/each}
+    {#each boxes as box (box.id)}
+      <SceneBox
+        geometryKey={box.geometryKey}
+        vertices={box.vertices}
+        bounds={box.bounds}
+        position={box.position}
+        onDragMove={rotateBothBoxes}
+      />
+    {/each}
+  </group>
 </scene>

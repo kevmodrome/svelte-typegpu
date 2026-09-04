@@ -94,7 +94,22 @@ export const typegpuShadowSchema = d
 export const materialBindGroupLayout = tgpu
   .bindGroupLayout({
     baseColorTexture: { texture: d.texture2d(), visibility: ['fragment'] },
-    baseColorSampler: { sampler: 'filtering', visibility: ['fragment'] }
+    baseColorSampler: { sampler: 'filtering', visibility: ['fragment'] },
+    uniforms: {
+      uniform: d
+        .struct({
+          value0: d.vec4f,
+          value1: d.vec4f,
+          value2: d.vec4f,
+          value3: d.vec4f,
+          value4: d.vec4f,
+          value5: d.vec4f,
+          value6: d.vec4f,
+          value7: d.vec4f
+        })
+        .$name('TypeGpuMaterialUniforms'),
+      visibility: ['fragment']
+    }
   })
   .$idx(2)
   .$name('TypeGPU standard material bind group layout');
@@ -115,7 +130,7 @@ export const shadowPassBindGroupLayout = tgpu
   .$idx(0)
   .$name('TypeGPU shadow pass bind group layout');
 
-export const TYPEGPU_SHADER_PASS_UNIFORM_FLOATS = 4;
+export const TYPEGPU_SHADER_PASS_UNIFORM_FLOATS = 36;
 export const TYPEGPU_SHADER_PASS_UNIFORM_BYTES =
   TYPEGPU_SHADER_PASS_UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT;
 
@@ -123,7 +138,15 @@ export const typegpuShaderPassUniformSchema = d
   .struct({
     time: d.f32,
     padding0: d.f32,
-    resolution: d.vec2f
+    resolution: d.vec2f,
+    value0: d.vec4f,
+    value1: d.vec4f,
+    value2: d.vec4f,
+    value3: d.vec4f,
+    value4: d.vec4f,
+    value5: d.vec4f,
+    value6: d.vec4f,
+    value7: d.vec4f
   })
   .$name('TypeGpuShaderPassUniforms');
 

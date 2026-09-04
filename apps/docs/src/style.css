@@ -836,7 +836,7 @@ textarea {
 
 .control-row {
   display: grid;
-  grid-template-columns: minmax(98px, 0.85fr) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(98px, 0.85fr) minmax(0, 1fr) minmax(5ch, auto);
   gap: 10px;
   align-items: center;
   color: var(--muted);
@@ -879,9 +879,11 @@ textarea {
 
 .control-row output,
 .vector-control output {
+  min-width: 5ch;
   color: var(--text);
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
   font-weight: 850;
   text-align: right;
 }
@@ -897,7 +899,7 @@ textarea {
 
 .vector-control label {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) 44px;
+  grid-template-columns: 16px minmax(0, 1fr) minmax(5ch, auto);
   gap: 8px;
   align-items: center;
 }

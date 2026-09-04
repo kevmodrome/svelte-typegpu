@@ -239,9 +239,9 @@ function generatedModuleName(sourcePath: string): string {
 function sceneDeclaration(sourcePath: string): string {
   return [
     header(sourcePath),
-    "import type renderer from 'svelte-typegpu';",
+    "import type { Component } from 'svelte';",
     '',
-    'type TypeGpuSceneComponent = Parameters<typeof renderer.render>[0];',
+    'type TypeGpuSceneComponent = Component<any>;',
     '',
     'declare const component: TypeGpuSceneComponent;',
     'export default component;',

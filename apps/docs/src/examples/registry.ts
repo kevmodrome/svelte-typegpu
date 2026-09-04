@@ -15,7 +15,7 @@ export interface DocsExample {
   category: string;
   tags: readonly string[];
   description: string;
-  typeGpuSourceUrl: string;
+  typeGpuSourceUrl?: string;
   notes: string;
   code: string;
   sourceFiles: ExampleSourceFile[];

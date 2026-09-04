@@ -13,6 +13,7 @@ export const exampleDefinitions = [
     sourceUrl: new URL('./two-boxes/TwoBoxes.typegpu.svelte', import.meta.url),
     sourceFiles: [
       new URL('./two-boxes/TwoBoxes.typegpu.svelte', import.meta.url),
+      new URL('./two-boxes/Floor.typegpu.svelte', import.meta.url),
       new URL('./two-boxes/SceneBox.typegpu.svelte', import.meta.url),
       new URL('./two-boxes/box-geometry.ts', import.meta.url),
       new URL('./two-boxes/box-interaction.ts', import.meta.url)
@@ -68,7 +69,7 @@ export const exampleDefinitions = [
     ]
   },
   {
-    slug: 'interactive-orbit-field',
+    slug: 'disco-shader-pass',
     title: 'Disco Shader Pass',
     category: 'rendering',
     tags: ['animation', 'shader', 'fullscreen'],
@@ -78,14 +79,11 @@ export const exampleDefinitions = [
       'https://docs.swmansion.com/TypeGPU/examples/#example=rendering--disco',
     notes:
       'Adapted from the motion-first official TypeGPU Disco example using a renderer shaderPass with time and resolution uniforms.',
-    exportName: 'InteractiveOrbitField',
-    sourceUrl: new URL(
-      './interactive-orbit-field/InteractiveOrbitField.typegpu.svelte',
-      import.meta.url
-    ),
+    exportName: 'DiscoShaderPass',
+    sourceUrl: new URL('./disco-shader-pass/DiscoShaderPass.typegpu.svelte', import.meta.url),
     sourceFiles: [
-      new URL('./interactive-orbit-field/InteractiveOrbitField.typegpu.svelte', import.meta.url),
-      new URL('./interactive-orbit-field/disco-fragment.ts', import.meta.url)
+      new URL('./disco-shader-pass/DiscoShaderPass.typegpu.svelte', import.meta.url),
+      new URL('./disco-shader-pass/disco-fragment.ts', import.meta.url)
     ],
     typeGpuSourceFiles: [
       { path: 'index.ts', loc: 86 },
@@ -93,6 +91,74 @@ export const exampleDefinitions = [
       { path: 'utils.ts', loc: 10 },
       { path: 'shaders/fragment.ts', loc: 231 },
       { path: 'shaders/vertex.ts', loc: 23 }
+    ]
+  },
+  {
+    slug: 'smoky-triangle',
+    title: 'Smoky Triangle',
+    category: 'rendering',
+    tags: ['ecosystem', 'noise', 'primitives'],
+    description:
+      'The official smoky triangle idea expressed as a single declarative fullscreen shader pass.',
+    typeGpuSourceUrl:
+      'https://docs.swmansion.com/TypeGPU/examples/#example=rendering--smoky-triangle',
+    notes:
+      'Adapted from the official TypeGPU Smoky Triangle example using the renderer shaderPass primitive and renderer-managed frame uniforms.',
+    exportName: 'SmokyTriangle',
+    sourceUrl: new URL('./smoky-triangle/SmokyTriangle.typegpu.svelte', import.meta.url),
+    sourceFiles: [
+      new URL('./smoky-triangle/SmokyTriangle.typegpu.svelte', import.meta.url),
+      new URL('./smoky-triangle/smoky-triangle-fragment.ts', import.meta.url)
+    ],
+    typeGpuSourceFiles: [{ path: 'index.ts', loc: 142 }]
+  },
+  {
+    slug: 'multiple-smoky-triangles',
+    title: 'Multiple Smoky Triangles',
+    category: 'rendering',
+    tags: ['shader', 'noise', 'pattern', 'fullscreen'],
+    description:
+      'A declarative mesh lattice that alternates smoky shader triangles with solid white triangles.',
+    notes:
+      'An original svelte-typegpu example that extends the smoky triangle shader idea into reusable triangle mesh components with shaderMaterial.',
+    exportName: 'MultipleSmokyTriangles',
+    sourceUrl: new URL(
+      './multiple-smoky-triangles/MultipleSmokyTriangles.typegpu.svelte',
+      import.meta.url
+    ),
+    sourceFiles: [
+      new URL('./multiple-smoky-triangles/MultipleSmokyTriangles.typegpu.svelte', import.meta.url),
+      new URL('./multiple-smoky-triangles/Triangle.typegpu.svelte', import.meta.url),
+      new URL('./multiple-smoky-triangles/triangle-geometry.ts', import.meta.url),
+      new URL('./multiple-smoky-triangles/smoky-triangle-material.ts', import.meta.url)
+    ],
+    typeGpuSourceFiles: []
+  },
+  {
+    slug: 'gravity',
+    title: 'Gravity',
+    category: 'simulation',
+    tags: ['3d', 'interaction', 'particles', 'physics', 'rasterization'],
+    description:
+      'The official gravity simulation recast as declarative Svelte state driving repeated sphere meshes.',
+    typeGpuSourceUrl: 'https://docs.swmansion.com/TypeGPU/examples/#example=simulation--gravity',
+    notes:
+      'Adapted from the official TypeGPU Gravity example. The official version uses compute pipelines, storage buffers, OBJ loading, and texture arrays; this renderer adaptation keeps the scene declarative with Svelte-managed simulation state until compute/storage primitives exist.',
+    exportName: 'Gravity',
+    sourceUrl: new URL('./gravity/Gravity.typegpu.svelte', import.meta.url),
+    sourceFiles: [
+      new URL('./gravity/Gravity.typegpu.svelte', import.meta.url),
+      new URL('./gravity/GravityBody.typegpu.svelte', import.meta.url),
+      new URL('./gravity/gravity-simulation.ts', import.meta.url)
+    ],
+    typeGpuSourceFiles: [
+      { path: 'index.ts', loc: 246 },
+      { path: 'compute.ts', loc: 116 },
+      { path: 'render.ts', loc: 68 },
+      { path: 'schemas.ts', loc: 85 },
+      { path: 'helpers.ts', loc: 153 },
+      { path: 'presets.ts', loc: 292 },
+      { path: 'enums.ts', loc: 14 }
     ]
   }
 ] as const;

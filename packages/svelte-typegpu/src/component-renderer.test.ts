@@ -1,11 +1,42 @@
 import { compile } from 'svelte/compiler';
+import { flushSync, mount, unmount, type Component } from 'svelte';
 import * as svelteClient from 'svelte/internal/client';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createFragment, type TypeGpuNode } from './core';
 import renderer from './svelte-renderer';
 import { typeGpuRendererPath } from './test-paths';
 
+const instances: ReturnType<typeof mount>[] = [];
+afterEach(async () => {
+  await Promise.all(instances.splice(0).map((instance) => unmount(instance)));
+});
+
 describe('TypeGPU target primitive component rendering', () => {
+  it('preserves keyed snippet nodes across reactive updates and removes them on unmount', async () => {
+    const Scene = compileTypeGpuSource<{ update(): void }>(`
+      <script>
+        let items = $state([1, 2]);
+        let x = $state(0);
+        export function update() { items.reverse(); x = 3; }
+      </script>
+      {#snippet box(id)}
+        <mesh position={[x, id, 0]}><boxGeometry /></mesh>
+      {/snippet}
+      <scene>{#each items as id (id)}{@render box(id)}{/each}</scene>
+    `);
+    const root = createFragment();
+    const instance = mount(Scene, { renderer, target: root });
+    const scene = onlyElement(root);
+    const meshes = scene.children.filter((node) => node.name === 'mesh');
+
+    flushSync(() => instance.update());
+
+    expect(scene.children.filter((node) => node.name === 'mesh')).toEqual([meshes[1], meshes[0]]);
+    expect(meshes[0].attributes.position).toEqual([3, 1, 0]);
+    await unmount(instance);
+    expect(root.children).toEqual([]);
+  });
+
   it('renders guide-level scene primitives into normalized host nodes', () => {
     const onClick = vi.fn();
     const Scene = compileTypeGpuSource(`
@@ -30,7 +61,7 @@ describe('TypeGPU target primitive component rendering', () => {
     `);
     const root = createFragment();
 
-    renderer.render(Scene, { target: root, props: { onClick } });
+    instances.push(mount(Scene, { renderer, target: root, props: { onClick } }));
 
     const scene = onlyElement(root);
     const camera = onlyNamed(scene, 'perspectiveCamera');
@@ -92,7 +123,7 @@ describe('TypeGPU target primitive component rendering', () => {
     `);
     const root = createFragment();
 
-    renderer.render(Scene, { target: root });
+    instances.push(mount(Scene, { renderer, target: root }));
 
     const scene = onlyElement(root);
     const meshes = scene.children.filter((node) => node.name === 'mesh');
@@ -118,9 +149,7 @@ describe('TypeGPU target primitive component rendering', () => {
     `);
     const root = createFragment();
 
-    renderer.render(ModelScene, {
-      target: root
-    });
+    instances.push(mount(ModelScene, { renderer, target: root }));
 
     const scene = onlyElement(root);
     const models = scene.children.filter((node) => node.kind === 'element');
@@ -175,7 +204,7 @@ function findChild(root: TypeGpuNode, name: string): TypeGpuNode | null {
   return null;
 }
 
-function compileTypeGpuSource(source: string) {
+function compileTypeGpuSource<Exports extends Record<string, unknown> = Record<string, never>>(source: string) {
   const result = compile(source, {
     filename: 'Inline.typegpu.svelte',
     generate: 'client',
@@ -196,5 +225,5 @@ function compileTypeGpuSource(source: string) {
   return new Function('$', '$renderer', `${executableCode}\nreturn ${componentName};`)(
     svelteClient,
     renderer
-  ) as Parameters<typeof renderer.render>[0];
+  ) as Component<any, Exports>;
 }

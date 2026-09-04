@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { mount, onMount, unmount } from 'svelte';
   import renderer, {
     createTypeGpuRoot,
     type TypeGpuCameraSettings,
@@ -8,6 +8,11 @@
   } from 'svelte-typegpu';
   import type { ExampleSlug } from '../examples/example-definitions';
   import { sceneComponents } from '../examples/scene-components';
+  import {
+    defaultSmokyTriangleControls,
+    type SmokyTriangleControls
+  } from '../examples/smoky-triangle/smoky-triangle-fragment';
+  import { gravityPresets, type GravityPreset } from '../examples/gravity/gravity-simulation';
 
   let { slug, label }: { slug: ExampleSlug; label: string } = $props();
   let host: HTMLDivElement;
@@ -36,13 +41,28 @@
   let discoControls = $state({
     pattern: 'pattern1'
   });
+  let smokyTriangleControls = $state<SmokyTriangleControls>({
+    ...defaultSmokyTriangleControls,
+    fromColor: [...defaultSmokyTriangleControls.fromColor],
+    toColor: [...defaultSmokyTriangleControls.toColor]
+  });
+  let gravityControls = $state({
+    preset: 'Solar System' as GravityPreset,
+    speed: 0
+  });
 
-  const hasControls = $derived(slug !== 'two-boxes');
+  const hasControls = $derived(
+      slug === 'phong-reflection' ||
+      slug === 'simple-shadow' ||
+      slug === 'disco-shader-pass' ||
+      slug === 'smoky-triangle' ||
+      slug === 'gravity'
+  );
 
   onMount(() => {
     let cancelled = false;
     let root: TypeGpuRoot | null = null;
-    let instance: { unmount(): void } | null = null;
+    let instance: ReturnType<typeof mount> | null = null;
 
     function sceneProps() {
       if (slug === 'phong-reflection') return { controls: phongControls };
@@ -52,15 +72,18 @@
           onCameraChange: handleSimpleShadowCameraChange
         };
       }
-      if (slug === 'interactive-orbit-field') return { controls: discoControls };
+      if (slug === 'disco-shader-pass') return { controls: discoControls };
+      if (slug === 'smoky-triangle') return { controls: smokyTriangleControls };
+      if (slug === 'gravity') return { controls: gravityControls };
       return {};
     }
 
     function renderScene() {
       if (!root) return;
 
-      instance?.unmount();
-      instance = renderer.render(sceneComponents[slug], {
+      if (instance) void unmount(instance);
+      instance = mount(sceneComponents[slug], {
+        renderer,
         target: root,
         props: sceneProps()
       });
@@ -111,7 +134,7 @@
 
     return () => {
       cancelled = true;
-      instance?.unmount();
+      if (instance) void unmount(instance);
       root?.dispose();
     };
   });
@@ -164,8 +187,51 @@
     rerenderScene();
   }
 
+  function setSmokyValue<K extends keyof SmokyTriangleControls>(
+    key: K,
+    value: SmokyTriangleControls[K]
+  ) {
+    smokyTriangleControls[key] = value;
+    rerenderScene();
+  }
+
+  function setSmokyColor(target: 'fromColor' | 'toColor', value: string) {
+    smokyTriangleControls[target] = hexToRgb(value);
+  }
+
+  function setSmokyPreset(preset: 'clouds' | 'fire') {
+    const next =
+      preset === 'clouds'
+        ? defaultSmokyTriangleControls
+        : {
+            distortion: 0.1,
+            sharpness: 7,
+            fromColor: [2, 0.4, 0.5] as [number, number, number],
+            toColor: [0, 0, 0.4] as [number, number, number],
+            polarCoords: true,
+            squashed: false
+          };
+
+    smokyTriangleControls = {
+      ...next,
+      fromColor: [...next.fromColor],
+      toColor: [...next.toColor]
+    };
+    rerenderScene();
+  }
+
+  function setGravityPreset(value: string) {
+    gravityControls.preset = value as GravityPreset;
+    rerenderScene();
+  }
+
+  function setGravitySpeed(value: number) {
+    gravityControls.speed = value;
+    rerenderScene();
+  }
+
   function rgbToHex(color: readonly number[]): string {
-    return `#${color.map((channel) => Math.round(channel * 255).toString(16).padStart(2, '0')).join('')}`;
+    return `#${color.map((channel) => Math.round(clamp01(channel) * 255).toString(16).padStart(2, '0')).join('')}`;
   }
 
   function hexToRgb(value: string): [number, number, number] {
@@ -175,6 +241,10 @@
     const blue = Number.parseInt(normalized.slice(4, 6), 16) / 255;
 
     return [red, green, blue];
+  }
+
+  function clamp01(value: number): number {
+    return Math.max(0, Math.min(1, value));
   }
 </script>
 
@@ -336,7 +406,7 @@
             {/each}
           </select>
         </label>
-      {:else if slug === 'interactive-orbit-field'}
+      {:else if slug === 'disco-shader-pass'}
         <label class="control-row">
           <span>Pattern</span>
           <select
@@ -347,6 +417,92 @@
               <option value={pattern}>{pattern}</option>
             {/each}
           </select>
+        </label>
+      {:else if slug === 'smoky-triangle'}
+        <label class="control-row">
+          <span>distortion</span>
+          <input
+            type="range"
+            min="0"
+            max="0.2"
+            step="0.001"
+            value={smokyTriangleControls.distortion}
+            oninput={(event) => setSmokyValue('distortion', event.currentTarget.valueAsNumber)}
+          />
+          <output>{smokyTriangleControls.distortion.toFixed(3)}</output>
+        </label>
+        <label class="control-row">
+          <span>sharpness</span>
+          <input
+            type="range"
+            min="0"
+            max="7"
+            step="0.1"
+            value={smokyTriangleControls.sharpness}
+            oninput={(event) => setSmokyValue('sharpness', event.currentTarget.valueAsNumber)}
+          />
+          <output>{smokyTriangleControls.sharpness.toFixed(1)}</output>
+        </label>
+        <label class="control-row">
+          <span>From Color</span>
+          <input
+            type="color"
+            value={rgbToHex(smokyTriangleControls.fromColor)}
+            oninput={(event) => setSmokyColor('fromColor', event.currentTarget.value)}
+          />
+        </label>
+        <label class="control-row">
+          <span>To Color</span>
+          <input
+            type="color"
+            value={rgbToHex(smokyTriangleControls.toColor)}
+            oninput={(event) => setSmokyColor('toColor', event.currentTarget.value)}
+          />
+        </label>
+        <label class="control-row checkbox-control">
+          <span>Polar Coordinates</span>
+          <input
+            type="checkbox"
+            checked={smokyTriangleControls.polarCoords}
+            onchange={(event) => setSmokyValue('polarCoords', event.currentTarget.checked)}
+          />
+        </label>
+        <label class="control-row checkbox-control">
+          <span>Squashed</span>
+          <input
+            type="checkbox"
+            checked={smokyTriangleControls.squashed}
+            onchange={(event) => setSmokyValue('squashed', event.currentTarget.checked)}
+          />
+        </label>
+        <div class="control-row button-row">
+          <span>presets</span>
+          <button type="button" onclick={() => setSmokyPreset('clouds')}>Clouds Preset</button>
+          <button type="button" onclick={() => setSmokyPreset('fire')}>Fire Preset</button>
+        </div>
+      {:else if slug === 'gravity'}
+        <label class="control-row">
+          <span>preset</span>
+          <select
+            value={gravityControls.preset}
+            onchange={(event) => setGravityPreset(event.currentTarget.value)}
+          >
+            {#each gravityPresets as preset}
+              <option value={preset}>{preset}</option>
+            {/each}
+          </select>
+        </label>
+        <label class="control-row">
+          <span>simulation speed modifier</span>
+          <input
+            type="range"
+            min="-5"
+            max="5"
+            step="1"
+            value={gravityControls.speed}
+            oninput={(event) => setGravitySpeed(event.currentTarget.valueAsNumber)}
+          />
+          <output>{gravityControls.speed}</output>
         </label>
       {/if}
     </section>

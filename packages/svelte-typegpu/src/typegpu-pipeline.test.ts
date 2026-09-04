@@ -57,6 +57,8 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     expect(wgsl).not.toContain('var shadow =');
     expect(wgsl).toContain('in.uv');
     expect(wgsl).toContain('texel * in.color * in.vertex_color');
+    expect(wgsl).toContain('return vec4f(base_color.r, base_color.g, base_color.b, output_alpha);');
+    expect(wgsl).not.toContain('base_color * 0.82');
     expect(wgsl).toContain('base_color * 0.08');
     expect(wgsl).toContain('texel.a * in.color.a * in.vertex_color.a * in.material.z');
     expect(wgsl).toContain('specular_exponent');

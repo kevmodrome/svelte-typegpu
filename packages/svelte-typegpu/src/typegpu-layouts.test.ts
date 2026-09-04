@@ -173,10 +173,12 @@ describe('TypeGPU layout schemas', () => {
   });
 
   it('describes fullscreen shader pass uniforms with a contiguous TypeGPU bind group', () => {
-    expect(TYPEGPU_SHADER_PASS_UNIFORM_BYTES).toBe(16);
+    expect(TYPEGPU_SHADER_PASS_UNIFORM_BYTES).toBe(144);
     expect(d.sizeOf(typegpuShaderPassUniformSchema)).toBe(TYPEGPU_SHADER_PASS_UNIFORM_BYTES);
     expect(typegpuShaderPassUniformSchema.propTypes.time).toBeDefined();
     expect(typegpuShaderPassUniformSchema.propTypes.resolution).toBeDefined();
+    expect(typegpuShaderPassUniformSchema.propTypes.value0).toBeDefined();
+    expect(typegpuShaderPassUniformSchema.propTypes.value7).toBeDefined();
     expect(shaderPassBindGroupLayout.index).toBe(0);
     expect(shaderPassBindGroupLayout.entries.uniforms?.uniform).toBe(typegpuShaderPassUniformSchema);
   });

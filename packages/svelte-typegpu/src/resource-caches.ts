@@ -1,3 +1,4 @@
+import { perlin3d } from '@typegpu/noise';
 import {
   d,
   type IndexFlag,
@@ -29,6 +30,7 @@ type TypeGpuIndexBuffer = TgpuBuffer<ReturnType<typeof d.arrayOf>> & IndexFlag;
 
 type TypeGpuMaterialTexture = TgpuTexture & SampledFlag;
 type TypeGpuMeshPipeline = ReturnType<typeof createMeshPipeline>;
+type TypeGpuPerlin3DCache = ReturnType<typeof perlin3d.staticCache>;
 type TypeGpuExternalImageSource =
   | HTMLCanvasElement
   | HTMLImageElement
@@ -74,6 +76,8 @@ export interface TypeGpuMaterialResource {
   key: string;
   textureKey: string;
   samplerKey: string;
+  uniformKey: string;
+  uniformBuffer: TgpuBuffer<typeof materialBindGroupLayout.entries.uniforms.uniform>;
   bindGroup: TgpuBindGroup<typeof materialBindGroupLayout.entries>;
   status: TypeGpuTextureResource['status'];
 }
@@ -400,31 +404,82 @@ export class MaterialResourceCache {
     const textureResource = this.textureResources.getOrLoad(material.map ?? material.texture ?? null);
     const samplerResource = this.samplerResources.getOrCreate(material.sampler ?? DEFAULT_SAMPLER);
     const samplerKey = material.samplerKey ?? DEFAULT_SAMPLER.key;
+    const uniformKey = material.kind === 'shader' ? material.uniformKey : 'uniforms:default';
     const existing = this.#resources.get(key);
 
     if (
       existing &&
       existing.textureKey === textureResource.key &&
       existing.samplerKey === samplerKey &&
+      existing.uniformKey === uniformKey &&
       existing.status === textureResource.status
     ) {
       return existing;
     }
 
     const root = this.root;
+    const uniforms = root
+      .createBuffer(materialBindGroupLayout.entries.uniforms.uniform)
+      .$usage('uniform')
+      .$name(`TypeGPU material uniforms ${key}`);
+    uniforms.write(packMaterialUniforms(material));
     const resource = {
       key,
       textureKey: textureResource.key,
       samplerKey,
+      uniformKey,
+      uniformBuffer: uniforms,
       bindGroup: root.createBindGroup(materialBindGroupLayout, {
         baseColorTexture: textureResource.texture,
-        baseColorSampler: samplerResource
+        baseColorSampler: samplerResource,
+        uniforms
       }),
       status: textureResource.status
     };
 
+    existing?.uniformBuffer.destroy();
     this.#resources.set(key, resource);
     return resource;
+  }
+
+  prune(liveKeys: Set<string>): void {
+    for (const [key, resource] of this.#resources) {
+      if (liveKeys.has(key)) continue;
+      resource.uniformBuffer.destroy();
+      this.#resources.delete(key);
+    }
+  }
+
+  dispose(): void {
+    for (const resource of this.#resources.values()) resource.uniformBuffer.destroy();
+    this.#resources.clear();
+  }
+}
+
+export class PipelineResourceCache {
+  readonly #resources = new Map<string, TypeGpuMeshPipeline>();
+  readonly #perlin3dCache: TypeGpuPerlin3DCache;
+
+  constructor(
+    private readonly root: TgpuRoot,
+    private readonly format: GPUTextureFormat
+  ) {
+    this.#perlin3dCache = perlin3d.staticCache({ root, size: d.vec3u(32, 32, 32) });
+  }
+
+  getOrCreate(batch: TypeGpuDrawBatch, depth = true): TypeGpuMeshPipeline {
+    const key = pipelineResourceKeyFor(batch, depth);
+    const existing = this.#resources.get(key);
+
+    if (existing) return existing;
+
+    const pipeline = createMeshPipeline(
+      this.root.pipe(this.#perlin3dCache.inject()),
+      this.format,
+      meshPipelineOptionsFor(batch, depth)
+    );
+    this.#resources.set(key, pipeline);
+    return pipeline;
   }
 
   prune(liveKeys: Set<string>): void {
@@ -435,32 +490,7 @@ export class MaterialResourceCache {
 
   dispose(): void {
     this.#resources.clear();
-  }
-}
-
-export class PipelineResourceCache {
-  readonly #resources = new Map<string, TypeGpuMeshPipeline>();
-
-  constructor(
-    private readonly root: TgpuRoot,
-    private readonly format: GPUTextureFormat
-  ) {}
-
-  getOrCreate(batch: TypeGpuDrawBatch, depth = true): TypeGpuMeshPipeline {
-    const key = pipelineResourceKeyFor(batch, depth);
-    const existing = this.#resources.get(key);
-
-    if (existing) return existing;
-
-    const pipeline = createMeshPipeline(this.root, this.format, meshPipelineOptionsFor(batch, depth));
-    this.#resources.set(key, pipeline);
-    return pipeline;
-  }
-
-  prune(liveKeys: Set<string>): void {
-    for (const key of this.#resources.keys()) {
-      if (!liveKeys.has(key)) this.#resources.delete(key);
-    }
+    this.#perlin3dCache.destroy();
   }
 }
 
@@ -475,7 +505,8 @@ export function pipelineResourceKeyFor(batch: TypeGpuDrawBatch, depth: boolean):
 export function materialResourceKeyFor(material: TypeGpuMaterialDescriptor): string {
   return material.bindGroupKey ?? [
     material.textureKey ?? 'solid:white',
-    material.samplerKey ?? DEFAULT_SAMPLER.key
+    material.samplerKey ?? DEFAULT_SAMPLER.key,
+    material.kind === 'shader' ? material.uniformKey : 'uniforms:default'
   ].join('|');
 }
 
@@ -485,7 +516,8 @@ function meshPipelineOptionsFor(batch: TypeGpuDrawBatch, depth: boolean) {
     blendMode: batch.material.blendMode ?? 'opaque',
     cullMode: batch.material.cullMode ?? 'back',
     depthWrite: batch.material.depthWrite !== false,
-    depthTest: batch.material.depthTest !== false
+    depthTest: batch.material.depthTest !== false,
+    fragment: batch.material.kind === 'shader' ? batch.material.fragment : undefined
   };
 }
 
@@ -497,6 +529,19 @@ function meshMaterialPipelineKeyFor(material: TypeGpuMaterialDescriptor): string
     `depthTest:${material.depthTest !== false}`,
     `cull:${material.cullMode ?? 'back'}`
   ].join('|');
+}
+
+function packMaterialUniforms(material: TypeGpuMaterialDescriptor): ArrayBuffer {
+  const data = new Float32Array(32);
+
+  if (material.kind === 'shader') {
+    for (let index = 0; index < 8; index += 1) {
+      const value = material.uniforms[`value${index}` as keyof typeof material.uniforms];
+      if (Array.isArray(value)) data.set(value, index * 4);
+    }
+  }
+
+  return data.buffer.slice(0);
 }
 
 export async function loadMaterialTextureImageSource(

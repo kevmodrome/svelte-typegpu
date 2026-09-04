@@ -4,16 +4,9 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
+import Floor from './Floor.typegpu.js';
 import SceneBox from './SceneBox.typegpu.js';
-
-import {
-	boxBounds,
-	floorBounds,
-	floorVertices,
-	leftBoxVertices,
-	rightBoxVertices
-} from './box-geometry.js';
-
+import { boxBounds, leftBoxVertices, rightBoxVertices } from './box-geometry.js';
 import { rotateBoxesFromDrag } from './box-interaction.js';
 
 var root = $.from_tree([
@@ -33,13 +26,7 @@ var root = $.from_tree([
 			]
 		],
 		' ',
-		[
-			'mesh',
-			null,
-			['bufferGeometry', { key: 'two-boxes:floor' }],
-			['basicMaterial', { cullMode: 'none' }]
-		],
-		' ',,
+		['group', null,, ' ',,]
 	]
 ]);
 
@@ -97,21 +84,15 @@ export default function TwoBoxes_typegpu($$anchor, $$props) {
 	$.reset(controls);
 	$.reset(perspectiveCamera);
 
-	var mesh = $.sibling(perspectiveCamera, 2);
+	var group = $.sibling(perspectiveCamera, 2);
+	var node = $.child(group);
 
-	$.set_attribute(mesh, 'position', [0, -2, 0]);
-	$.set_attribute(mesh, 'scale', [5, 1, 5]);
+	Floor(node, {});
 
-	var bufferGeometry = $.child(mesh);
-	var basicMaterial = $.sibling(bufferGeometry);
+	var node_1 = $.sibling(node, 2);
 
-	$.set_attribute(basicMaterial, 'color', [1, 1, 1, 1]);
-	$.reset(mesh);
-
-	var node = $.sibling(mesh, 2);
-
-	$.each(node, 17, () => boxes, (box) => box.id, ($$anchor, box) => {
-		$.without_renderer(() => SceneBox($$anchor, {
+	$.each(node_1, 17, () => boxes, (box) => box.id, ($$anchor, box) => {
+		SceneBox($$anchor, {
 			get geometryKey() {
 				return $.get(box).geometryKey;
 			},
@@ -127,21 +108,13 @@ export default function TwoBoxes_typegpu($$anchor, $$props) {
 			get position() {
 				return $.get(box).position;
 			},
-
-			get quaternion() {
-				return $.get(boxRotation);
-			},
 			onDragMove: rotateBothBoxes
-		}));
+		});
 	});
 
+	$.reset(group);
 	$.reset(scene);
-
-	$.template_effect(() => {
-		$.set_attribute(bufferGeometry, 'vertices', floorVertices);
-		$.set_attribute(bufferGeometry, 'bounds', floorBounds);
-	});
-
+	$.template_effect(() => $.set_attribute(group, 'quaternion', $.get(boxRotation)));
 	$.append($$anchor, scene);
 	$.pop();
 	$$pop_renderer();

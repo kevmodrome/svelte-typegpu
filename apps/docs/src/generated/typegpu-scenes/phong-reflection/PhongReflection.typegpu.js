@@ -73,7 +73,7 @@ export default function PhongReflection_typegpu($$anchor, $$props) {
 
 	var node = $.sibling(perspectiveCamera, 2);
 
-	$.without_renderer(() => PhongLights(node, {
+	PhongLights(node, {
 		get lightColor() {
 			return phongControls().lightColor;
 		},
@@ -89,7 +89,7 @@ export default function PhongReflection_typegpu($$anchor, $$props) {
 		get ambientStrength() {
 			return phongControls().ambientStrength;
 		}
-	}));
+	});
 
 	var model = $.sibling(node, 2);
 

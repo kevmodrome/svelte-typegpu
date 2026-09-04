@@ -153,6 +153,7 @@ function createRuntime(
   gpu: TypeGpuRenderer,
   options: RuntimeOptions = {}
 ): RuntimeState {
+  let disposed = false;
   let queued = false;
   let dirty = Dirty.All;
   const onModelSettled = () => scheduleSync(root);
@@ -185,6 +186,7 @@ function createRuntime(
     _dirtyNode?: TypeGpuNode,
     dirtyMask: Dirty = Dirty.All
   ) {
+    if (disposed) return;
     root = nextRoot;
     dirty = (dirty | dirtyMask) as Dirty;
 
@@ -193,6 +195,7 @@ function createRuntime(
     queued = true;
     queueMicrotask(() => {
       queued = false;
+      if (disposed) return;
       const sceneDirty = dirty;
       dirty = Dirty.None;
       const scene = createSceneState(root, sceneCache, {
@@ -492,6 +495,10 @@ function createRuntime(
   return {
     scheduleSync,
     dispose() {
+      if (disposed) return;
+      disposed = true;
+      currentScene = null;
+      hoveredTarget = null;
       cameraInteraction.dispose();
       canvas.removeEventListener('click', dispatchCanvasClick);
       canvas.removeEventListener('pointerdown', dispatchCanvasPointerDown);

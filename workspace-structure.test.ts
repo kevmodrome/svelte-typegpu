@@ -71,8 +71,8 @@ describe('pnpm workspace layout', () => {
       '!src/svelte-internal-client.d.ts'
     ]);
     expect(packageJson.publishConfig?.access).toBe('public');
-    expect(packageJson.peerDependencies?.svelte).toBe('>=5.55.9 <6');
-    expect(packageJson.devDependencies?.svelte).toBe('https://pkg.pr.new/svelte@18042');
+    expect(packageJson.peerDependencies?.svelte).toBe('>=5.57.0 <6');
+    expect(packageJson.devDependencies?.svelte).toBe('https://pkg.svelte.dev/svelte/c/17e37a51bc539cdb6a923b424e5746fc6505ba89');
     expect(packageJson.dependencies?.svelte).toBeUndefined();
   });
 
@@ -81,7 +81,7 @@ describe('pnpm workspace layout', () => {
       dependencies?: Record<string, string>;
     };
 
-    expect(packageJson.dependencies?.svelte).toBe('https://pkg.pr.new/svelte@18042');
+    expect(packageJson.dependencies?.svelte).toBe('https://pkg.svelte.dev/svelte/c/17e37a51bc539cdb6a923b424e5746fc6505ba89');
     expect(packageJson.dependencies?.['svelte-typegpu']).toBe('workspace:*');
   });
 

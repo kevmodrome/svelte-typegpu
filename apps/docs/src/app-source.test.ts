@@ -71,6 +71,9 @@ describe('docs app source wiring', () => {
     expect(source).toContain("import.meta.resolve('svelte-typegpu/svelte-renderer')");
     expect(source).toContain('resolveRendererPath');
     expect(source).toContain('customRenderer: rendererPath');
+    expect(read('./snippets/doc-snippets.ts')).toContain(
+      "filename.endsWith('.typegpu.svelte') ? typeGpuRenderer : null"
+    );
     expect(source).toContain("import { codeToTokens } from 'shiki'");
     expect(source).toContain('highlightedExampleCode');
     expect(generated).toContain("from 'svelte-typegpu/svelte-renderer'");
@@ -81,7 +84,7 @@ describe('docs app source wiring', () => {
   it('rewrites generated scene imports to generated bundle files', () => {
     const twoBoxes = read('./generated/typegpu-scenes/two-boxes/TwoBoxes.typegpu.js');
     const orbitField = read(
-      './generated/typegpu-scenes/interactive-orbit-field/InteractiveOrbitField.typegpu.js'
+      './generated/typegpu-scenes/disco-shader-pass/DiscoShaderPass.typegpu.js'
     );
 
     expect(twoBoxes).toContain("from './SceneBox.typegpu.js'");
@@ -181,12 +184,23 @@ describe('docs app source wiring', () => {
     expect(source).toContain('less code');
   });
 
+  it('keeps numeric example control outputs from resizing range sliders', () => {
+    const source = read('./style.css');
+
+    expect(source).toContain('font-variant-numeric: tabular-nums');
+    expect(source).toContain('min-width: 5ch');
+  });
+
   it('mirrors official TypeGPU example controls in the hydrated preview', () => {
     const previewSource = read('./components/ExamplePreview.svelte');
     const phongSource = read('./examples/phong-reflection/PhongReflection.typegpu.svelte');
     const simpleShadowSource = read('./examples/simple-shadow/SimpleShadow.typegpu.svelte');
     const simpleShadowLightsSource = read('./examples/simple-shadow/ShadowLights.typegpu.svelte');
-    const discoSource = read('./examples/interactive-orbit-field/InteractiveOrbitField.typegpu.svelte');
+    const discoSource = read('./examples/disco-shader-pass/DiscoShaderPass.typegpu.svelte');
+    const smokySource = read('./examples/smoky-triangle/SmokyTriangle.typegpu.svelte');
+    const smokyFragmentSource = read('./examples/smoky-triangle/smoky-triangle-fragment.ts');
+    const gravitySource = read('./examples/gravity/Gravity.typegpu.svelte');
+    const gravitySimulationSource = read('./examples/gravity/gravity-simulation.ts');
 
     for (const label of [
       'light color',
@@ -202,7 +216,17 @@ describe('docs app source wiring', () => {
       'shadow map size',
       'shadow map filtering',
       'display mode',
-      'Pattern'
+      'Pattern',
+      'distortion',
+      'sharpness',
+      'From Color',
+      'To Color',
+      'Polar Coordinates',
+      'Squashed',
+      'Clouds Preset',
+      'Fire Preset',
+      'preset',
+      'simulation speed modifier'
     ]) {
       expect(previewSource).toContain(label);
     }
@@ -230,8 +254,35 @@ describe('docs app source wiring', () => {
     expect(simpleShadowLightsSource).toContain('shadowBias={TYPEGPU_SHADOW_DEPTH_BIAS}');
     expect(simpleShadowLightsSource).toContain('shadowSlopeBias={TYPEGPU_SHADOW_SLOPE_BIAS}');
     expect(discoSource).toContain('discoControls');
-    expect(discoSource).toContain("discoControls.pattern === 'pattern1'");
-    expect(discoSource).toContain("discoControls.pattern === 'pattern7'");
+    expect(discoSource).toContain('fragments[discoControls.pattern]');
+    expect(discoSource).toContain('pattern7: discoFragment7');
+    expect(discoSource).not.toContain('active={discoControls.pattern');
+
+    expect(previewSource).toContain('setSmokyPreset');
+    expect(previewSource).toContain('setSmokyColor');
+    expect(previewSource).toContain('type="color"');
+    expect(previewSource).toContain("oninput={(event) => setSmokyColor('fromColor', event.currentTarget.value)}");
+    expect(previewSource).toContain("oninput={(event) => setSmokyColor('toColor', event.currentTarget.value)}");
+    expect(smokySource).toContain('smokyTriangleControls');
+    expect(smokySource).toContain('createSmokyTriangleFragment(smokyTriangleControls)');
+    expect(smokySource).toContain('smokyTriangleUniforms');
+    expect(smokySource).toContain('value0: smokyTriangleControls.fromColor');
+    expect(smokySource).toContain('value1: smokyTriangleControls.toColor');
+    expect(smokyFragmentSource).toContain('interface SmokyTriangleControls');
+    expect(smokyFragmentSource).toContain('controls.distortion');
+    expect(smokyFragmentSource).toContain('controls.sharpness ** 2');
+    expect(smokyFragmentSource).toContain('uniforms.value0.rgb');
+    expect(smokyFragmentSource).toContain('uniforms.value1.rgb');
+    expect(smokyFragmentSource).not.toContain('vec3fLiteral');
+
+    expect(previewSource).toContain('Solar System');
+    expect(gravitySimulationSource).toContain('Asteroids');
+    expect(gravitySimulationSource).toContain('Colliding asteroids');
+    expect(gravitySimulationSource).toContain('Bouncy dust');
+    expect(gravitySimulationSource).toContain('Merging dust');
+    expect(gravitySource).toContain('gravityControls.preset');
+    expect(gravitySimulationSource).toContain('export type GravityPreset =');
+    expect(gravitySimulationSource).toContain("| 'Solar System'");
   });
 
   it('generates aggregate source samples and LoC metadata', () => {

@@ -4,15 +4,22 @@ export {
   type TypeGpuRoot,
   type TypeGpuRootOptions
 } from './svelte-renderer';
-export { shaderPassBindGroupLayout } from './typegpu-layouts';
+export {
+  materialBindGroupLayout,
+  sceneBindGroupLayout,
+  shaderPassBindGroupLayout
+} from './typegpu-layouts';
 export type {
   RgbaTuple,
+  TypeGpuBounds,
   TypeGpuCameraSettings,
   TypeGpuControlsMode,
   TypeGpuDragEventDetail,
   TypeGpuGeometryKind,
   TypeGpuInstanceId,
   TypeGpuMaterialKind,
+  TypeGpuMeshFragment,
+  TypeGpuMeshFragmentInput,
   TypeGpuNormalizedCameraSettings,
   TypeGpuPointerControls,
   TypeGpuPointerDragButton,

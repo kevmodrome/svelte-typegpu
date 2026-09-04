@@ -9,20 +9,23 @@ export default defineConfig({
     svelte({
       extensions: ['.svelte'],
       compilerOptions: {
-        runes: true
-      },
-      dynamicCompileOptions({ filename }) {
-        if (filename.endsWith('.typegpu.svelte')) {
-          return {
-            experimental: {
-              customRenderer: typeGpuRenderer
-            }
-          };
+        runes: true,
+        experimental: {
+          customRenderer: ({ filename }) =>
+            filename.endsWith('.typegpu.svelte') ? typeGpuRenderer : null
         }
       }
     })
   ],
   test: {
+    alias: [
+      {
+        find: /^svelte$/,
+        replacement: fileURLToPath(
+          new URL('./src/index-client.js', import.meta.resolve('svelte/package.json'))
+        )
+      }
+    ],
     environment: 'node',
     include: ['src/**/*.{test,spec}.{ts,js}']
   }

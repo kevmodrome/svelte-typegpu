@@ -15,8 +15,9 @@ const officialExampleUrls = {
   'phong-reflection':
     'https://docs.swmansion.com/TypeGPU/examples/#example=rendering--phong-reflection',
   'simple-shadow': 'https://docs.swmansion.com/TypeGPU/examples/#example=rendering--simple-shadow',
-  'interactive-orbit-field':
-    'https://docs.swmansion.com/TypeGPU/examples/#example=rendering--disco'
+  'disco-shader-pass': 'https://docs.swmansion.com/TypeGPU/examples/#example=rendering--disco',
+  'smoky-triangle': 'https://docs.swmansion.com/TypeGPU/examples/#example=rendering--smoky-triangle',
+  gravity: 'https://docs.swmansion.com/TypeGPU/examples/#example=simulation--gravity'
 } as const;
 
 describe('docs example registry', () => {
@@ -25,7 +26,10 @@ describe('docs example registry', () => {
       'two-boxes',
       'phong-reflection',
       'simple-shadow',
-      'interactive-orbit-field'
+      'disco-shader-pass',
+      'smoky-triangle',
+      'multiple-smoky-triangles',
+      'gravity'
     ]);
   });
 
@@ -35,8 +39,10 @@ describe('docs example registry', () => {
       expect(example.description).toMatch(/\S/);
       expect(example.category).toMatch(/\S/);
       expect(example.tags.length).toBeGreaterThan(0);
-      expect(example.typeGpuSourceUrl).toBe(officialExampleUrls[example.slug]);
-      expect(example.notes).toMatch(/adapted/i);
+      expect(example.typeGpuSourceUrl).toBe(
+        officialExampleUrls[example.slug as keyof typeof officialExampleUrls]
+      );
+      expect(example.notes).toMatch(/\S/);
       expect(example.code).toContain('<scene');
       expect(example.code).not.toContain('<resources>');
       expect(example.code).not.toContain('<instancedMesh');
@@ -50,7 +56,11 @@ describe('docs example registry', () => {
         true
       );
       expect(example.sourceStats.svelteLoc).toBeGreaterThan(0);
-      expect(example.sourceStats.typeGpuLoc).toBeGreaterThan(0);
+      if (example.typeGpuSourceUrl) {
+        expect(example.sourceStats.typeGpuLoc).toBeGreaterThan(0);
+      } else {
+        expect(example.sourceStats.typeGpuLoc).toBe(0);
+      }
       expect(example.sourceStats.deltaLoc).toBe(
         example.sourceStats.svelteLoc - example.sourceStats.typeGpuLoc
       );
@@ -62,14 +72,16 @@ describe('docs example registry', () => {
   });
 
   it('includes the Disco shader-pass example built from renderer primitives', () => {
-    const example = getExampleBySlug('interactive-orbit-field');
-    const disco = sourceBundleForSlug('interactive-orbit-field');
+    const example = getExampleBySlug('disco-shader-pass');
+    const disco = sourceBundleForSlug('disco-shader-pass');
 
     expect(example.category).toBe('rendering');
     expect(example.tags).toEqual(expect.arrayContaining(['animation', 'shader', 'fullscreen']));
     expect(example.code).toContain('<shaderPass');
+    expect(example.code).toContain('fragments[discoControls.pattern]');
     expect(example.code).toContain("uniforms={{ time: 'time', resolution: 'resolution' }}");
     expect(example.code).toContain('discoFragment');
+    expect(example.code).not.toContain('active={discoControls.pattern');
     expect(example.code).not.toContain('<instancedMesh');
     expect(disco).toContain('const aspectCorrected');
     expect(disco).toContain('const palette');
@@ -84,9 +96,14 @@ describe('docs example registry', () => {
     const twoBoxes = sourceBundleForSlug('two-boxes');
     const phong = sourceBundleForSlug('phong-reflection');
     const simpleShadow = sourceBundleForSlug('simple-shadow');
-    const disco = sourceBundleForSlug('interactive-orbit-field');
+    const disco = sourceBundleForSlug('disco-shader-pass');
+    const smokyTriangle = sourceBundleForSlug('smoky-triangle');
+    const gravity = sourceBundleForSlug('gravity');
 
     expect(twoBoxes).toContain('<bufferGeometry');
+    expect(twoBoxes).toContain('<group quaternion={boxRotation}>');
+    expect(twoBoxes).toContain('<Floor />');
+    expect(exampleCode['two-boxes']).toContain('// File: Floor.typegpu.svelte');
     expect(twoBoxes).not.toContain('layoutKey=');
     expect(twoBoxes).toContain('drag="rotate"');
     expect(twoBoxes).toContain('ondragmove=');
@@ -102,9 +119,40 @@ describe('docs example registry', () => {
     expect(simpleShadow).toContain('shadowSlopeBias={TYPEGPU_SHADOW_SLOPE_BIAS}');
 
     expect(disco).toContain('<shaderPass');
-    expect(disco).toContain('fragment={discoFragment1}');
-    expect(disco).toContain('fragment={discoFragment7}');
+    expect(disco).toContain('fragments[discoControls.pattern]');
     expect(disco).toContain("uniforms={{ time: 'time', resolution: 'resolution' }}");
+
+    expect(smokyTriangle).toContain('<shaderPass');
+    expect(smokyTriangle).toContain('smokyTriangleFragment');
+    expect(smokyTriangle).toContain('shaderPassBindGroupLayout');
+    expect(smokyTriangle).toContain('triangleMask');
+
+    expect(gravity).toContain('{#each bodies as body (body.id)}');
+    expect(gravity).toContain('<sphereGeometry');
+    expect(gravity).toContain('<phongMaterial');
+    expect(gravity).toContain('stepGravity');
+  });
+
+  it('includes the multiple smoky triangles lattice example', () => {
+    const example = getExampleBySlug('multiple-smoky-triangles');
+    const source = sourceBundleForSlug('multiple-smoky-triangles');
+
+    expect(example.title).toBe('Multiple Smoky Triangles');
+    expect(example.category).toBe('rendering');
+    expect(example.tags).toEqual(expect.arrayContaining(['shader', 'noise', 'pattern']));
+    expect(source).toContain('{#each triangles as triangle (triangle.id)}');
+    expect(source).toContain('<Triangle');
+    expect(source).toContain('randomColorForTriangle');
+    expect(source).toContain('hashTriangleSeed');
+    expect(source).toContain('smoky: firstTriangleIndex % 2 === 1');
+    expect(source).toContain('<shaderMaterial');
+    expect(source).toContain('smokyTriangleMaterialFragment');
+    expect(source).toContain('<basicMaterial color={[1, 1, 1, 1]}');
+    expect(source).toContain('triangleVertices');
+    expect(example.typeGpuSourceUrl).toBeUndefined();
+    expect(example.sourceStats.typeGpuLoc).toBe(0);
+    expect(source).not.toContain('<instancedMesh');
+    expect(source).not.toContain('<shaderPass');
   });
 
   it('keeps typegpu example components declarative', () => {
@@ -131,7 +179,7 @@ describe('docs example registry', () => {
         }
       }
 
-      if (definition.slug === 'interactive-orbit-field') {
+      if (definition.slug === 'disco-shader-pass') {
         const shaderHelper = sourceFiles.find((sourceFile) =>
           sourceFile.filename.endsWith('disco-fragment.ts')
         );
@@ -164,7 +212,6 @@ describe('docs example registry', () => {
       expect(source).toContain('<perspectiveCamera');
       expect(definition.sourceFiles[0]?.toString()).toBe(definition.sourceUrl.toString());
       expect(definition.sourceFiles.length).toBeGreaterThan(1);
-      expect(definition.typeGpuSourceFiles.length).toBeGreaterThan(0);
       expect(definition.typeGpuSourceFiles.every((file) => file.loc > 0)).toBe(true);
     }
   });

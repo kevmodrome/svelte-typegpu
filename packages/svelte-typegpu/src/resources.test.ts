@@ -1,10 +1,23 @@
 import { describe, expect, it } from 'vitest';
+import tgpu, { d } from 'typegpu';
 import { createElement, setAttribute } from './core';
 import { readInlineGeometry, readInlineMaterial } from './resources';
 import { MESH_VERTEX_FLOATS, MESH_VERTEX_LAYOUT_KEY } from './instance-data';
 import type { TypeGpuStandardMaterialDescriptor } from './types';
 
 describe('TypeGPU resource descriptors', () => {
+  it('reuses geometry data until the geometry node changes', () => {
+    const node = createElement('boxGeometry');
+    const first = readInlineGeometry(node);
+
+    expect(readInlineGeometry(node)).toBe(first);
+    setAttribute(node, 'width', 3);
+    const resized = readInlineGeometry(node);
+    expect(resized).not.toBe(first);
+    expect(resized?.bounds?.max[0]).toBe(1.5);
+    expect(readInlineGeometry(node)).toBe(resized);
+  });
+
   it('reads inline box geometry with stable key and bounds', () => {
     const node = createElement('boxGeometry');
     setAttribute(node, 'width', 2);
@@ -198,6 +211,90 @@ describe('TypeGPU resource descriptors', () => {
     });
   });
 
+  it('reads shader material fragments as custom mesh materials', () => {
+    const fragment = tgpu
+      .fragmentFn({
+        in: {
+          color: d.location(0, d.vec4f),
+          normal: d.location(1, d.vec3f),
+          material: d.location(2, d.vec4f),
+          world_position: d.location(3, d.vec3f),
+          uv: d.location(4, d.vec2f),
+          vertex_color: d.location(5, d.vec4f),
+          material_extra: d.location(6, d.vec4f)
+        },
+        out: d.vec4f
+      })/* wgsl */ `{
+        return vec4f(in.uv, 0.0, 1.0);
+      }`
+      .$name('customMeshFragmentFixture');
+    const material = createElement('shaderMaterial');
+    setAttribute(material, 'fragment', fragment);
+    setAttribute(material, 'cullMode', 'none');
+
+    expect(readInlineMaterial(material)).toMatchObject({
+      kind: 'shader',
+      fragment,
+      cullMode: 'none',
+      pipelineKey: expect.stringContaining('material:shader'),
+      key: expect.stringContaining('material:shader')
+    });
+  });
+
+  it('normalizes shader material uniforms without putting values in the pipeline key', () => {
+    const fragment = tgpu
+      .fragmentFn({
+        in: {
+          color: d.location(0, d.vec4f),
+          normal: d.location(1, d.vec3f),
+          material: d.location(2, d.vec4f),
+          world_position: d.location(3, d.vec3f),
+          uv: d.location(4, d.vec2f),
+          vertex_color: d.location(5, d.vec4f),
+          material_extra: d.location(6, d.vec4f)
+        },
+        out: d.vec4f
+      })/* wgsl */ `{
+        return vec4f(in.uv, 0.0, 1.0);
+      }`
+      .$name('customMeshUniformFragmentFixture');
+    const first = createElement('shaderMaterial');
+    const second = createElement('shaderMaterial');
+
+    setAttribute(first, 'fragment', fragment);
+    setAttribute(first, 'uniforms', {
+      value0: 0.25,
+      value1: [0.5, 0.75],
+      value2: [0.1, 0.2, 0.3],
+      value3: [0.2, 0.4, 0.6, 0.8],
+      value8: [1, 1, 1, 1]
+    });
+    setAttribute(second, 'fragment', fragment);
+    setAttribute(second, 'uniforms', {
+      value0: 0.75
+    });
+
+    const firstMaterial = readInlineMaterial(first);
+    const secondMaterial = readInlineMaterial(second);
+
+    expect(firstMaterial).toMatchObject({
+      kind: 'shader',
+      uniforms: {
+        value0: [0.25, 0, 0, 0],
+        value1: [0.5, 0.75, 0, 0],
+        value2: [0.1, 0.2, 0.3, 0],
+        value3: [0.2, 0.4, 0.6, 0.8]
+      }
+    });
+    expect(firstMaterial?.kind).toBe('shader');
+    expect(secondMaterial?.kind).toBe('shader');
+    if (firstMaterial?.kind !== 'shader' || secondMaterial?.kind !== 'shader') {
+      throw new Error('Expected shader materials');
+    }
+    expect(firstMaterial.uniformKey).not.toBe(secondMaterial.uniformKey);
+    expect(firstMaterial.pipelineKey).toBe(secondMaterial.pipelineKey);
+  });
+
   it('keys inline sampler objects by normalized sampler fields', () => {
     const defaultSamplerMaterial = createElement('standardMaterial');
     const nearestSamplerMaterial = createElement('standardMaterial');
@@ -269,6 +366,44 @@ describe('TypeGPU resource descriptors', () => {
       kind: 'buffer',
       vertexCount: 3
     });
+  });
+
+  it('automatically reuses buffer geometry identity for the same typed arrays', () => {
+    const vertices = new Float32Array([
+      -1, 0, -1, 0, 1, 0, 0, 0, 1, 1, 1, 1,
+      1, 0, -1, 0, 1, 0, 1, 0, 1, 1, 1, 1,
+      0, 0, 1, 0, 1, 0, 0.5, 1, 1, 1, 1, 1
+    ]);
+    const bounds = { min: [-1, 0, -1], max: [1, 0, 1] };
+    const first = createElement('bufferGeometry');
+    const second = createElement('bufferGeometry');
+
+    setAttribute(first, 'vertices', vertices);
+    setAttribute(first, 'bounds', bounds);
+    setAttribute(second, 'vertices', vertices);
+    setAttribute(second, 'bounds', bounds);
+
+    expect(readInlineGeometry(first)?.key).toBe(readInlineGeometry(second)?.key);
+    expect(readInlineGeometry(first)?.key).toMatch(/^buffer:auto:/);
+  });
+
+  it('gives changed vertex data and different index arrays distinct GPU cache keys', () => {
+    const vertices = new Float32Array(36);
+    const nodes = [createElement('bufferGeometry'), createElement('bufferGeometry')];
+    for (const node of nodes) {
+      setAttribute(node, 'vertices', vertices);
+      setAttribute(node, 'bounds', { min: [0, 0, 0], max: [1, 1, 1] });
+    }
+    setAttribute(nodes[0], 'indices', new Uint16Array([0, 1, 2]));
+    setAttribute(nodes[1], 'indices', new Uint16Array([2, 1, 0]));
+    const first = readInlineGeometry(nodes[0])!;
+    expect(readInlineGeometry(nodes[1])?.key).not.toBe(first.key);
+
+    vertices[0] = 0.5;
+    setAttribute(nodes[0], 'vertices', vertices);
+    const updated = readInlineGeometry(nodes[0])!;
+    expect(updated.key).not.toBe(first.key);
+    expect(updated.vertexData[0]).toBe(0.5);
   });
 });
 

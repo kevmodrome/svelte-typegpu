@@ -11,7 +11,7 @@ export const MAX_TYPEGPU_LIGHTS = 32;
 
 export type TypeGpuProceduralGeometryKind = 'box' | 'sphere';
 export type TypeGpuGeometryKind = 'box' | 'plane' | 'sphere' | 'buffer' | 'imported';
-export type TypeGpuMaterialKind = 'basic' | 'phong' | 'standard';
+export type TypeGpuMaterialKind = 'basic' | 'phong' | 'standard' | 'shader';
 export type TypeGpuPrimitiveTopology = 'triangle-list';
 export type TypeGpuLightKind = 'ambient' | 'hemisphere' | 'directional' | 'point' | 'spot';
 export type TypeGpuInstanceId = number | string;
@@ -146,6 +146,7 @@ export interface TypeGpuLoadedModel {
 }
 
 export interface TypeGpuLoadedModelMesh {
+  name?: string;
   geometry: TypeGpuGeometryData;
   material: TypeGpuMaterialDescriptor;
   transform: TypeGpuTransform;
@@ -254,10 +255,26 @@ export interface TypeGpuMaterialDescriptorBase<K extends TypeGpuMaterialKind> {
 export type TypeGpuBasicMaterialDescriptor = TypeGpuMaterialDescriptorBase<'basic'>;
 export type TypeGpuPhongMaterialDescriptor = TypeGpuMaterialDescriptorBase<'phong'>;
 export type TypeGpuStandardMaterialDescriptor = TypeGpuMaterialDescriptorBase<'standard'>;
+export type TypeGpuMeshFragmentInput = {
+  color: d.Vec4f;
+  normal: d.Vec3f;
+  material: d.Vec4f;
+  world_position: d.Vec3f;
+  uv: d.Vec2f;
+  vertex_color: d.Vec4f;
+  material_extra: d.Vec4f;
+};
+export type TypeGpuMeshFragment = TgpuFragmentFn<TypeGpuMeshFragmentInput, d.Vec4f>;
+export type TypeGpuShaderMaterialDescriptor = TypeGpuMaterialDescriptorBase<'shader'> & {
+  fragment: TypeGpuMeshFragment;
+  uniforms: TypeGpuShaderMaterialUniformMap;
+  uniformKey: string;
+};
 export type TypeGpuMaterialDescriptor =
   | TypeGpuBasicMaterialDescriptor
   | TypeGpuPhongMaterialDescriptor
-  | TypeGpuStandardMaterialDescriptor;
+  | TypeGpuStandardMaterialDescriptor
+  | TypeGpuShaderMaterialDescriptor;
 
 export interface TypeGpuLiveResourceKeys {
   geometries: Set<string>;
@@ -332,11 +349,29 @@ export interface TypeGpuDrawBatch {
 }
 
 export type TypeGpuShaderPassUniformBuiltIn = 'time' | 'resolution';
+export type TypeGpuShaderPassUniformValue =
+  | number
+  | Vector2Tuple
+  | Vector3Tuple
+  | Vector4Tuple;
+
 export interface TypeGpuShaderPassUniformMap {
   time?: 'time';
   resolution?: 'resolution';
+  value0?: TypeGpuShaderPassUniformValue;
+  value1?: TypeGpuShaderPassUniformValue;
+  value2?: TypeGpuShaderPassUniformValue;
+  value3?: TypeGpuShaderPassUniformValue;
+  value4?: TypeGpuShaderPassUniformValue;
+  value5?: TypeGpuShaderPassUniformValue;
+  value6?: TypeGpuShaderPassUniformValue;
+  value7?: TypeGpuShaderPassUniformValue;
 }
 export type TypeGpuShaderPassFragment = TgpuFragmentFn<{ uv: d.Vec2f }, d.Vec4f>;
+export type TypeGpuShaderMaterialUniformMap = Omit<
+  TypeGpuShaderPassUniformMap,
+  'time' | 'resolution'
+>;
 
 export interface TypeGpuShaderPass {
   key: string;

@@ -8,6 +8,7 @@ import type { TypeGpuLoadedModelMesh } from './glb-loader';
 import { createInteractionIndex } from './interaction-index';
 import { collectLights } from './lights';
 import { createModelCache, type TypeGpuModelCache } from './model-cache';
+import { SceneRevisionCache } from './scene-revisions';
 import { readInlineGeometry, readInlineMaterial } from './resources';
 import {
   DEFAULT_SAMPLER,
@@ -37,10 +38,12 @@ import type {
 export interface TypeGpuSceneCache {
   drawBatchCache: TypeGpuDrawBatchCache;
   modelCache: TypeGpuModelCache;
+  revisions: SceneRevisionCache;
   cleanDrawBatches: TypeGpuDrawBatch[];
   cleanLights: TypeGpuLight[];
   cleanShaderPasses: TypeGpuShaderPass[];
   cleanInteraction: TypeGpuInteractionIndex;
+  cleanResourceKeys: TypeGpuLiveResourceKeys;
 }
 
 export interface CreateTypeGpuSceneCacheOptions {
@@ -81,6 +84,7 @@ export function createTypeGpuSceneCache(
 ): TypeGpuSceneCache {
   return {
     drawBatchCache: createDrawBatchCache(),
+    revisions: new SceneRevisionCache(),
     modelCache:
       options.modelCache ??
       createModelCache({
@@ -89,7 +93,8 @@ export function createTypeGpuSceneCache(
     cleanDrawBatches: [],
     cleanLights: [],
     cleanShaderPasses: [],
-    cleanInteraction: createInteractionIndex([])
+    cleanInteraction: createInteractionIndex([]),
+    cleanResourceKeys: createLiveResourceKeys()
   };
 }
 
@@ -121,16 +126,17 @@ export function createSceneState(
   }
 
   const drawBatches = recomputeDrawBatches
-    ? cache.drawBatchCache.read((drawItems = collectMeshDrawItems(root, cache.modelCache)))
+    ? cache.drawBatchCache.read((drawItems = collectMeshDrawItems(root, cache)))
     : cache.cleanDrawBatches;
 
   if (recomputeDrawBatches) {
     cache.cleanDrawBatches = cleanDrawBatches(drawBatches);
+    cache.cleanResourceKeys = liveResourceKeysFor(drawBatches);
   }
 
   const interaction = recomputeInteraction
     ? createInteractionIndex(
-        (drawItems ?? collectMeshDrawItems(root, cache.modelCache)).flatMap(interactionTargetFor)
+        (drawItems ?? collectMeshDrawItems(root, cache)).flatMap(interactionTargetFor)
       )
     : cache.cleanInteraction;
 
@@ -153,20 +159,20 @@ export function createSceneState(
     shaderPassesChanged: recomputeShaderPasses,
     interaction,
     interactionChanged: recomputeInteraction,
-    liveResourceKeys: liveResourceKeysFor(drawBatches)
+    liveResourceKeys: cache.cleanResourceKeys
   };
 }
 
 function collectMeshDrawItems(
   root: TypeGpuNode,
-  modelCache: TypeGpuModelCache
+  cache: TypeGpuSceneCache
 ): TypeGpuMeshDrawItem[] {
   const items: TypeGpuMeshDrawItem[] = [];
   collectDrawItemsFromNode(
     root,
-    { transform: IDENTITY_TRANSFORM, revision: root.treeRevision },
+    { transform: IDENTITY_TRANSFORM, revision: 0 },
     items,
-    modelCache
+    cache
   );
   return items;
 }
@@ -222,33 +228,34 @@ function collectDrawItemsFromNode(
   node: TypeGpuNode,
   context: DrawItemWalkContext,
   items: TypeGpuMeshDrawItem[],
-  modelCache: TypeGpuModelCache
+  cache: TypeGpuSceneCache
 ): void {
   let childContext = context;
 
   if (node.name === 'group') {
     childContext = {
       transform: composeTransforms(context.transform, readLocalTransform(node)),
-      revision: combineNodeRevision(context.revision, node)
+      revision: cache.revisions.read(node, 'transform', [context.revision, node.revision])
     };
   } else if (node.name === 'mesh') {
-    childContext = readMeshDrawItem(node, context, items);
+    childContext = readMeshDrawItem(node, context, items, cache.revisions);
   } else if (node.name === 'model') {
-    childContext = readModelDrawItems(node, context, items, modelCache);
+    childContext = readModelDrawItems(node, context, items, cache);
   }
 
   for (let child = node.firstChild; child; child = child.nextSibling) {
-    collectDrawItemsFromNode(child, childContext, items, modelCache);
+    collectDrawItemsFromNode(child, childContext, items, cache);
   }
 }
 
 function readMeshDrawItem(
   mesh: TypeGpuNode,
   context: DrawItemWalkContext,
-  items: TypeGpuMeshDrawItem[]
+  items: TypeGpuMeshDrawItem[],
+  revisions: SceneRevisionCache
 ): DrawItemWalkContext {
   const transform = composeTransforms(context.transform, readLocalTransform(mesh));
-  const meshRevision = combineNodeRevision(context.revision, mesh);
+  const meshRevision = revisions.read(mesh, 'transform', [context.revision, mesh.revision]);
 
   if (mesh.attributes.visible === false) {
     return { transform, revision: meshRevision };
@@ -261,10 +268,9 @@ function readMeshDrawItem(
 
   const material = readMeshMaterial(mesh);
   const effectiveMaterial = materialForGeometry(material.value, geometry.value);
-  const itemRevision = combineNodeRevision(
-    combineNodeRevision(meshRevision, geometry.node),
-    material.node
-  );
+  const itemRevision = revisions.read(mesh, 'instance', [
+    meshRevision, geometry.node, geometry.node?.revision, material.node, material.node?.revision
+  ]);
   const localBounds = geometry.value.bounds ?? defaultBounds();
   const color = rgbaArg(mesh.attributes.color, effectiveMaterial.color);
 
@@ -311,11 +317,11 @@ function readModelDrawItems(
   modelNode: TypeGpuNode,
   context: DrawItemWalkContext,
   items: TypeGpuMeshDrawItem[],
-  modelCache: TypeGpuModelCache
+  cache: TypeGpuSceneCache
 ): DrawItemWalkContext {
   const modelTransform = composeTransforms(context.transform, readLocalTransform(modelNode));
-  const modelRevision = combineNodeRevision(context.revision, modelNode);
-  const entry = modelCache.read({
+  const modelRevision = cache.revisions.read(modelNode, 'transform', [context.revision, modelNode.revision]);
+  const entry = cache.modelCache.read({
     src: modelNode.attributes.src,
     data: modelNode.attributes.data
   });
@@ -335,10 +341,9 @@ function readModelDrawItems(
     items.push({
       id: `model:${modelNode.uid}:primitive:${index}`,
       node: modelNode,
-      revision: combineNodeRevision(
-        combineNodeRevision(modelRevision * 31 + entry.revision + index, material.node),
-        null
-      ),
+      revision: cache.revisions.read(modelNode, index, [
+        modelRevision, entry, material.node, material.node?.revision
+      ]),
       geometry,
       material: effectiveMaterial,
       transform,
@@ -362,6 +367,8 @@ function readModelMaterial(
   mesh: TypeGpuLoadedModelMesh
 ): MeshResourceResult<TypeGpuMaterialDescriptor> {
   for (let child = modelNode.firstChild; child; child = child.nextSibling) {
+    if (!modelMaterialTargetMatches(child, mesh)) continue;
+
     const override = readInlineMaterial(child);
     if (override) {
       return {
@@ -372,6 +379,13 @@ function readModelMaterial(
   }
 
   return { node: null, value: batchMaterialDescriptor(mesh.material) };
+}
+
+function modelMaterialTargetMatches(child: TypeGpuNode, mesh: TypeGpuLoadedModelMesh): boolean {
+  const target = stringAttribute(child.attributes.target);
+  if (!target) return true;
+
+  return target === mesh.name || target === mesh.geometry.key;
 }
 
 function readRenderSettings(root: TypeGpuNode): {
@@ -679,67 +693,6 @@ function findScene(root: TypeGpuNode): TypeGpuNode | null {
     if (scene) return scene;
   }
   return null;
-}
-
-function combineNodeRevision(seed: number, node: TypeGpuNode | null): number {
-  return node ? (seed * 31 + node.uid) * 31 + node.revision : seed * 31;
-}
-
-function vector3Arg(value: unknown, fallback: Vector3Tuple): Vector3Tuple {
-  if (!Array.isArray(value)) return [...fallback] as Vector3Tuple;
-
-  return [
-    numberArg(value[0], fallback[0]),
-    numberArg(value[1], fallback[1]),
-    numberArg(value[2], fallback[2])
-  ];
-}
-
-function valueRevision(seed: number, values: unknown[]): number {
-  let revision = seed;
-
-  for (const value of values) {
-    revision = revision * 31 + hashValue(value);
-  }
-
-  return revision;
-}
-
-function hashValue(value: unknown): number {
-  if (typeof value === 'number') return hashNumber(value);
-  if (typeof value === 'string') return hashString(value);
-  if (typeof value === 'boolean') return value ? 1 : 0;
-  if (Array.isArray(value)) return value.reduce((hash, item) => hash * 31 + hashValue(item), 17);
-  if (!value || typeof value !== 'object') return 0;
-  return hashString(String(value));
-}
-
-function hashNumber(value: number): number {
-  const bytes = new ArrayBuffer(8);
-  const view = new DataView(bytes);
-  view.setFloat64(0, value, true);
-
-  return hashBytes(new Uint8Array(bytes));
-}
-
-function hashBytes(bytes: Uint8Array): number {
-  let hash = 0;
-
-  for (const byte of bytes) {
-    hash = (hash * 31 + byte) | 0;
-  }
-
-  return hash;
-}
-
-function hashString(value: string): number {
-  let hash = 0;
-
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) | 0;
-  }
-
-  return hash;
 }
 
 function stringArg(value: unknown): string | null {

@@ -13,6 +13,75 @@ import { createModelCache } from './model-cache';
 import { createSceneState, createTypeGpuSceneCache } from './scene-compiler';
 
 describe('TypeGPU scene compiler', () => {
+  it('updates transforms and material data through deeply nested groups', () => {
+    const root = createFragment();
+    let parent = root;
+    for (let index = 0; index < 12; index++) {
+      const group = createElement('group');
+      insert(parent, group, null);
+      parent = group;
+    }
+    const mesh = createElement('mesh');
+    const material = createElement('standardMaterial');
+    insert(mesh, createElement('boxGeometry'), null);
+    insert(mesh, material, null);
+    insert(parent, mesh, null);
+    const cache = createTypeGpuSceneCache();
+    createSceneState(root, cache);
+
+    setAttribute(mesh, 'position', [3, 0, 0]);
+    const moved = createSceneState(root, cache, { dirty: Dirty.Transform });
+    expect(moved.drawBatches[0].instances[0]).toBe(3);
+    expect(moved.drawBatches[0].dirtyRanges).toEqual([{ start: 0, count: 1 }]);
+
+    setAttribute(material, 'color', [0.25, 0.5, 0.75, 1]);
+    const recolored = createSceneState(root, cache, { dirty: Dirty.MaterialUniform });
+    expect(Array.from(recolored.drawBatches[0].instances.slice(4, 8))).toEqual([0.25, 0.5, 0.75, 1]);
+    expect(createSceneState(root, cache).drawBatches[0].instancesChanged).toBe(false);
+  });
+
+  it('does not repack unchanged meshes after an unrelated tree insertion', () => {
+    const root = createFragment();
+    const mesh = createElement('mesh');
+    insert(mesh, createElement('boxGeometry'), null);
+    insert(root, mesh, null);
+    const cache = createTypeGpuSceneCache();
+    createSceneState(root, cache);
+
+    insert(root, createElement('pointLight'), null);
+    const next = createSceneState(root, cache);
+
+    expect(next.drawBatches[0].instancesChanged).toBe(false);
+    expect(next.drawBatches[0].dirtyRanges).toEqual([]);
+  });
+
+  it('invalidates instance data after reparenting and replacing an inline resource', () => {
+    const root = createFragment();
+    const left = createElement('group');
+    const right = createElement('group');
+    setAttribute(left, 'position', [1, 0, 0]);
+    setAttribute(right, 'position', [9, 0, 0]);
+    const mesh = createElement('mesh');
+    insert(mesh, createElement('boxGeometry'), null);
+    const red = createElement('standardMaterial');
+    setAttribute(red, 'color', [1, 0, 0, 1]);
+    insert(mesh, red, null);
+    insert(left, mesh, null);
+    insert(root, left, null);
+    insert(root, right, null);
+    const cache = createTypeGpuSceneCache();
+    createSceneState(root, cache);
+
+    insert(right, mesh, null);
+    const blue = createElement('standardMaterial');
+    setAttribute(blue, 'color', [0, 0, 1, 1]);
+    insert(mesh, blue, red);
+    const next = createSceneState(root, cache);
+
+    expect(next.drawBatches[0].instances[0]).toBe(9);
+    expect(Array.from(next.drawBatches[0].instances.slice(4, 8))).toEqual([0, 0, 1, 1]);
+  });
+
   it('compiles render settings, camera, lights, draw batches, interaction, and live keys', () => {
     const root = createFragment();
     const scene = createElement('scene');
@@ -597,6 +666,7 @@ describe('TypeGPU scene compiler', () => {
     expect(second.drawBatches[0].dirtyRanges).toEqual([]);
     expect(second.lights).toBe(first.lights);
     expect(second.interaction).toBe(first.interaction);
+    expect(second.liveResourceKeys).toBe(first.liveResourceKeys);
     expect(second.drawBatchesChanged).toBe(false);
     expect(second.lightsChanged).toBe(false);
     expect(second.interactionChanged).toBe(false);
@@ -803,6 +873,46 @@ describe('TypeGPU scene compiler', () => {
       textureKey: 'url:/textures/albedo.png',
       map: { kind: 'url', src: '/textures/albedo.png' }
     });
+  });
+
+  it('applies named model material overrides only to matching imported primitives', async () => {
+    const root = createFragment();
+    const scene = createElement('scene');
+    const model = createElement('model');
+    const hullMaterial = createElement('standardMaterial');
+    const loaded = loadedModelFixture('url:/models/ship.glb');
+
+    loaded.meshes.push({
+      ...loaded.meshes[0],
+      name: 'Canopy',
+      geometry: {
+        ...loaded.meshes[0].geometry,
+        key: 'url:/models/ship.glb:primitive:1'
+      }
+    });
+    loaded.meshes[0].name = 'Hull';
+    const cache = createTypeGpuSceneCache({
+      modelCache: createModelCache({
+        loadUrl: async () => loaded,
+        loadData: async () => loaded
+      })
+    });
+
+    setAttribute(model, 'src', '/models/ship.glb');
+    setAttribute(hullMaterial, 'target', 'Hull');
+    setAttribute(hullMaterial, 'color', [0.8, 0.1, 0.1, 1]);
+    insert(model, hullMaterial, null);
+    insert(scene, model, null);
+    insert(root, scene, null);
+
+    createSceneState(root, cache, { dirty: Dirty.All });
+    await Promise.resolve();
+    const state = createSceneState(root, cache, { dirty: Dirty.All });
+    const hull = state.drawBatches.find((batch) => batch.geometryKey.endsWith(':primitive:0'));
+    const canopy = state.drawBatches.find((batch) => batch.geometryKey.endsWith(':primitive:1'));
+
+    expect(hull?.material.color).toEqual([0.8, 0.1, 0.1, 1]);
+    expect(canopy?.material.color).toEqual([1, 1, 1, 1]);
   });
 
   it('keeps explicit model material blend and depth overrides with geometry vertex alpha', async () => {

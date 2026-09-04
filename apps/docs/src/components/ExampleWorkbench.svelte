@@ -15,6 +15,9 @@
   const codeRatio = $derived(
     formatCodeRatio(selected.sourceStats.typeGpuLoc, selected.sourceStats.svelteLoc)
   );
+  const hasTypeGpuComparison = $derived(
+    !!selected.typeGpuSourceUrl && selected.sourceStats.typeGpuLoc > 0
+  );
   const typeGpuFileCountLabel = $derived(formatFileCount(selected.sourceStats.typeGpuFileCount));
   const svelteFileCountLabel = $derived(formatFileCount(selected.sourceStats.svelteFileCount));
 
@@ -77,7 +80,9 @@
         <p class="eyebrow">{selected.category}</p>
         <h1>{selected.title}</h1>
       </div>
-      <a class="source-link" href={selected.typeGpuSourceUrl}>Original TypeGPU example</a>
+      {#if selected.typeGpuSourceUrl}
+        <a class="source-link" href={selected.typeGpuSourceUrl}>Original TypeGPU example</a>
+      {/if}
     </header>
     <p class="example-description">{selected.description}</p>
     <div class="tag-row" aria-label="Example tags">
@@ -85,36 +90,38 @@
         <span>{tag}</span>
       {/each}
     </div>
-    <div class="source-metrics" aria-label="Source line-count comparison">
-      <div>
-        <strong>{selected.sourceStats.typeGpuLoc}</strong>
-        <span>TypeGPU LoC</span>
-        <small>{typeGpuFileCountLabel}</small>
+    {#if hasTypeGpuComparison}
+      <div class="source-metrics" aria-label="Source line-count comparison">
+        <div>
+          <strong>{selected.sourceStats.typeGpuLoc}</strong>
+          <span>TypeGPU LoC</span>
+          <small>{typeGpuFileCountLabel}</small>
+        </div>
+        <div>
+          <strong>{selected.sourceStats.svelteLoc}</strong>
+          <span>svelte-typegpu LoC</span>
+          <small>{svelteFileCountLabel}</small>
+        </div>
+        <div
+          class="loc-delta"
+          class:compact={selected.sourceStats.deltaLoc <= 0}
+          class:expanded={selected.sourceStats.deltaLoc > 0}
+        >
+          <strong>{deltaLabel}</strong>
+          <span>LoC delta</span>
+          <small>Svelte minus TypeGPU</small>
+        </div>
+        <div
+          class="loc-ratio"
+          class:compact={codeRatio.compact}
+          class:expanded={!codeRatio.compact}
+        >
+          <strong>{codeRatio.value}</strong>
+          <span>{codeRatio.label}</span>
+          <small>Compared with TypeGPU</small>
+        </div>
       </div>
-      <div>
-        <strong>{selected.sourceStats.svelteLoc}</strong>
-        <span>svelte-typegpu LoC</span>
-        <small>{svelteFileCountLabel}</small>
-      </div>
-      <div
-        class="loc-delta"
-        class:compact={selected.sourceStats.deltaLoc <= 0}
-        class:expanded={selected.sourceStats.deltaLoc > 0}
-      >
-        <strong>{deltaLabel}</strong>
-        <span>LoC delta</span>
-        <small>Svelte minus TypeGPU</small>
-      </div>
-      <div
-        class="loc-ratio"
-        class:compact={codeRatio.compact}
-        class:expanded={!codeRatio.compact}
-      >
-        <strong>{codeRatio.value}</strong>
-        <span>{codeRatio.label}</span>
-        <small>Compared with TypeGPU</small>
-      </div>
-    </div>
+    {/if}
     <div class="preview-code-grid">
       <ExamplePreview mochi:hydrate slug={selected.slug} label={selected.title} />
       <CodePanel

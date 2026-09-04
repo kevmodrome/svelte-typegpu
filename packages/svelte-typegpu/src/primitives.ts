@@ -16,6 +16,7 @@ const aliases = new Map<string, string>([
   ['basic-material', 'basicMaterial'],
   ['phong-material', 'phongMaterial'],
   ['standard-material', 'standardMaterial'],
+  ['shader-material', 'shaderMaterial'],
   ['shader-pass', 'shaderPass']
 ]);
 
@@ -30,7 +31,7 @@ export interface PrimitiveDescriptor {
 const customDescriptors = new Map<string, PrimitiveDescriptor>();
 
 const transformAttributes = new Set(['position', 'rotation', 'quaternion', 'scale', 'matrix']);
-const sceneAttributes = new Set(['clearColor', 'background', 'activeCamera']);
+const sceneAttributes = new Set(['clearColor', 'background', 'depth', 'alphaMode']);
 const cameraAttributes = new Set([
   'id',
   'active',
@@ -57,7 +58,7 @@ const controlAttributes = new Set([
   'zoomSpeed'
 ]);
 const geometryNames = new Set(['boxGeometry', 'planeGeometry', 'sphereGeometry', 'bufferGeometry']);
-const materialNames = new Set(['basicMaterial', 'phongMaterial', 'standardMaterial']);
+const materialNames = new Set(['basicMaterial', 'phongMaterial', 'standardMaterial', 'shaderMaterial']);
 const meshNames = new Set(['mesh', 'model']);
 const materialUniformAttributes = new Set([
   'color',
@@ -73,6 +74,7 @@ const materialPipelineAttributes = new Set([
   'depthWrite',
   'depthTest',
   'cullMode',
+  'fragment',
   'doubleSided'
 ]);
 const textureAttributes = new Set(['src', 'data', 'width', 'height', 'format', 'colorSpace']);

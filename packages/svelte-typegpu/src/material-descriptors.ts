@@ -1,10 +1,13 @@
 import { colorTuple, numberArg } from './attributes';
+import { isTgpuFragmentFn } from 'typegpu';
 import type { TypeGpuNode } from './core';
 import type {
   RgbaTuple,
+  TypeGpuMeshFragment,
   TypeGpuMaterialDescriptor,
   TypeGpuMaterialKind,
   TypeGpuSamplerDescriptor,
+  TypeGpuShaderMaterialUniformMap,
   TypeGpuTextureSource
 } from './types';
 
@@ -23,6 +26,7 @@ export function readInlineMaterial(
 ): TypeGpuMaterialDescriptor | null {
   const kind = materialKindForNode(node);
   if (!kind) return null;
+  if (kind === 'shader' && !isMeshMaterialFragment(node.attributes.fragment)) return null;
 
   return createMaterialDescriptor(kind, node.attributes);
 }
@@ -41,6 +45,8 @@ export interface TypeGpuMaterialDescriptorInput {
   depthTest?: unknown;
   cullMode?: unknown;
   blendMode?: unknown;
+  fragment?: unknown;
+  uniforms?: unknown;
 }
 
 export function createMaterialDescriptor(
@@ -86,8 +92,15 @@ export function createMaterialDescriptor(
     explicitBlendMode,
     explicitDepthWrite,
     explicitDepthTest,
-    map: texture
-  };
+    map: texture,
+    ...(kind === 'shader'
+      ? {
+          fragment: input.fragment as TypeGpuMeshFragment,
+          uniforms: normalizeShaderMaterialUniforms(input.uniforms),
+          uniformKey: shaderMaterialUniformKey(normalizeShaderMaterialUniforms(input.uniforms))
+        }
+      : {})
+  } as TypeGpuMaterialDescriptor;
 
   descriptor.pipelineKey = pipelineKeyFor(descriptor);
   descriptor.bindGroupKey = bindGroupKeyFor(descriptor);
@@ -97,7 +110,7 @@ export function createMaterialDescriptor(
 }
 
 export function materialKeyFor(input: TypeGpuMaterialDescriptor): string {
-  return [
+  const keyParts = [
     `material:${input.kind}`,
     colorKey(input.color),
     `roughness:${input.roughness}`,
@@ -105,10 +118,14 @@ export function materialKeyFor(input: TypeGpuMaterialDescriptor): string {
     `specularExponent:${input.specularExponent}`,
     `opacity:${input.opacity}`,
     input.textureKey ?? 'solid:white',
-    input.samplerKey ?? DEFAULT_SAMPLER.key,
-    input.blendMode ?? 'opaque',
-    input.cullMode ?? 'back'
-  ].join('|');
+    input.samplerKey ?? DEFAULT_SAMPLER.key
+  ];
+
+  if (input.kind === 'shader') keyParts.push(input.uniformKey);
+
+  keyParts.push(input.blendMode ?? 'opaque', input.cullMode ?? 'back');
+
+  return keyParts.join('|');
 }
 
 export function textureKeyFor(value: unknown): string {
@@ -206,7 +223,37 @@ function materialKindForNode(node: TypeGpuNode): TypeGpuMaterialKind | null {
   if (node.name === 'basicMaterial') return 'basic';
   if (node.name === 'phongMaterial') return 'phong';
   if (node.name === 'standardMaterial') return 'standard';
+  if (node.name === 'shaderMaterial') return 'shader';
   return null;
+}
+
+function isMeshMaterialFragment(value: unknown): value is TypeGpuMeshFragment {
+  if (!isTgpuFragmentFn(value)) return false;
+
+  const input = value.shell.in as Record<string, { type?: string }> | undefined;
+  const output = value.shell.out as { type?: string } | undefined;
+  if (!input) return false;
+
+  const expected = {
+    color: 'vec4f',
+    normal: 'vec3f',
+    material: 'vec4f',
+    world_position: 'vec3f',
+    uv: 'vec2f',
+    vertex_color: 'vec4f',
+    material_extra: 'vec4f'
+  } as const;
+  const inputKeys = Object.keys(input);
+
+  return (
+    inputKeys.length === Object.keys(expected).length &&
+    Object.entries(expected).every(([key, type]) => decoratedType(input[key]) === type) &&
+    decoratedType(output) === 'vec4f'
+  );
+}
+
+function decoratedType(value: { type?: string; inner?: { type?: string } } | undefined): string | undefined {
+  return value?.inner?.type ?? value?.type;
 }
 
 function defaultRoughness(kind: TypeGpuMaterialKind): number {
@@ -231,6 +278,7 @@ function nonNegativeMaterialNumber(value: unknown, fallback: number): number {
 function pipelineKeyFor(input: TypeGpuMaterialDescriptor): string {
   return [
     `material:${input.kind}`,
+    input.kind === 'shader' ? shaderMaterialFragmentKey(input.fragment) : 'fragment:default',
     `blend:${input.blendMode ?? 'opaque'}`,
     `depthWrite:${input.depthWrite !== false}`,
     `depthTest:${input.depthTest !== false}`,
@@ -238,8 +286,24 @@ function pipelineKeyFor(input: TypeGpuMaterialDescriptor): string {
   ].join('|');
 }
 
+const shaderMaterialFragmentIds = new WeakMap<object, number>();
+let nextShaderMaterialFragmentId = 1;
+
+function shaderMaterialFragmentKey(fragment: TypeGpuMeshFragment): string {
+  const cached = shaderMaterialFragmentIds.get(fragment);
+  if (cached) return `fragment:${cached}`;
+
+  const next = nextShaderMaterialFragmentId++;
+  shaderMaterialFragmentIds.set(fragment, next);
+  return `fragment:${next}`;
+}
+
 function bindGroupKeyFor(input: TypeGpuMaterialDescriptor): string {
-  return [input.textureKey ?? 'solid:white', input.samplerKey ?? DEFAULT_SAMPLER.key].join('|');
+  const keyParts = [input.textureKey ?? 'solid:white', input.samplerKey ?? DEFAULT_SAMPLER.key];
+
+  if (input.kind === 'shader') keyParts.push(input.uniformKey);
+
+  return keyParts.join('|');
 }
 
 function colorKey(color: RgbaTuple): string {
@@ -308,4 +372,56 @@ function hashTextureData(data: Uint8Array | Uint8ClampedArray | Float32Array): s
   }
 
   return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function normalizeShaderMaterialUniforms(value: unknown): TypeGpuShaderMaterialUniformMap {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+
+  const uniforms: TypeGpuShaderMaterialUniformMap = {};
+
+  for (const [name, source] of Object.entries(value)) {
+    if (!isShaderMaterialUniformName(name)) continue;
+
+    const vector = uniformValue(source);
+    if (vector) uniforms[name] = vector;
+  }
+
+  return uniforms;
+}
+
+function shaderMaterialUniformKey(uniforms: TypeGpuShaderMaterialUniformMap): string {
+  const entries = Object.entries(uniforms).sort(([left], [right]) => left.localeCompare(right));
+  if (entries.length === 0) return 'uniforms:default';
+
+  return entries
+    .map(([name, value]) => `${name}:${Array.isArray(value) ? value.join(',') : value}`)
+    .join('|');
+}
+
+function isShaderMaterialUniformName(
+  name: string
+): name is keyof TypeGpuShaderMaterialUniformMap {
+  return /^value[0-7]$/.test(name);
+}
+
+function uniformValue(value: unknown): [number, number, number, number] | null {
+  if (typeof value === 'number') {
+    const scalar = finiteNumber(value);
+    return scalar === null ? null : [scalar, 0, 0, 0];
+  }
+
+  if (!Array.isArray(value) || value.length < 2 || value.length > 4) return null;
+
+  const x = finiteNumber(value[0]);
+  const y = finiteNumber(value[1]);
+  const z = value.length > 2 ? finiteNumber(value[2]) : 0;
+  const w = value.length > 3 ? finiteNumber(value[3]) : 0;
+
+  if (x === null || y === null || z === null || w === null) return null;
+
+  return [x, y, z, w];
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
