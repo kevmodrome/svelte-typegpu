@@ -61,43 +61,26 @@ Mount it into a WebGPU canvas root from ordinary Svelte code:
 
 ```svelte
 <script lang="ts">
-  import { mount, onMount, unmount } from 'svelte';
-  import renderer, { createTypeGpuRoot } from 'svelte-typegpu';
+  import Canvas from 'svelte-typegpu/canvas';
   import Scene from './Scene.typegpu.svelte';
-
-  let host: HTMLDivElement;
-
-  onMount(() => {
-    let disposed = false;
-    let cleanup: (() => void) | undefined;
-
-    createTypeGpuRoot({ target: host, frameloop: 'always' }).then((root) => {
-      if (disposed) {
-        root.dispose();
-        return;
-      }
-
-      const instance = mount(Scene, { renderer, target: root });
-      cleanup = () => {
-        void unmount(instance);
-        root.dispose();
-      };
-    });
-
-    return () => {
-      disposed = true;
-      cleanup?.();
-    };
-  });
 </script>
 
-<div bind:this={host}></div>
+<Canvas
+  scene={Scene}
+  sceneProps={{}}
+  options={{ frameloop: 'demand' }}
+  style="height: 400px"
+/>
 ```
 
 Until Svelte's custom renderer API lands upstream, `.typegpu.svelte` files also
 need to be compiled with the Svelte PR preview build described below.
 
 ## Setup
+
+See [Canvas hosting](docs/canvas-guide.md) for reactive props, context, startup
+options, lifecycle ownership, and manual rendering. The low-level
+`createTypeGpuRoot` and Svelte `mount` APIs remain available.
 
 See [Animation and frame tasks](docs/scene-animation-guide.md) for Svelte motion,
 animated shader uniforms, dynamic collections, and reusable behavior components.

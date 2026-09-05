@@ -70,22 +70,16 @@ export default {
     lang: 'svelte',
     code: [
       '<script lang="ts">',
-      "  import { mount, onMount, unmount } from 'svelte';",
-      "  import renderer, { createTypeGpuRoot } from 'svelte-typegpu';",
+      "  import Canvas from 'svelte-typegpu/canvas';",
       "  import Scene from './Scene.typegpu.svelte';",
-      '  let host: HTMLDivElement;',
-      '  onMount(() => {',
-      '    let disposed = false;',
-      '    let cleanup = () => {};',
-      "    createTypeGpuRoot({ target: host, frameloop: 'always' }).then((root) => {",
-      '      if (disposed) { root.dispose(); return; }',
-      '      const instance = mount(Scene, { renderer, target: root });',
-      '      cleanup = () => { void unmount(instance); root.dispose(); };',
-      '    });',
-      '    return () => { disposed = true; cleanup(); };',
-      '  });',
       '</script>',
-      '<div bind:this={host}></div>'
+      '',
+      '<Canvas',
+      '  scene={Scene}',
+      '  sceneProps={{}}',
+      "  options={{ frameloop: 'demand' }}",
+      '  style="height: 400px"',
+      '/>'
     ].join('\n')
   }
 ] satisfies readonly DocSnippetDefinition[];

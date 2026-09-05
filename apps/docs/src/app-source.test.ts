@@ -37,8 +37,8 @@ describe('docs app source wiring', () => {
   it('keeps WebGPU preview failures local', () => {
     const source = read('./components/ExamplePreview.svelte');
 
-    expect(source).toContain('createTypeGpuRoot');
-    expect(source).toContain('WebGPU is not available');
+    expect(source).toContain("from 'svelte-typegpu/canvas'");
+    expect(source).toContain('onerror=');
     expect(source).toContain('Unable to start this preview');
   });
 
@@ -47,7 +47,7 @@ describe('docs app source wiring', () => {
     const styleSource = read('./style.css');
 
     expect(previewSource).toContain('let fps = $state<number | null>(null)');
-    expect(previewSource).toContain('onFps: (value) => (fps = value)');
+    expect(previewSource).toContain('onfps={(value) => fps = value}');
     expect(previewSource).toContain('aria-label="Preview frames per second"');
     expect(previewSource).toContain('{fps === null ?');
     expect(styleSource).toContain('.fps-badge');
@@ -105,7 +105,8 @@ describe('docs app source wiring', () => {
     expect(workbenchSource).not.toMatch(/<CodePanel[\s\S]*?mochi:hydrate/);
     expect(workbenchSource).toContain('files={selected.sourceFiles}');
     expect(previewSource).toContain('Example controls');
-    expect(previewSource).toContain('controlStateForSlug');
+    expect(previewSource).toContain('{sceneProps}');
+    expect(previewSource).not.toContain('rerenderScene');
   });
 
   it('renders source files as static anchor navigation instead of hydrated tabs', () => {

@@ -31,7 +31,7 @@ describe('example package boundary', () => {
     }
 
     expect(readFileSync(new URL('./TypeGpuCanvas.svelte', import.meta.url), 'utf8')).toContain(
-      "from 'svelte-typegpu'"
+      "from 'svelte-typegpu/canvas'"
     );
     expect(readFileSync(new URL('./Scene.typegpu.test.ts', import.meta.url), 'utf8')).toContain(
       "from 'svelte-typegpu'"

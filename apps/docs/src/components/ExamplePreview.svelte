@@ -1,11 +1,6 @@
 <script lang="ts">
-  import { mount, onMount, unmount } from 'svelte';
-  import renderer, {
-    createTypeGpuRoot,
-    type TypeGpuCameraSettings,
-    type TypeGpuRoot,
-    type Vector3Tuple
-  } from 'svelte-typegpu';
+  import Canvas from 'svelte-typegpu/canvas';
+  import type { TypeGpuCameraSettings, Vector3Tuple } from 'svelte-typegpu';
   import type { ExampleSlug } from '../examples/example-definitions';
   import { sceneComponents } from '../examples/scene-components';
   import {
@@ -15,7 +10,6 @@
   import { gravityPresets, type GravityPreset } from '../examples/gravity/gravity-simulation';
 
   let { slug, label }: { slug: ExampleSlug; label: string } = $props();
-  let host: HTMLDivElement;
   let error = $state<string | null>(null);
   let ready = $state(false);
   let fps = $state<number | null>(null);
@@ -65,98 +59,42 @@
       slug === 'gravity'
   );
 
-  onMount(() => {
-    let cancelled = false;
-    let root: TypeGpuRoot | null = null;
-    let instance: ReturnType<typeof mount> | null = null;
-
-    function sceneProps() {
-      if (slug === 'svelte-motion') return {
+  const sceneProps = $derived.by(() => {
+    if (slug === 'svelte-motion') {
+      return {
         controls: motionControls,
-        onTargetChange: (x: number, z: number) => { motionControls.x = x; motionControls.z = z; }
+        onTargetChange: (x: number, z: number) => {
+          motionControls.x = x;
+          motionControls.z = z;
+        }
       };
-      if (slug === 'phong-reflection') return {
+    }
+    if (slug === 'phong-reflection') {
+      return {
         controls: phongControls,
-        onModelStatus: (message: string) => { modelStatus = message; }
+        onModelStatus: (message: string) => {
+          modelStatus = message;
+        }
       };
-      if (slug === 'simple-shadow') {
-        return {
-          controls: simpleShadowControls,
-          onCameraChange: handleSimpleShadowCameraChange
-        };
-      }
-      if (slug === 'disco-shader-pass') return { controls: discoControls };
-      if (slug === 'smoky-triangle') return { controls: smokyTriangleControls };
-      if (slug === 'gravity') return { controls: gravityControls };
-      return {};
     }
-
-    function renderScene() {
-      if (!root) return;
-
-      if (instance) void unmount(instance);
-      instance = mount(sceneComponents[slug], {
-        renderer,
-        target: root,
-        props: sceneProps()
-      });
+    if (slug === 'simple-shadow') {
+      return {
+        controls: simpleShadowControls,
+        onCameraChange: handleSimpleShadowCameraChange
+      };
     }
-
-    controlStateForSlug = () => {
-      renderScene();
-    };
-
-    if (!('gpu' in navigator)) {
-      error = 'WebGPU is not available in this browser.';
-      return;
-    }
-
-    createTypeGpuRoot({
-      target: host,
-      frameloop: slug === 'gravity' || slug === 'svelte-motion' ? 'demand' : 'always',
-      maxDevicePixelRatio: 1.5,
-      clearColor: [0.045, 0.05, 0.055, 1],
-      depth: true,
-      alphaMode: 'premultiplied',
-      onFps: (value) => (fps = value)
-    })
-      .then((nextRoot) => {
-        if (cancelled) {
-          nextRoot.dispose();
-          return;
-        }
-
-        root = nextRoot;
-        try {
-          renderScene();
-          ready = true;
-          error = null;
-        } catch (unknownError) {
-          root.dispose();
-          root = null;
-          throw unknownError;
-        }
-      })
-      .catch((unknownError: unknown) => {
-        if (cancelled) return;
-        error =
-          unknownError instanceof Error
-            ? `Unable to start this preview: ${unknownError.message}`
-            : 'Unable to start this preview.';
-      });
-
-    return () => {
-      cancelled = true;
-      if (instance) void unmount(instance);
-      root?.dispose();
-    };
+    if (slug === 'disco-shader-pass') return { controls: discoControls };
+    if (slug === 'smoky-triangle') return { controls: smokyTriangleControls };
+    if (slug === 'gravity') return { controls: gravityControls };
+    return {};
   });
 
-  let controlStateForSlug = () => {};
-
-  function rerenderScene() {
-    controlStateForSlug();
-  }
+  $effect(() => {
+    slug;
+    error = null;
+    ready = false;
+    fps = null;
+  });
 
   function setColor(target: 'lightColor' | 'ambientColor', value: string) {
     phongControls[target] = hexToRgb(value);
@@ -172,7 +110,6 @@
     value: (typeof simpleShadowControls)[K]
   ) {
     simpleShadowControls[key] = value;
-    rerenderScene();
   }
 
   function setSimpleCameraX(value: number) {
@@ -182,7 +119,6 @@
       simpleShadowControls.cameraPosition[1],
       simpleShadowControls.cameraPosition[2]
     ];
-    rerenderScene();
   }
 
   function handleSimpleShadowCameraChange(
@@ -195,7 +131,6 @@
 
   function setDiscoPattern(value: string) {
     discoControls.pattern = value;
-    rerenderScene();
   }
 
   function setSmokyValue<K extends keyof SmokyTriangleControls>(
@@ -203,7 +138,6 @@
     value: SmokyTriangleControls[K]
   ) {
     smokyTriangleControls[key] = value;
-    rerenderScene();
   }
 
   function setSmokyColor(target: 'fromColor' | 'toColor', value: string) {
@@ -228,7 +162,6 @@
       fromColor: [...next.fromColor],
       toColor: [...next.toColor]
     };
-    rerenderScene();
   }
 
   function setGravityPreset(value: string) {
@@ -259,7 +192,31 @@
 
 <div class:preview-with-controls={hasControls}>
   <section class="preview-panel" aria-label={`${label} live preview`}>
-    <div class="preview-host" bind:this={host} data-ready={ready}></div>
+    {#key slug}
+      <Canvas
+        class="preview-host"
+        data-ready={ready}
+        scene={sceneComponents[slug]}
+        {sceneProps}
+        options={{
+          frameloop: slug === 'gravity' || slug === 'svelte-motion' ? 'demand' : 'always',
+          maxDevicePixelRatio: 1.5,
+          clearColor: [0.045, 0.05, 0.055, 1],
+          depth: true,
+          alphaMode: 'premultiplied'
+        }}
+        onfps={(value) => fps = value}
+        onready={() => {
+          ready = true;
+          error = null;
+        }}
+        onerror={(cause) => {
+          error = cause instanceof Error
+            ? `Unable to start this preview: ${cause.message}`
+            : 'Unable to start this preview.';
+        }}
+      />
+    {/key}
     <div class="fps-badge" aria-label="Preview frames per second">
       <span>FPS</span>
       <strong>{fps === null ? '...' : fps}</strong>

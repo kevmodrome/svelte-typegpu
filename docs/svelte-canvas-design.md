@@ -89,3 +89,24 @@ the boundary clearly. Existing createTypeGpuRoot/mount usage remains supported;
 rollback requires no renderer changes. Startup failures surface via onerror;
 Svelte boundary/await still own scene rendering/loading failures. Device-loss
 recovery is not introduced by this component.
+
+## Verified results
+
+- 534 tests pass across the workspace: 463 renderer, 42 docs, 24 example, and 5
+  workspace tests. Renderer TypeScript checking and both production builds pass.
+- Real compiled Tween/Spring scenes now run through SceneHost in the existing
+  60/120/144 Hz matrix, with both producer/renderer callback orders. Upload
+  ranges, resource reuse, idle behavior, and disposal assertions remain green.
+- Live desktop checks verify motion/appearance updates, camera settings retained
+  through lighting edits, whole-object smoky preset replacement, and disco
+  shader selection. Canvas pixel samples confirm visible geometry and motion.
+- The Phong model still reports a missing-URL error and recovers after loading
+  the valid URL. At 390x844 it is nonblank, fully framed, and has no horizontal
+  overflow. Canvas retains both its scoped CSS class and renderer class.
+- The automation browser reports 60 rendered FPS before and after migration;
+  this does not measure the user's physical 120 Hz monitor. Normal interaction
+  checks produced no browser warnings/errors. The intentional missing model
+  request produced the expected 404.
+- Component runtime compilation is covered, but a dedicated Svelte public API
+  typecheck has not yet been added; plain TypeScript checking does not establish
+  generic prop inference in consumer `.svelte` files.
