@@ -29,6 +29,8 @@ docs generator -> compileTypeGpu -> generated scene JavaScript
 
 ```diff
 + compiler/diagnostics.ts
++ src/primitive-names.ts (move existing aliases into a dependency-free shared module)
+~ src/primitives.ts (re-export the existing normalization API)
 ~ compiler/index.ts (warnings from the existing parsed AST, Warning-compatible results)
 ~ compiler/vite.ts (route warnings through onwarn/default Vite logger)
 + src/scene-diagnostics.test.ts
@@ -87,3 +89,7 @@ Catalog entries must follow actual scene readers, not the broader invalidation
 table. Future primitive changes should update diagnostics and the reader tests
 together. Vite warnings use the preprocessed source if earlier preprocessors
 rewrite it. Rollback removes analysis/transport only; rendering output is unchanged.
+
+Real Vite builds load the compiler directly in Node: compiler-relative imports
+use explicit `.ts` extensions. The compiler shares only the pure alias module
+with runtime code; it does not load the invalidation or event registries.

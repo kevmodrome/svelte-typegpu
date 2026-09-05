@@ -3,7 +3,7 @@ import { parse as parseJavaScript } from 'acorn';
 import MagicString from 'magic-string';
 import remapping from '@jridgewell/remapping';
 import { compile, parse, type CompileOptions, type Warning } from 'svelte/compiler';
-import { sceneDiagnostics } from './diagnostics';
+import { sceneDiagnostics } from './diagnostics.ts';
 
 const hostModule = 'svelte-typegpu/internal/viewport-canvas';
 const elementSizes = new Set(['clientWidth', 'clientHeight', 'offsetWidth', 'offsetHeight']);

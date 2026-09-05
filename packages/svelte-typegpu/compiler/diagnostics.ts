@@ -1,5 +1,5 @@
 import type { AST, Warning } from 'svelte/compiler';
-import { normalizePrimitiveName } from '../src/primitives';
+import { normalizePrimitiveName } from '../src/primitive-names.ts';
 
 // Only list nodes consumed by scene/resource readers, not every name that the
 // invalidation registry recognizes (notably texture and sampler).

@@ -180,6 +180,12 @@ function writeGeneratedSourceFile(
       runes: true,
       experimental: custom ? { customRenderer: rendererPath } : undefined
     });
+    const diagnostics = compiled.warnings.filter((warning) => warning.code.startsWith('typegpu_'));
+    if (diagnostics.length) {
+      throw new Error(diagnostics.map((warning) =>
+        `${sourceFile.path}:${warning.start?.line ?? 1} [${warning.code}] ${warning.message}\n${warning.frame ?? ''}`
+      ).join('\n\n'));
+    }
     if (compiled.css?.code) {
       writeFileSync(outPath.replace(/\.js$/, '.css'), compiled.css.code);
     }
