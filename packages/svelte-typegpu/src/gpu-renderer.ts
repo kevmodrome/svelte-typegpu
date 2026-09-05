@@ -147,6 +147,7 @@ export interface TypeGpuRenderer {
 
 export interface TypeGpuRendererOptions {
   canvas: HTMLCanvasElement;
+  /** Delivered render frames per second; 0 after 500 ms without a frame. */
   onFps?: (fps: number) => void;
   frameloop?: 'always' | 'demand' | 'manual';
   maxDevicePixelRatio?: number;
@@ -157,7 +158,7 @@ export interface TypeGpuRendererOptions {
 
 export async function createTypeGpuRenderer({
   canvas,
-  onFps = () => {},
+  onFps,
   frameloop = FRAMELOOP_OPTIONS.always.frameloop,
   maxDevicePixelRatio = MAX_DEVICE_PIXEL_RATIO,
   clearColor = [0, 0, 0, 1],
@@ -227,23 +228,21 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   readonly #format: GPUTextureFormat;
   readonly #frameloop: TypeGpuFrameLoop;
   readonly #maxDevicePixelRatio: number;
-  readonly #onFps: (fps: number) => void;
 
   constructor(
     private readonly root: TgpuRoot,
-    private readonly options: Required<TypeGpuRendererOptions>
+    private readonly options: Required<Omit<TypeGpuRendererOptions, 'onFps'>> & Pick<TypeGpuRendererOptions, 'onFps'>
   ) {
     this.#format = navigator.gpu.getPreferredCanvasFormat();
     this.#frameloop = normalizeFrameloop(options.frameloop);
     this.#maxDevicePixelRatio = options.maxDevicePixelRatio;
-    this.#onFps = options.onFps;
     this.#renderSettings = {
       clearColor: options.clearColor,
       depth: options.depth,
       alphaMode: options.alphaMode
     };
     this.#context = this.#configureContext();
-    this.#fpsMeter = createFpsMeter((fps) => this.#onFps(fps));
+    this.#fpsMeter = options.onFps ? createFpsMeter(options.onFps) : null;
     this.#uniformBuffer = root
       .createBuffer(typegpuSceneUniformSchema)
       .$usage('uniform')
@@ -551,7 +550,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       }
     });
 
-    this.#fpsMeter.record(now);
+    this.#fpsMeter?.record(now);
   }
 
   getRenderSize(): { width: number; height: number } {
@@ -562,6 +561,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     if (this.#disposed) return;
 
     this.#disposed = true;
+    this.#fpsMeter?.dispose();
     this.#needsFollowUpFrame = false;
     this.#frameHandler = null;
     this.#continueFrame = false;

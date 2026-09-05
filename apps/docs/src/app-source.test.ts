@@ -49,7 +49,7 @@ describe('docs app source wiring', () => {
     expect(previewSource).toContain('let fps = $state<number | null>(null)');
     expect(previewSource).toContain('onfps={(value) => fps = value}');
     expect(previewSource).toContain('aria-label="Preview frames per second"');
-    expect(previewSource).toContain("{!ready ? '...' : fps || 'Idle'}");
+    expect(previewSource).toContain("{!ready || fps === null ? '...' : fps === 0 ? 'Idle' : fps}");
     expect(styleSource).toContain('.fps-badge');
     expect(styleSource).toContain('position: absolute');
   });

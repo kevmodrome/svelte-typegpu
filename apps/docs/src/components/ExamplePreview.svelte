@@ -229,7 +229,7 @@
     {/key}
     <div class="fps-badge" aria-label="Preview frames per second">
       <span>FPS</span>
-      <strong>{!ready ? '...' : fps || 'Idle'}</strong>
+      <strong>{!ready || fps === null ? '...' : fps === 0 ? 'Idle' : fps}</strong>
     </div>
     {#if error}
       <div class="preview-status" role="status">{error}</div>

@@ -70,6 +70,48 @@ afterEach(() => {
 });
 
 describe('GPU resource and frame lifecycle', () => {
+  it.each([60, 120, 144].flatMap(hz => (['demand', 'manual'] as const).map(frameloop => ({ hz, frameloop }))))(
+    'reports idle without drawing or scheduling RAF at $hz Hz in $frameloop mode',
+    async ({ hz, frameloop }) => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+      const pending = new Map<number, FrameRequestCallback>();
+      let id = 0;
+      const request = vi.fn((callback: FrameRequestCallback) => { pending.set(++id, callback); return id; });
+      vi.stubGlobal('requestAnimationFrame', request);
+      vi.stubGlobal('cancelAnimationFrame', (key: number) => pending.delete(key));
+      const onFps = vi.fn();
+      const { renderer, submissions } = await setupRenderer(frameloop, onFps);
+      try {
+        for (let frame = 0; frame <= hz; frame++) {
+          vi.advanceTimersByTime(1000 / hz);
+          if (frameloop === 'manual') renderer.renderFrame(performance.now());
+          else {
+            if (pending.size === 0) renderer.invalidate();
+            for (const [key, callback] of [...pending]) { pending.delete(key); callback(performance.now()); }
+          }
+          expect(submissions).toHaveLength(frame + 1);
+          expect(vi.getTimerCount()).toBe(1);
+        }
+        expect(onFps).toHaveBeenCalledWith(hz);
+        expect(pending.size).toBe(0);
+        if (frameloop === 'manual') expect(request).not.toHaveBeenCalled();
+        const requested = request.mock.calls.length;
+        vi.advanceTimersByTime(501);
+        expect(onFps).toHaveBeenLastCalledWith(0);
+        expect(submissions).toHaveLength(hz + 1);
+        expect(request).toHaveBeenCalledTimes(requested);
+        expect(vi.getTimerCount()).toBe(0);
+        renderer.renderFrame(performance.now());
+        expect(vi.getTimerCount()).toBe(1);
+        renderer.dispose();
+        onFps.mockClear();
+        vi.advanceTimersByTime(1000);
+        expect(onFps).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(0);
+      } finally { renderer.dispose(); vi.useRealTimers(); }
+    }
+  );
+
   it.each([60, 120, 144])('switches viewport scenes and clears an empty viewport at %s Hz', async (hz) => {
     const pending = new Map<number, FrameRequestCallback>();
     let id = 0;
@@ -1410,14 +1452,15 @@ function dispatchExampleInput(
   return event;
 }
 
-async function setupRenderer(frameloop: 'manual' | 'demand' | 'always' = 'manual') {
+async function setupRenderer(frameloop: 'manual' | 'demand' | 'always' = 'manual', onFps?: (fps: number) => void) {
   const fake = fakeRoot();
   vi.mocked(tgpu.init).mockResolvedValue(fake.root as never);
   vi.stubGlobal('navigator', { gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
   vi.stubGlobal('window', { devicePixelRatio: 1 });
   const renderer = await createTypeGpuRenderer({
     canvas: { clientWidth: 100, clientHeight: 100, width: 100, height: 100 } as HTMLCanvasElement,
-    frameloop
+    frameloop,
+    onFps
   });
   return { ...fake, renderer };
 }
