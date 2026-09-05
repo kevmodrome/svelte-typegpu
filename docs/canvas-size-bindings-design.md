@@ -94,3 +94,23 @@ This is additive, requiring no migration. Roll back the binding branch/export
 if the pinned runtime changes incompatibly; compiler/runtime parity tests are
 the upgrade gate. Original-source editor typing remains an existing limitation.
 Do not claim physical monitor cadence from synthetic clock results.
+
+## Verification outcome
+
+- All eight bindings match ordinary compiled Svelte for initial measurements,
+  resize delivery, function capture, target replacement and observer cleanup.
+- Compiled viewport hydration preserves the server canvas and never measures on
+  SSR. Real Tween/Spring tests cover 60/120/144 Hz in both RAF callback orders.
+- A resize-driven mesh update uploads one 96-byte instance range, with no buffer,
+  bind-group or pipeline recreation. Demand settles after the existing bounded
+  follow-up when scene and native resize invalidations coincide; manual mode
+  renders only when explicitly requested. Observer subscriptions stay constant.
+- Namespace destructuring retained all Svelte helpers in Bun. Static member
+  exports reduced an isolated minified binding entry from 113 KB to 44 KB; a
+  docs-bundler regression test now checks unused helpers and a size ceiling.
+- `pnpm test`: 750 tests pass. `pnpm build` and `check:svelte` pass (zero Svelte
+  errors/warnings). Vite client/SSR fixtures include both binding forms.
+- Live Native Events: bound CSS size changed from 954x596 to 345x215, the drawing
+  buffer settled to the new size, clicked selection and canvas focus survived,
+  all three meshes remained visible, and demand returned to Idle. No browser
+  warnings/errors. Physical 120/144 Hz and GPU throughput were not measured here.

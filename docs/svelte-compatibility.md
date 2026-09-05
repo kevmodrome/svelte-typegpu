@@ -7,7 +7,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | --- | --- |
 | Reactive state, component props, `{#if}`, keyed `{#each}` | Supported and tested |
 | DOM `Canvas` host | Reactive scene/canvas props, native DOM events/attachments, inherited context, SSR shell, and async startup/unmount cleanup tested |
-| Dedicated `<canvas>` viewport | Experimental compiler path: native attributes/events/attachments, `bind:this`, scoped CSS, SSR/hydration, scene switching and frame cadence tested; other canvas directives are explicitly rejected |
+| Dedicated `<canvas>` viewport | Experimental compiler path: native attributes/events/attachments, `bind:this`, read-only size bindings, scoped CSS, SSR/hydration, scene switching and frame cadence tested; other canvas directives are explicitly rejected |
 | Consumer component types | Canvas props/callbacks/bindings checked; scene-element declarations deferred due to language-tools casing and action-target gaps |
 | `{#snippet}` and `{@render}` | Supported, including attachment forwarding |
 | `<svelte:element>` | Dynamic geometry/materials, prop spreads, events, attachment cleanup, and keyed identity tested |
@@ -15,7 +15,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | Scene event attributes and `onclickcapture` | Capture/target/bubble ordering, group hover, double-click/context-menu/wheel, and propagation controls supported |
 | `Tween` / `Spring` bound to transforms and material values | Supported; frame delivery tested at 60/120/144 Hz in both RAF callback orders |
 | `{@attach}` | Supported on scene nodes, including reactive replacement and component prop spreads |
-| `use:` | Supported for renderer-safe actions with update/destroy cleanup |
+| `use:` | Not part of the renderer API; use attachments. The pinned preview may accept scene actions incidentally; the canvas boundary rejects them |
 | Host-element bindings, including `<mesh bind:this>` | Rejected by the pinned upstream compiler |
 | `transition:`, `in:`, `out:`, `animate:` on host nodes | Rejected by the pinned upstream compiler |
 | `{#await}` | Pending/then/catch, replacement, stale results, and unmount cleanup tested |
@@ -34,7 +34,7 @@ Use [Canvas hosting](canvas-guide.md) to cross that boundary without manually
 mounting, remounting, or disposing the scene.
 See the [element typing investigation](scene-element-types-design.md) for the
 reproducer and current editor limitations. These are separate from the tested
-runtime attachment/action behavior below.
+runtime attachment behavior below.
 
 Async expressions (`await` in markup or `$derived`) are not enabled in the apps.
 Their successful ready paths do not establish safe lifecycle behavior. See the

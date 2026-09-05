@@ -147,12 +147,17 @@ omits GPU markup; it still emits only the canvas shell.
   values. Canvas keyboard focus does not create scene-object focus navigation.
 - `bind:this` returns the actual native canvas, never the internal host component.
   Attachments receive that same canvas and clean up normally.
+- Read-only native size bindings work directly on the canvas: `clientWidth`,
+  `clientHeight`, `offsetWidth`, `offsetHeight`, `contentRect`, `contentBoxSize`,
+  `borderBoxSize`, and `devicePixelContentBoxSize`. Assignable targets and
+  `{null, setter}` function bindings follow Svelte's native measurement and cleanup
+  behavior. Observers are shared, with no per-frame layout polling.
 - Native attributes, prop spreads, class/style values, and canvas-scoped CSS
   update without remounting the scene. CSS owns display size; the renderer owns
   drawing-buffer width/height and DPR. Explicit width/height attributes are rejected.
-- Native bindings other than `bind:this`, class/style directives, actions,
-  transitions and animations on this canvas boundary are not yet supported and
-  produce compile errors. Scene attachments/actions retain their existing support.
+- Other native bindings, class/style directives, transitions and animations on
+  this canvas boundary are not yet supported and produce compile errors.
+  Use attachments for reusable behavior; `use:` actions are not a supported API.
 - `frameloop` defaults to `demand`. `frameloop` and `maxDevicePixelRatio` are
   creation-only; changing them warns without recreating GPU resources. Remount
   deliberately with a parent `{#key}` when changing these settings.
@@ -170,6 +175,32 @@ The scene uses a separately owned Svelte mount with inherited context. Parent
 error boundaries and pending counts are not joined across that mount. Existing
 async-expression restrictions still apply. Original-source primitive editor
 typing remains a separate [upstream/tooling limitation](svelte-compatibility.md).
+
+## Responsive scenes
+
+Size bindings measure CSS layout, not the renderer's DPR-scaled drawing buffer.
+Use their values in ordinary derived state or scene props:
+
+```svelte
+<script>
+  let width = $state(0);
+  let height = $state(0);
+  const portrait = $derived(width > 0 && height > width);
+</script>
+
+<canvas bind:clientWidth={width} bind:clientHeight={height} aria-label="Responsive scene">
+  <scene>
+    <perspectiveCamera active position={[0, 0, 8]} fov={portrait ? 60 : 42} />
+    <mesh><boxGeometry /><basicMaterial /></mesh>
+  </scene>
+</canvas>
+```
+
+These bindings do not run during SSR. Element dimensions receive an initial
+client measurement; ResizeObserver entry bindings receive their first value
+when the browser delivers an entry. Resizing does not remount the canvas or
+scene. Avoid sizing the canvas from its own bound measurement, which can create
+a browser resize feedback loop.
 
 ## Verification
 

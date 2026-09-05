@@ -5,6 +5,7 @@ import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
 import TypeGpuViewportCanvas from "svelte-typegpu/internal/viewport-canvas";
+import * as TypeGpuCanvasBindings from 'svelte-typegpu/internal/canvas-bindings';
 
 var root = $.from_tree([['mesh', null, ['boxGeometry'], ['standardMaterial']]], 4);
 
@@ -45,6 +46,9 @@ var root_1 = $.from_tree([
 
 export default function NativeEvents_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer(null);
+
+	$.push($$props, true);
+
 	let frameloop = $.prop($$props, 'frameloop', 3, 'demand');
 
 	let objects = $.proxy([
@@ -75,140 +79,160 @@ export default function NativeEvents_typegpu($$anchor, $$props) {
 
 	let selected = $.state(0);
 	let hovered = $.state(null);
+	let width = $.state(0);
+	let height = $.state(0);
+	const compact = $.derived(() => $.get(width) > 0 && $.get(width) < 600);
 
 	function reset(object) {
 		object.angle = 0;
 		object.size = 1;
 	}
 
-	TypeGpuViewportCanvas($$anchor, {
-		get frameloop() {
-			return frameloop();
-		},
+	{
+		let $0 = $.derived(() => `${$.get(width)}x${$.get(height)}`);
 
-		get onready() {
-			return $$props.onready;
-		},
+		TypeGpuViewportCanvas($$anchor, {
+			get frameloop() {
+				return frameloop();
+			},
 
-		get onfps() {
-			return $$props.onfps;
-		},
+			get onready() {
+				return $$props.onready;
+			},
 
-		get onrenderererror() {
-			return $$props.onrenderererror;
-		},
-		'aria-label': 'Native Events 3D scene',
-		'aria-keyshortcuts': 'Escape',
-		tabindex: 0,
-		onpointerdown: (event) => event.currentTarget.focus({ preventScroll: true }),
-		onkeydown: (event) => {
-			if (event.key === 'Escape') objects.forEach(reset);
-		},
+			get onfps() {
+				return $$props.onfps;
+			},
 
-		children: $.renderer_snippet($renderer, ($$anchor, $$slotProps) => {
-			var scene = root_1();
+			get onrenderererror() {
+				return $$props.onrenderererror;
+			},
 
-			$.set_attribute(scene, 'clearColor', [0.035, 0.045, 0.05, 1]);
+			[$.attachment()]: (TypeGpuCanvasNode) => {
+				TypeGpuCanvasBindings.untrack(() => TypeGpuCanvasBindings.bind_element_size(TypeGpuCanvasNode, "clientWidth", (TypeGpuCanvasValue) => $.set(width, TypeGpuCanvasValue, true)));
+			},
 
-			var perspectiveCamera = $.child(scene);
+			[$.attachment()]: (TypeGpuCanvasNode_) => {
+				TypeGpuCanvasBindings.untrack(() => TypeGpuCanvasBindings.bind_element_size(TypeGpuCanvasNode_, "clientHeight", (TypeGpuCanvasValue_) => $.set(height, TypeGpuCanvasValue_, true)));
+			},
 
-			$.set_attribute(perspectiveCamera, 'position', [7, 6, 12]);
-			$.set_attribute(perspectiveCamera, 'target', [0, 0.5, 0]);
-			$.set_attribute(perspectiveCamera, 'fov', 42);
+			get 'data-size'() {
+				return $.get($0);
+			},
+			'aria-label': 'Native Events 3D scene',
+			'aria-keyshortcuts': 'Escape',
+			tabindex: 0,
+			onpointerdown: (event) => event.currentTarget.focus({ preventScroll: true }),
+			onkeydown: (event) => {
+				if (event.key === 'Escape') objects.forEach(reset);
+			},
 
-			var controls = $.child(perspectiveCamera);
+			children: $.renderer_snippet($renderer, ($$anchor, $$slotProps) => {
+				var scene = root_1();
 
-			$.set_attribute(controls, 'minDistance', 9);
-			$.set_attribute(controls, 'maxDistance', 24);
-			$.reset(perspectiveCamera);
+				$.set_attribute(scene, 'clearColor', [0.035, 0.045, 0.05, 1]);
 
-			var ambientLight = $.sibling(perspectiveCamera, 2);
+				var perspectiveCamera = $.child(scene);
 
-			$.set_attribute(ambientLight, 'intensity', 0.65);
+				$.set_attribute(perspectiveCamera, 'position', [7, 6, 12]);
+				$.set_attribute(perspectiveCamera, 'target', [0, 0.5, 0]);
 
-			var directionalLight = $.sibling(ambientLight, 2);
+				var controls = $.child(perspectiveCamera);
 
-			$.set_attribute(directionalLight, 'position', [3, 9, 6]);
-			$.set_attribute(directionalLight, 'intensity', 1.1);
+				$.set_attribute(controls, 'minDistance', 9);
+				$.set_attribute(controls, 'maxDistance', 24);
+				$.reset(perspectiveCamera);
 
-			var mesh = $.sibling(directionalLight, 2);
+				var ambientLight = $.sibling(perspectiveCamera, 2);
 
-			$.set_attribute(mesh, 'position', [0, -0.35, 0]);
-			$.set_attribute(mesh, 'scale', [10, 0.25, 4]);
+				$.set_attribute(ambientLight, 'intensity', 0.65);
 
-			var standardMaterial = $.sibling($.child(mesh));
+				var directionalLight = $.sibling(ambientLight, 2);
 
-			$.set_attribute(standardMaterial, 'color', [0.17, 0.2, 0.23]);
-			$.reset(mesh);
+				$.set_attribute(directionalLight, 'position', [3, 9, 6]);
+				$.set_attribute(directionalLight, 'intensity', 1.1);
 
-			var node = $.sibling(mesh, 2);
+				var mesh = $.sibling(directionalLight, 2);
 
-			$.each(node, 19, () => objects, (object) => object.name, ($$anchor, object, index) => {
-				var mesh_1 = root();
-				var standardMaterial_1 = $.sibling($.child(mesh_1));
+				$.set_attribute(mesh, 'position', [0, -0.35, 0]);
+				$.set_attribute(mesh, 'scale', [10, 0.25, 4]);
 
-				$.reset(mesh_1);
+				var standardMaterial = $.sibling($.child(mesh));
+
+				$.set_attribute(standardMaterial, 'color', [0.17, 0.2, 0.23]);
+				$.reset(mesh);
+
+				var node = $.sibling(mesh, 2);
+
+				$.each(node, 19, () => objects, (object) => object.name, ($$anchor, object, index) => {
+					var mesh_1 = root();
+					var standardMaterial_1 = $.sibling($.child(mesh_1));
+
+					$.reset(mesh_1);
+
+					$.template_effect(() => {
+						$.set_attribute(mesh_1, 'position', [$.get(object).x, $.get(object).size * 0.75 - 0.15, 0]);
+						$.set_attribute(mesh_1, 'rotation', [0, $.get(object).angle * Math.PI / 180, 0]);
+
+						$.set_attribute(mesh_1, 'scale', [
+							$.get(object).size * 1.5,
+							$.get(object).size * 1.5,
+							$.get(object).size * 1.5
+						]);
+
+						$.set_attribute(standardMaterial_1, 'color', $.get(hovered) === $.get(index) ? [1, 0.85, 0.4] : $.get(object).color);
+					});
+
+					$.event('pointerenter', mesh_1, () => $.set(hovered, $.get(index), true));
+					$.event('pointerleave', mesh_1, () => $.set(hovered, null));
+
+					$.event('click', mesh_1, () => {
+						$.set(selected, $.get(index), true);
+						($.get(object).angle = ($.get(object).angle + 15) % 360);
+					});
+
+					$.event('dblclick', mesh_1, () => reset($.get(object)));
+
+					$.event('contextmenu', mesh_1, (event) => {
+						event.preventDefault();
+						reset($.get(object));
+					});
+
+					$.event('wheel', mesh_1, (event) => {
+						event.preventDefault();
+
+						const wheel = event.originalEvent;
+						const pixels = wheel.deltaY * (wheel.deltaMode === 1 ? 16 : wheel.deltaMode === 2 ? 400 : 1);
+
+						(
+							$.get(object).size = Math.max(0.6, Math.min(1.6, $.get(object).size - pixels * 0.002))
+						);
+					});
+
+					$.append($$anchor, mesh_1);
+				});
+
+				var mesh_2 = $.sibling(node, 2);
+
+				$.set_attribute(mesh_2, 'scale', [1.9, 0.12, 1.9]);
+
+				var basicMaterial = $.sibling($.child(mesh_2));
+
+				$.reset(mesh_2);
+				$.reset(scene);
 
 				$.template_effect(() => {
-					$.set_attribute(mesh_1, 'position', [$.get(object).x, $.get(object).size * 0.75 - 0.15, 0]);
-					$.set_attribute(mesh_1, 'rotation', [0, $.get(object).angle * Math.PI / 180, 0]);
-
-					$.set_attribute(mesh_1, 'scale', [
-						$.get(object).size * 1.5,
-						$.get(object).size * 1.5,
-						$.get(object).size * 1.5
-					]);
-
-					$.set_attribute(standardMaterial_1, 'color', $.get(hovered) === $.get(index) ? [1, 0.85, 0.4] : $.get(object).color);
+					$.set_attribute(perspectiveCamera, 'fov', $.get(compact) ? 50 : 42);
+					$.set_attribute(mesh_2, 'position', [objects[$.get(selected)].x, -0.12, 0]);
+					$.set_attribute(basicMaterial, 'color', objects[$.get(selected)].color);
 				});
 
-				$.event('pointerenter', mesh_1, () => $.set(hovered, $.get(index), true));
-				$.event('pointerleave', mesh_1, () => $.set(hovered, null));
+				$.append($$anchor, scene);
+			}),
+			$$slots: { default: true }
+		});
+	}
 
-				$.event('click', mesh_1, () => {
-					$.set(selected, $.get(index), true);
-					($.get(object).angle = ($.get(object).angle + 15) % 360);
-				});
-
-				$.event('dblclick', mesh_1, () => reset($.get(object)));
-
-				$.event('contextmenu', mesh_1, (event) => {
-					event.preventDefault();
-					reset($.get(object));
-				});
-
-				$.event('wheel', mesh_1, (event) => {
-					event.preventDefault();
-
-					const wheel = event.originalEvent;
-					const pixels = wheel.deltaY * (wheel.deltaMode === 1 ? 16 : wheel.deltaMode === 2 ? 400 : 1);
-
-					(
-						$.get(object).size = Math.max(0.6, Math.min(1.6, $.get(object).size - pixels * 0.002))
-					);
-				});
-
-				$.append($$anchor, mesh_1);
-			});
-
-			var mesh_2 = $.sibling(node, 2);
-
-			$.set_attribute(mesh_2, 'scale', [1.9, 0.12, 1.9]);
-
-			var basicMaterial = $.sibling($.child(mesh_2));
-
-			$.reset(mesh_2);
-			$.reset(scene);
-
-			$.template_effect(() => {
-				$.set_attribute(mesh_2, 'position', [objects[$.get(selected)].x, -0.12, 0]);
-				$.set_attribute(basicMaterial, 'color', objects[$.get(selected)].color);
-			});
-
-			$.append($$anchor, scene);
-		}),
-		$$slots: { default: true }
-	});
-
+	$.pop();
 	$$pop_renderer();
 }

@@ -10,6 +10,9 @@
   ]);
   let selected = $state(0);
   let hovered = $state<number | null>(null);
+  let width = $state(0);
+  let height = $state(0);
+  const compact = $derived(width > 0 && width < 600);
 
   function reset(object: { angle: number; size: number }) {
     object.angle = 0;
@@ -22,6 +25,9 @@
   {onready}
   {onfps}
   {onrenderererror}
+  bind:clientWidth={width}
+  bind:clientHeight={height}
+  data-size={`${width}x${height}`}
   aria-label="Native Events 3D scene"
   aria-keyshortcuts="Escape"
   tabindex={0}
@@ -29,7 +35,7 @@
   onkeydown={(event) => { if (event.key === 'Escape') objects.forEach(reset); }}
 >
   <scene clearColor={[0.035, 0.045, 0.05, 1]}>
-    <perspectiveCamera active position={[7, 6, 12]} target={[0, 0.5, 0]} fov={42}>
+    <perspectiveCamera active position={[7, 6, 12]} target={[0, 0.5, 0]} fov={compact ? 50 : 42}>
       <controls mode="orbit" minDistance={9} maxDistance={24}>
         <pointerControls dragButton="primary" wheel="zoom" />
       </controls>
