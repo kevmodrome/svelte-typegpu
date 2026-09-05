@@ -7,6 +7,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | --- | --- |
 | Reactive state, component props, `{#if}`, keyed `{#each}` | Supported and tested |
 | DOM `Canvas` host | Reactive scene props, inherited context, SSR shell, and async startup/unmount cleanup tested |
+| Consumer component types | Canvas props/callbacks/bindings checked; scene-element declarations deferred due to language-tools casing and action-target gaps |
 | `{#snippet}` and `{@render}` | Supported, including attachment forwarding |
 | Component `$bindable` props and component `bind:this` | Supported and tested |
 | `Tween` / `Spring` bound to transforms and material values | Supported; frame delivery tested at 60/120/144 Hz in both RAF callback orders |
@@ -25,6 +26,9 @@ HTMLElements and do not implement layout, CSS, Web Animations, or DOM event APIs
 Keep DOM controls in an ordinary Svelte component outside the scene.
 Use [Canvas hosting](canvas-guide.md) to cross that boundary without manually
 mounting, remounting, or disposing the scene.
+See the [element typing investigation](scene-element-types-design.md) for the
+reproducer and current editor limitations. These are separate from the tested
+runtime attachment/action behavior below.
 
 ## Async scenes
 

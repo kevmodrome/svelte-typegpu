@@ -29,7 +29,7 @@ new errors in supported usage. Keep fixtures outside the published `src` tree.
 ```text
 ~ package.json / pnpm-lock.yaml (svelte-check dev dependency)
 + type-tests/ (consumer components and scoped tsconfigs)
-+ src/canvas-types.test.ts (CLI diagnostics assertions)
++ src/svelte-types.test.ts (CLI diagnostics assertions)
 ~ src/Canvas.svelte / SceneHost.svelte (only corrections proved necessary)
 CI -> pnpm test -> svelte-check -> JSON diagnostics -> assertions
 ```

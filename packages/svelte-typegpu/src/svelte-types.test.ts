@@ -1,6 +1,8 @@
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
+import { compile } from 'svelte/compiler';
 import { describe, expect, it } from 'vitest';
 import { typeGpuRendererPath } from './test-paths';
 
@@ -75,5 +77,40 @@ describe('Canvas public Svelte types', () => {
         code
       }))
     );
+  });
+});
+
+describe('released language-tools custom renderer compatibility', () => {
+  it('tracks case rewriting and the unsafe generic action target fallback', () => {
+    const result = check('renderer-compat/tsconfig.json');
+    expect(result.status, result.output).toBe(1);
+    expect(
+      result.diagnostics.map(({ type, filename, start, code }) => ({
+        type,
+        filename: filename.replaceAll('\\', '/'),
+        line: start.line + 1,
+        code
+      })),
+      result.output
+    ).toEqual([
+      { type: 'ERROR', filename: 'type-tests/renderer-compat/Probe.svelte', line: 5, code: 2353 },
+      { type: 'ERROR', filename: 'type-tests/renderer-compat/Probe.svelte', line: 8, code: 2339 }
+    ]);
+    expect(result.diagnostics[0].message).toContain('clearcolor');
+    expect(result.diagnostics[1].message).toContain('TypeGpuNode');
+
+    // This is a compatibility canary, not a support claim. When language-tools
+    // fixes the casing/action gaps, revisit the deferred element declarations.
+    // The actual preview compiler already preserves the attribute's casing.
+    const source = readFileSync(join(workspace, 'type-tests/renderer-compat/Probe.svelte'), 'utf8');
+    const compiled = compile(source, {
+      filename: 'Probe.typegpu.svelte',
+      generate: 'client',
+      runes: true,
+      experimental: { customRenderer: typeGpuRendererPath }
+    });
+    expect(compiled.warnings).toEqual([]);
+    expect(compiled.js.code).toContain('clearColor');
+    expect(compiled.js.code).not.toContain('clearcolor');
   });
 });
