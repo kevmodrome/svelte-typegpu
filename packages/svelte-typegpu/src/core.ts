@@ -235,28 +235,36 @@ export function setText(node: TypeGpuNode, value: string): void {
 }
 
 function createStub(kind: TypeGpuNodeKind): TypeGpuNode {
-  const node = {
-    kind,
-    uid: nextNodeUid++,
-    revision: 0,
-    treeRevision: 0,
-    parent: null,
-    firstChild: null,
-    lastChild: null,
-    previousSibling: null,
-    nextSibling: null,
-    attributes: {},
-    listeners: new Map()
-  } as TypeGpuNode;
+  return new HostNode(kind);
+}
 
-  Object.defineProperty(node, 'children', {
-    enumerable: true,
-    get() {
-      return childSnapshot(node);
-    }
-  });
+// Host objects must stay opaque to Svelte's deep $state proxying. References
+// retained by consumers must be identical to event targets and weak-cache keys.
+class HostNode implements TypeGpuNode {
+  kind: TypeGpuNodeKind;
+  uid = nextNodeUid++;
+  revision = 0;
+  treeRevision = 0;
+  parent: TypeGpuNode | null = null;
+  firstChild: TypeGpuNode | null = null;
+  lastChild: TypeGpuNode | null = null;
+  previousSibling: TypeGpuNode | null = null;
+  nextSibling: TypeGpuNode | null = null;
+  attributes: Record<string, unknown> = {};
+  listeners = new Map<string, Set<TypeGpuNodeEventHandler>>();
+  declare name?: string;
+  declare originalName?: string;
+  declare captureListeners?: Map<string, Set<TypeGpuNodeEventHandler>>;
+  declare runtime?: TypeGpuRuntime;
+  declare value?: string;
 
-  return node;
+  constructor(kind: TypeGpuNodeKind) {
+    this.kind = kind;
+  }
+
+  get children(): TypeGpuNode[] {
+    return childSnapshot(this);
+  }
 }
 
 export function findFirst(

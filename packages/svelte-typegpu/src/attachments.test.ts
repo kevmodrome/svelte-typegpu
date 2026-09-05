@@ -7,6 +7,88 @@ import type { TypeGpuRenderer } from './gpu-renderer';
 import { compileTypeGpuSource } from './component-test-utils';
 
 describe('scene attachments', () => {
+  it('retains actual node identity in state, event selection and attachment cleanup', async () => {
+    const Scene = compileTypeGpuSource<{ read(): any; show(value: boolean): void }>(`
+      <script>
+        let ref = $state(null), selected = $state(null), visible = $state(true);
+        let record = $state({ node: null }), list = $state([]);
+        function capture(node) {
+          ref = node; record.node = node; list = [node];
+          return () => {
+            if (ref === node) ref = null;
+            if (record.node === node) record.node = null;
+            if (list[0] === node) list = [];
+          };
+        }
+        export function read() { return { ref, selected, nested: record.node, item: list[0] }; }
+        export function show(value) { visible = value; }
+      </script>
+      <scene>{#if visible}
+        <mesh {@attach capture} onclick={event => selected = event.currentTarget}>
+          <boxGeometry /><standardMaterial color={selected && selected === ref ? [1, 0, 0, 1] : [0, 0, 1, 1]} />
+        </mesh>
+      {/if}</scene>
+    `);
+    const root = createFragment();
+    const instance = mount(Scene, { renderer, target: root });
+    let node: TypeGpuNode;
+    try {
+      flushSync();
+      const scene = root.children.find((node) => node.name === 'scene')!;
+      node = scene.children.find((node) => node.name === 'mesh')!;
+      for (const key of ['ref', 'nested', 'item']) expect(instance.read()[key] === node, key).toBe(true);
+      expect(instance.read().ref.parent).toBe(scene);
+      flushSync(() => dispatchNodeEvent(node, 'click'));
+      expect(instance.read().selected).toBe(node);
+      const material = node.children.find((node) => node.name === 'standardMaterial')!;
+      expect(material.attributes.color).toEqual([1, 0, 0, 1]);
+      flushSync(() => instance.show(false));
+      expect(instance.read()).toMatchObject({ ref: null, nested: null, item: undefined, selected: node });
+      expect(instance.read().selected.parent).toBeNull();
+    } finally {
+      await unmount(instance);
+    }
+    expect(instance.read().ref).toBeNull();
+  });
+
+  it('keeps keyed references inside reactive records identical across moves and removals', async () => {
+    const Scene = compileTypeGpuSource<{ read(): Record<number, TypeGpuNode>; reverse(): void; remove(): void }>(`
+      <script>
+        let { setup, cleanup } = $props();
+        let items = $state([1, 2, 3]), refs = $state({});
+        function capture(id) {
+          return node => {
+            setup(node); refs[id] = node;
+            return () => { cleanup(node); if (refs[id] === node) delete refs[id]; };
+          };
+        }
+        export function read() { return refs; }
+        export function reverse() { items.reverse(); }
+        export function remove() { items = items.slice(1); }
+      </script>
+      <scene>{#each items as id (id)}<mesh {@attach capture(id)} />{/each}</scene>
+    `);
+    const setup = vi.fn(), cleanup = vi.fn();
+    const root = createFragment();
+    const instance = mount(Scene, { renderer, target: root, props: { setup, cleanup } });
+    try {
+      flushSync();
+      const nodes = setup.mock.calls.map(([node]) => node);
+      nodes.forEach((node, i) => expect(instance.read()[i + 1] === node).toBe(true));
+      flushSync(() => instance.reverse());
+      nodes.forEach((node, i) => expect(instance.read()[i + 1]).toBe(node));
+      expect(setup).toHaveBeenCalledTimes(3);
+      expect(cleanup).not.toHaveBeenCalled();
+      flushSync(() => instance.remove());
+      expect(Object.keys(instance.read())).toEqual(['1', '2']);
+      expect(cleanup).toHaveBeenCalledExactlyOnceWith(nodes[2]);
+    } finally {
+      await unmount(instance);
+    }
+    expect(Object.keys(instance.read())).toEqual([]);
+    expect(cleanup).toHaveBeenCalledTimes(3);
+  });
+
   it('routes attachment events through Svelte state into targeted material updates', async () => {
     const Scene = compileTypeGpuSource(`
       <script>

@@ -493,20 +493,32 @@ describe('GPU resource and frame lifecycle', () => {
         .mockResolvedValue(gpu as never);
       vi.stubGlobal('navigator', { gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
       const Scene = compileTypeGpuSource(`
-        <script>let { motion, setup, children } = $props();</script>
+        <script>
+          let { motion, setup, children } = $props();
+          let retained = $state(null);
+          function retain(node) {
+            retained = node;
+            const cleanup = setup(node, () => retained);
+            return () => { if (retained === node) retained = null; cleanup(); };
+          }
+        </script>
         <scene>
           {#each Array.from({ length: 300 }, (_, i) => i) as i (i)}
             <mesh position={[i + 10, 0, 0]}><boxGeometry /><standardMaterial /></mesh>
           {/each}
           {#if children}{@render children()}{:else}
-          <mesh position={[motion.current, 0, 0]} {@attach setup}>
+          <mesh position={[motion.current, 0, 0]} {@attach retain}>
             <boxGeometry /><standardMaterial />
           </mesh>
           {/if}
         </scene>
       `);
       const cleanup = vi.fn();
-      const setup = vi.fn(() => cleanup);
+      let readReference!: () => TypeGpuNode | null;
+      const setup = vi.fn((_node: TypeGpuNode, read: () => TypeGpuNode | null) => {
+        readReference = read;
+        return cleanup;
+      });
       const domCleanup = vi.fn();
       const domSetup = vi.fn((canvas: HTMLCanvasElement) => {
         Object.defineProperties(canvas, {
@@ -527,10 +539,16 @@ describe('GPU resource and frame lifecycle', () => {
           let { Scene, motion, setup, domSetup, onready, onerror, frameloop } = $props();
           let label = $state('Moving scene');
           let width = $state(0), height = $state(0);
+          let retained = $state(null);
+          function retain(node) {
+            retained = node;
+            const cleanup = setup(node, () => retained);
+            return () => { if (retained === node) retained = null; cleanup(); };
+          }
           export function rename(value) { label = value; }
         </script>
         {#snippet marker(x, height)}
-          <mesh position={[x, height / 180 - 1, 0]} {@attach setup}><boxGeometry /><standardMaterial /></mesh>
+          <mesh position={[x, height / 180 - 1, 0]} {@attach retain}><boxGeometry /><standardMaterial /></mesh>
         {/snippet}
         <canvas {frameloop} maxDevicePixelRatio={1} {onready} onrenderererror={onerror}
           data-motion={motion.current} aria-label={label} class={{ moving: motion.current > 0 }}
@@ -572,6 +590,8 @@ describe('GPU resource and frame lifecycle', () => {
         const canvas = document.querySelector('canvas')!;
         expect(root.canvas).toBe(canvas);
         expect(domSetup).toHaveBeenCalledExactlyOnceWith(canvas);
+        const marker = setup.mock.calls[0][0];
+        expect(readReference() === marker).toBe(true);
         const dimensions = [canvas.width, canvas.height];
         const observations = CanvasSizeObserver.instances.reduce((sum, observer) => sum + observer.observe.mock.calls.length, 0);
         const buffer = buffers.find((buffer) => buffer.label.endsWith('instances'))!;
@@ -599,6 +619,9 @@ describe('GPU resource and frame lifecycle', () => {
           }
           expect(submissions.length - before).toBe(1);
           expect(Number(canvas.dataset.motion)).toBe(motion.current);
+          expect(readReference() === marker).toBe(true);
+          expect(readReference()!.attributes).toBe(marker.attributes);
+          expect((readReference()!.attributes.position as number[])[0]).toBe(motion.current);
           expect(document.querySelector('canvas')).toBe(canvas);
           expect([canvas.width, canvas.height]).toEqual(dimensions);
           expect(canvas.classList.contains('renderer-root-canvas')).toBe(true);
@@ -658,6 +681,7 @@ describe('GPU resource and frame lifecycle', () => {
       }
       expect(pending.size).toBe(0);
       expect(cleanup).toHaveBeenCalledOnce();
+      expect(readReference()).toBeNull();
       expect(domCleanup).toHaveBeenCalledOnce();
       expect(gpu.destroy).toHaveBeenCalledOnce();
       expect(CanvasSizeObserver.instances.every((observer) => observer.targets.size === 0)).toBe(true);

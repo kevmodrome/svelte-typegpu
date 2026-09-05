@@ -3,7 +3,9 @@ import { MESH_INSTANCE_FLOATS, MESH_VERTEX_FLOATS } from './instance-data';
 import {
   addEventListener,
   createElement,
+  createComment,
   createFragment,
+  createTextNode,
   dispatchNodeEvent,
   getNextSibling,
   insert,
@@ -29,6 +31,43 @@ function readyModelCache(model: TypeGpuLoadedModel) {
 }
 
 describe('TypeGPU renderer core', () => {
+  it('shares a children getter without allocating child snapshots during node creation', () => {
+    const root = createFragment();
+    const nodes = Array.from({ length: 1000 }, () => createElement('mesh'));
+    const prototype = Object.getPrototypeOf(root);
+    const getter = Object.getOwnPropertyDescriptor(prototype, 'children')!.get;
+    expect(getter).toBeTypeOf('function');
+    for (const node of nodes) {
+      expect(Object.hasOwn(node, 'children')).toBe(false);
+      expect(Object.getPrototypeOf(node)).toBe(prototype);
+      insert(root, node, null);
+    }
+    const snapshot = root.children;
+    expect(snapshot).toEqual(nodes);
+    snapshot.pop();
+    expect(root.children).toEqual(nodes);
+    expect(root.children).not.toBe(snapshot);
+    remove(nodes[0]);
+    expect(root.children).toEqual(nodes.slice(1));
+  });
+
+  it('preserves factory fields while leaving optional host state unallocated', () => {
+    const nodes = [createFragment(), createElement('box-geometry'), createTextNode('text'), createComment('anchor')];
+    expect(nodes.map((node) => node.kind)).toEqual(['fragment', 'element', 'text', 'comment']);
+    expect(new Set(nodes.map((node) => node.uid)).size).toBe(4);
+    expect(nodes[1]).toMatchObject({ name: 'boxGeometry', originalName: 'box-geometry' });
+    expect(nodes[2].value).toBe('text');
+    expect(nodes[3].value).toBe('anchor');
+    for (const node of nodes) {
+      expect(node).toMatchObject({ revision: 0, treeRevision: 0, parent: null, firstChild: null,
+        lastChild: null, previousSibling: null, nextSibling: null, attributes: {} });
+      expect(node.listeners.size).toBe(0);
+      expect(Object.hasOwn(node, 'captureListeners')).toBe(false);
+      expect(Object.hasOwn(node, 'runtime')).toBe(false);
+      expect(node.children).toEqual([]);
+    }
+  });
+
   it('turns authored mesh nodes into geometry/material draw batches', () => {
     const root = createFragment();
     const scene = createElement('scene');
