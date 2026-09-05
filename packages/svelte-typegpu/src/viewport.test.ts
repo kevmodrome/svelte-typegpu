@@ -10,6 +10,7 @@ import { createTypeGpuRoot, type TypeGpuRoot } from './svelte-renderer';
 import { createFragment, walk, type TypeGpuNode } from './core';
 import { compileViewportSource } from './viewport-test-utils';
 import { compileTypeGpu } from '../compiler/index';
+import * as canvasBindings from './canvas-bindings';
 
 vi.mock('./svelte-renderer', async (original) => ({
   ...await original<typeof import('./svelte-renderer')>(), createTypeGpuRoot: vi.fn()
@@ -30,7 +31,7 @@ function nodes(root: TypeGpuNode, name: string) {
   return found;
 }
 const source = `<script>
-  let { setup, nativeSetup, onready, onrenderererror, keydown, get } = $props();
+  let { setup, nativeSetup, measure, onready, onrenderererror, keydown, get } = $props();
   let canvas = $state();
   let editing = $state(true);
   let items = $state([1, 2]);
@@ -43,6 +44,7 @@ const source = `<script>
 </script>
 {#snippet itemMesh(item)}<mesh name={item} color={theme?.color} {@attach setup} />{/snippet}
 <canvas frameloop="demand" bind:this={canvas} aria-label={label} tabindex={0}
+  bind:clientWidth={null, value => measure?.(value)}
   onkeydown={keydown} {@attach nativeSetup} {onready} {onrenderererror}>
   {#if editing}
     <scene>{#each items as item (item)}{@render itemMesh(item)}{/each}</scene>
@@ -147,20 +149,24 @@ describe('declarative canvas', () => {
     const Host = evaluate(compile(hostSource, { filename: 'ViewportCanvas.svelte', generate: 'server', runes: true }).js.code,
       { getAllContexts: svelte.getAllContexts, onMount: svelte.onMount, startCanvasScene: initialize });
     const ServerViewport = evaluate(compileTypeGpu(source, { filename: 'Viewport.typegpu.svelte', generate: 'server', runes: true }).js.code,
-      { TypeGpuViewportCanvas: Host });
-    const html = render(ServerViewport, { props: {} }).body;
+      { TypeGpuViewportCanvas: Host, TypeGpuCanvasBindings: canvasBindings });
+    const measure = vi.fn();
+    const html = render(ServerViewport, { props: { measure } }).body;
     expect(html).not.toContain('<scene');
     expect(html).not.toContain('<mesh');
     expect(initialize).not.toHaveBeenCalled();
+    expect(measure).not.toHaveBeenCalled();
     document.body.innerHTML = html;
     const canvas = document.querySelector('canvas');
     const gpu = root();
     vi.mocked(createTypeGpuRoot).mockResolvedValue(gpu);
-    const instance = hydrate(compileViewportSource<Exports>(source), { target: document.body, props: {}, recover: false });
+    Object.defineProperty(canvas, 'clientWidth', { value: 640 });
+    const instance = hydrate(compileViewportSource<Exports>(source), { target: document.body, props: { measure }, recover: false });
     mounted.push(instance);
     await tick(); await tick();
     expect(document.querySelectorAll('canvas')).toHaveLength(1);
     expect(instance.reference()).toBe(canvas);
+    expect(measure).toHaveBeenCalledExactlyOnceWith(640);
     expect(nodes(gpu, 'mesh')).toHaveLength(2);
     flushSync(() => instance.toggle());
     expect(document.querySelector('canvas')).toBe(canvas);

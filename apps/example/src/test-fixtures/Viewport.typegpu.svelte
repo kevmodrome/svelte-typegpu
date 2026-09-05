@@ -7,12 +7,15 @@
   let { editing = true } = $props();
   let canvas = $state<HTMLCanvasElement>();
   let angle = $state(0);
+  let width = $state(0);
+  let height = $state(0);
 </script>
 
 {#snippet clickableMesh(value)}<Mesh angle={value} onclick={() => angle += 1} />{/snippet}
 {#snippet orb()}<mesh><sphereGeometry /></mesh>{/snippet}
 
-<canvas bind:this={canvas} frameloop="demand" aria-label="Build test">
+<canvas bind:this={canvas} bind:clientWidth={width} bind:clientHeight={null, value => height = value}
+  frameloop="demand" aria-label="Build test" data-size={`${width}x${height}`}>
   {#if editing}
     <scene>{@render clickableMesh(angle)}</scene>
   {:else}

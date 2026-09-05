@@ -30,6 +30,7 @@
     "./compiler": "./compiler/index.ts",
     "./vite": "./compiler/vite.ts",
     "./internal/viewport-canvas": "./src/ViewportCanvas.svelte",
+    "./internal/canvas-bindings": "./src/canvas-bindings.ts",
     "./canvas": {
       "types": "./src/Canvas.svelte",
       "svelte": "./src/Canvas.svelte",

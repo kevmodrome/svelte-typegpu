@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { compile } from 'svelte/compiler';
 import { adaptViewportClient, compileTypeGpu, prepareTypeGpuSource } from '../compiler/index';
 
 const filename = 'Viewport.typegpu.svelte';
@@ -31,6 +32,32 @@ describe('viewport compiler boundary', () => {
     expect(compiled.js.code).toContain('TypeGpuViewportCanvas');
     expect(compiled.js.code).not.toContain('svelte-typegpu/svelte-renderer');
   });
+  it.each([false, true])('lowers size bindings with hygienic names and native CSS (dev %s)', (dev) => {
+    const source = `<script>
+      let TypeGpuViewportCanvas = $state(0), TypeGpuCanvasBindings = $state(0);
+      let TypeGpuCanvasNode = $state(0), TypeGpuCanvasValue = $state(0);
+    </script><canvas bind:clientWidth={TypeGpuCanvasBindings} bind:clientHeight={TypeGpuCanvasNode}
+      bind:offsetWidth={TypeGpuCanvasValue} bind:offsetHeight={TypeGpuViewportCanvas} />
+    <style>canvas { height: 420px; }</style>`;
+    const result = compileTypeGpu(source, { filename, dev });
+    expect(result.js.code).toContain('TypeGpuCanvasBindings_');
+    expect(result.js.code).toContain('$.push_renderer(null)');
+    expect(result.css?.code).toContain('canvas.typegpu-');
+    expect(compileTypeGpu(source, { filename, generate: 'server', dev }).js.code).not.toContain('bind_element_size(');
+    expect(prepareTypeGpuSource('<canvas />', filename).code).not.toContain('canvas-bindings');
+  });
+  it.each([
+    '<canvas bind:clientWidth={123} />',
+    '<canvas bind:clientWidth={missing} />',
+    '<script>const width = 1;</script><canvas bind:clientWidth={width} />',
+    '<script>let width = $state(0);</script><canvas bind:clientWidth={(null, value => width = value)} />',
+    '<canvas bind:clientWidth={null, () => {}, () => {}} />'
+  ])('preserves native binding errors: %s', (source) => {
+    function error(run: () => unknown) { try { run(); } catch (error) { return (error as { code: string }).code; } }
+    const expected = error(() => compile(source, { filename, runes: true }));
+    expect(expected).toBeDefined();
+    expect(error(() => compileTypeGpu(source, { filename, runes: true }))).toBe(expected);
+  });
   it.each([false, true])('keeps top-level and exported snippets renderer-owned (dev %s)', (dev) => {
     const source = `<script module>export { cube };</script>
       {#snippet cube(x)}<mesh position={[x, 0, 0]}><boxGeometry /></mesh>{/snippet}
@@ -49,8 +76,8 @@ describe('viewport compiler boundary', () => {
   });
   it.each([
     '{#if true}<canvas />{/if}', '<canvas /><canvas />', '<canvas><canvas /></canvas>',
-    '<div /><canvas />', '<canvas bind:clientWidth={width} />', '<canvas width={300} />',
-    '<canvas transition:fade />', '<canvas class:active={true} />'
+    '<div /><canvas />', '<canvas bind:width={width} />', '<canvas width={300} />',
+    '<canvas transition:fade />', '<canvas class:active={true} />', '<canvas use:setup />'
   ])('rejects unsupported canvas contracts: %s', (source) => {
     expect(() => prepareTypeGpuSource(source, filename)).toThrow(/viewport|<canvas/);
   });

@@ -5,6 +5,8 @@ import remapping from '@jridgewell/remapping';
 import { compile, parse, type CompileOptions } from 'svelte/compiler';
 
 const hostModule = 'svelte-typegpu/internal/viewport-canvas';
+const elementSizes = new Set(['clientWidth', 'clientHeight', 'offsetWidth', 'offsetHeight']);
+const observerSizes = new Set(['contentRect', 'contentBoxSize', 'borderBoxSize', 'devicePixelContentBoxSize']);
 
 export interface PreparedTypeGpuSource {
   code: string;
@@ -32,10 +34,18 @@ export function prepareTypeGpuSource(source: string, filename: string): Prepared
   }
   const identifiers = new Set<string>();
   visit(ast, (node) => { if (node.type === 'Identifier') identifiers.add(node.name); });
-  let host = 'TypeGpuViewportCanvas';
-  while (identifiers.has(host)) host += '_';
+  const fresh = (name: string) => {
+    while (identifiers.has(name)) name += '_';
+    identifiers.add(name);
+    return name;
+  };
+  const host = fresh('TypeGpuViewportCanvas');
+  const hasSizeBindings = canvas.attributes.some((attribute: any) => attribute.type === 'BindDirective' &&
+    (elementSizes.has(attribute.name) || observerSizes.has(attribute.name)));
+  const bindings = hasSizeBindings ? fresh('TypeGpuCanvasBindings') : null;
   const result = new MagicString(source);
-  const importCode = `import ${host} from ${JSON.stringify(hostModule)};`;
+  const importCode = `import ${host} from ${JSON.stringify(hostModule)};` +
+    (bindings ? `import * as ${bindings} from 'svelte-typegpu/internal/canvas-bindings';` : '');
   if (ast.instance) result.appendLeft((ast.instance.content as any).start, importCode);
   else result.prepend(`<script>${importCode}</script>\n`);
   result.overwrite(canvas.start + 1, canvas.start + 7, host);
@@ -44,18 +54,30 @@ export function prepareTypeGpuSource(source: string, filename: string): Prepared
   if (!selfClosing) result.overwrite(closeStart + 2, closeStart + 8, host);
 
   for (const attribute of canvas.attributes) {
-    if (attribute.type === 'BindDirective' && attribute.name === 'this') {
+    if (attribute.type === 'BindDirective' && (elementSizes.has(attribute.name) || observerSizes.has(attribute.name))) {
+      const node = fresh('TypeGpuCanvasNode');
+      const value = fresh('TypeGpuCanvasValue');
+      const expression = attribute.expression;
+      const setter = expression.type === 'SequenceExpression'
+        ? source.slice(expression.expressions[1].start, expression.expressions[1].end)
+        : `(${value}) => (${source.slice(expression.start, expression.end)} = ${value})`;
+      const helper = elementSizes.has(attribute.name) ? 'bind_element_size' : 'bind_resize_observer';
+      // Function setters are captured once, as with native bindings. Their reads
+      // must not turn the attachment into a reactive observer subscription.
+      result.overwrite(attribute.start, attribute.end,
+        `{@attach (${node}) => { ${bindings}.untrack(() => ${bindings}.${helper}(${node}, ${JSON.stringify(attribute.name)}, (${setter}))); }}`);
+    } else if (attribute.type === 'BindDirective' && attribute.name === 'this') {
       result.overwrite(attribute.start, attribute.end,
         `bind:canvas={${source.slice(attribute.expression.start, attribute.expression.end)}}`);
     } else if (!['Attribute', 'SpreadAttribute', 'AttachTag'].includes(attribute.type)) {
-      throw new Error(`${filename}: ${attribute.type} on <canvas> is not supported yet. Use native event attributes, class/style props, attachments, or bind:this.`);
+      throw new Error(`${filename}: ${attribute.type} on <canvas> is not supported. Use native event attributes, class/style props, attachments, bind:this, or size bindings.`);
     }
     if (attribute.type === 'Attribute' && ['width', 'height', 'children', 'canvas', 'scopeClass'].includes(attribute.name)) {
       throw new Error(`${filename}: <canvas ${attribute.name}> is renderer-owned. Use CSS for display size and bind:this for the native canvas.`);
     }
   }
 
-  if (ast.css) {
+  if (ast.css || hasSizeBindings) {
     // Let Svelte scope the original native canvas selectors, then forward its
     // scope class through the internal host. Scene primitives are never DOM CSS.
     const scopeClass = `typegpu-${createHash('sha256').update(filename + source).digest('hex').slice(0, 10)}`;
@@ -67,8 +89,10 @@ export function prepareTypeGpuSource(source: string, filename: string): Prepared
     const css = compile(shell.toString(), {
       filename, generate: 'client', runes: true, css: 'external', cssHash: () => scopeClass
     }).css?.code ?? '';
-    result.overwrite(ast.css.content.start, ast.css.content.end, `:global { ${css} }`);
-    result.appendLeft(canvas.start + 7, ` scopeClass=${JSON.stringify(scopeClass)}`);
+    if (ast.css) {
+      result.overwrite(ast.css.content.start, ast.css.content.end, `:global { ${css} }`);
+      result.appendLeft(canvas.start + 7, ` scopeClass=${JSON.stringify(scopeClass)}`);
+    }
   }
   return { code: result.toString(), map: result.generateMap({ source: filename, includeContent: true, hires: true }), viewport: true };
 }

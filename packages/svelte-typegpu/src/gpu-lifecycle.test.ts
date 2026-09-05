@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import tgpu, { d } from 'typegpu';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createElement,
   createFragment,
@@ -37,6 +37,27 @@ import { createViewProjectionMatrix, readCameraState } from './camera';
 import { rotateVectorXyz, transformPoint4 } from './math3d';
 
 const captured = vi.hoisted(() => ({ bindings: [] as unknown[][], counts: [] as number[] }));
+
+class CanvasSizeObserver {
+  static instances: CanvasSizeObserver[] = [];
+  targets = new Set<Element>();
+  observe = vi.fn((target: Element) => this.targets.add(target));
+  unobserve = vi.fn((target: Element) => this.targets.delete(target));
+  disconnect = vi.fn(() => this.targets.clear());
+  constructor(readonly callback: ResizeObserverCallback) { CanvasSizeObserver.instances.push(this); }
+  static resize(canvas: HTMLCanvasElement) {
+    for (const observer of this.instances) {
+      if (observer.targets.has(canvas)) observer.callback([{
+        target: canvas, contentRect: new DOMRectReadOnly(0, 0, canvas.clientWidth, canvas.clientHeight),
+        contentBoxSize: [], borderBoxSize: [], devicePixelContentBoxSize: []
+      }], observer as unknown as ResizeObserver);
+    }
+  }
+}
+
+// Native bindings share Svelte's observers across all components in this file,
+// including generated examples mounted before the controlled motion tests.
+beforeEach(() => vi.stubGlobal('ResizeObserver', CanvasSizeObserver));
 
 vi.mock('typegpu', async (importOriginal) => {
   const actual = await importOriginal<typeof import('typegpu')>();
@@ -487,7 +508,13 @@ describe('GPU resource and frame lifecycle', () => {
       const cleanup = vi.fn();
       const setup = vi.fn(() => cleanup);
       const domCleanup = vi.fn();
-      const domSetup = vi.fn(() => domCleanup);
+      const domSetup = vi.fn((canvas: HTMLCanvasElement) => {
+        Object.defineProperties(canvas, {
+          clientWidth: { configurable: true, value: 320 },
+          clientHeight: { configurable: true, value: 180 }
+        });
+        return domCleanup;
+      });
       let resolve!: (root: TypeGpuRoot) => void;
       let reject!: (error: unknown) => void;
       const ready = new Promise<TypeGpuRoot>((yes, no) => {
@@ -499,15 +526,16 @@ describe('GPU resource and frame lifecycle', () => {
         <script>
           let { Scene, motion, setup, domSetup, onready, onerror, frameloop } = $props();
           let label = $state('Moving scene');
+          let width = $state(0), height = $state(0);
           export function rename(value) { label = value; }
         </script>
-        {#snippet marker(x)}
-          <mesh position={[x, 0, 0]} {@attach setup}><boxGeometry /><standardMaterial /></mesh>
+        {#snippet marker(x, height)}
+          <mesh position={[x, height / 180 - 1, 0]} {@attach setup}><boxGeometry /><standardMaterial /></mesh>
         {/snippet}
         <canvas {frameloop} maxDevicePixelRatio={1} {onready} onrenderererror={onerror}
           data-motion={motion.current} aria-label={label} class={{ moving: motion.current > 0 }}
-          {@attach domSetup}>
-          <Scene {motion} {setup}>{@render marker(motion.current)}</Scene>
+          {@attach domSetup} bind:clientWidth={width} bind:clientHeight={height} data-size={width + 'x' + height}>
+          <Scene {motion} {setup}>{@render marker(motion.current, height)}</Scene>
         </canvas>
       `);
       const instance = mount(viewport ? Viewport : CanvasMotionHost, {
@@ -539,11 +567,13 @@ describe('GPU resource and frame lifecycle', () => {
         const root = await ready;
         await tick();
         for (let i = 0; i < 3; i++) await step();
+        if (frameloop === 'manual') root.gpu.renderFrame(now);
         expect(pending.size).toBe(0);
         const canvas = document.querySelector('canvas')!;
         expect(root.canvas).toBe(canvas);
         expect(domSetup).toHaveBeenCalledExactlyOnceWith(canvas);
         const dimensions = [canvas.width, canvas.height];
+        const observations = CanvasSizeObserver.instances.reduce((sum, observer) => sum + observer.observe.mock.calls.length, 0);
         const buffer = buffers.find((buffer) => buffer.label.endsWith('instances'))!;
         buffer.write.mockClear();
         gpu.createBuffer.mockClear();
@@ -572,6 +602,7 @@ describe('GPU resource and frame lifecycle', () => {
           expect(document.querySelector('canvas')).toBe(canvas);
           expect([canvas.width, canvas.height]).toEqual(dimensions);
           expect(canvas.classList.contains('renderer-root-canvas')).toBe(true);
+          if (viewport) expect(canvas.dataset.size).toBe('320x180');
         }
         expect(buffer.write.mock.calls.length).toBeGreaterThan(hz - 4);
         for (const [, range] of buffer.write.mock.calls) {
@@ -587,9 +618,30 @@ describe('GPU resource and frame lifecycle', () => {
         expect(domSetup).toHaveBeenCalledOnce();
         expect(cleanup).not.toHaveBeenCalled();
         expect(domCleanup).not.toHaveBeenCalled();
+        expect(CanvasSizeObserver.instances.reduce((sum, observer) => sum + observer.observe.mock.calls.length, 0)).toBe(observations);
         await stop();
         for (let i = 0; i < 4; i++) await step();
         expect(pending.size).toBe(0);
+        if (viewport) {
+          const beforeResize = submissions.length;
+          buffer.write.mockClear();
+          Object.defineProperty(canvas, 'clientHeight', { configurable: true, value: 360 });
+          CanvasSizeObserver.resize(canvas);
+          await tick();
+          if (frameloop === 'manual') root.gpu.renderFrame(now);
+          for (let i = 0; i < 4; i++) await step();
+          expect(canvas.dataset.size).toBe('320x360');
+          // The scene assignment and native resize invalidate together. Demand
+          // retains its existing one-frame follow-up for external RAF producers.
+          expect(submissions.length - beforeResize).toBe(frameloop === 'manual' ? 1 : 2);
+          expect(buffer.write).toHaveBeenCalledOnce();
+          expect(buffer.write.mock.calls[0][1]).toEqual({ startOffset: 300 * 96, endOffset: 301 * 96 });
+          expect(buffer.data[300 * 24 + 1]).toBe(1);
+          expect(gpu.createBuffer).not.toHaveBeenCalled();
+          expect(gpu.createBindGroup).not.toHaveBeenCalled();
+          expect(createMeshPipeline).not.toHaveBeenCalled();
+          expect(pending.size).toBe(0);
+        }
         const count = submissions.length;
         const frames = vi.mocked(requestAnimationFrame).mock.calls.length;
         flushSync(() => instance.rename('Idle scene'));
@@ -608,6 +660,7 @@ describe('GPU resource and frame lifecycle', () => {
       expect(cleanup).toHaveBeenCalledOnce();
       expect(domCleanup).toHaveBeenCalledOnce();
       expect(gpu.destroy).toHaveBeenCalledOnce();
+      expect(CanvasSizeObserver.instances.every((observer) => observer.targets.size === 0)).toBe(true);
     }
   );
 
