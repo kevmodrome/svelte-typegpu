@@ -799,6 +799,40 @@ describe('TypeGPU scene compiler', () => {
     expect(Array.from(state.drawBatches[0].instances.slice(0, 3))).toEqual([3, 4, 5]);
   });
 
+  it('shares resolved model geometry and replaces assets without an asynchronous cache round trip', () => {
+    const root = createFragment();
+    const first = createElement('model');
+    const second = createElement('model');
+    const asset = loadedModelFixture('asset:shared');
+    const cache = createTypeGpuSceneCache();
+    setAttribute(first, 'asset', asset);
+    setAttribute(second, 'asset', asset);
+    setAttribute(second, 'position', [3, 0, 0]);
+    insert(root, first, null);
+    insert(root, second, null);
+
+    const initial = createSceneState(root, cache);
+    expect(initial.drawBatches).toHaveLength(1);
+    expect(initial.drawBatches[0].instanceCount).toBe(2);
+    expect(initial.drawBatches[0].geometry).toBe(asset.meshes[0].geometry);
+
+    setAttribute(second, 'position', [4, 0, 0]);
+    const moved = createSceneState(root, cache, {
+      dirty: Dirty.Transform, dirtyNodes: new Map([[second, Dirty.Transform]])
+    });
+    expect(moved.drawBatches[0].instances).toBe(initial.drawBatches[0].instances);
+    expect(moved.instanceUpdates![0].dirtyRanges).toEqual([{ start: 1, count: 1 }]);
+
+    const replacement = loadedModelFixture('asset:replacement');
+    setAttribute(second, 'asset', replacement);
+    const replaced = createSceneState(root, cache, { dirty: Dirty.Geometry | Dirty.DrawBatches });
+    expect(replaced.drawBatches).toHaveLength(2);
+    expect(replaced.drawBatches.find(batch => batch.geometryKey === asset.meshes[0].geometry.key)?.geometry)
+      .toBe(asset.meshes[0].geometry);
+    expect(replaced.drawBatches.find(batch => batch.geometryKey === replacement.meshes[0].geometry.key)?.geometry)
+      .toBe(replacement.meshes[0].geometry);
+  });
+
   it('uses basic material kind when a basicMaterial child overrides a loaded model material', async () => {
     const { state } = await compileLoadedModelWithMaterialChild('basicMaterial');
 

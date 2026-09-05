@@ -122,7 +122,7 @@ const cameraBridgeAttributes = new Map<string, Set<string>>([
     ])
   ]
 ]);
-const modelGeometryAttributes = new Set(['src', 'data']);
+const modelGeometryAttributes = new Set(['src', 'data', 'asset']);
 const pointerEvents = new Set([
   'click',
   'pointermove',

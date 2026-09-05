@@ -1,5 +1,4 @@
-import { loadGlbModel } from './glb-loader';
-import { loadObjModel } from './obj-loader';
+import { loadDataModel, loadUrlModel } from './model-loader';
 import type { TypeGpuLoadedModel } from './types';
 
 export type TypeGpuModelCacheEntry =
@@ -9,6 +8,7 @@ export type TypeGpuModelCacheEntry =
   | { status: 'failed'; error: unknown; revision: number };
 
 export interface TypeGpuModelRequest {
+  asset?: unknown;
   src?: unknown;
   data?: unknown;
 }
@@ -30,6 +30,7 @@ export function createModelCache({
 }: TypeGpuModelCacheOptions = {}): TypeGpuModelCache {
   const urls = new Map<string, TypeGpuModelCacheEntry>();
   const data = new WeakMap<ArrayBuffer, TypeGpuModelCacheEntry>();
+  const assets = new WeakMap<TypeGpuLoadedModel, TypeGpuModelCacheEntry>();
   let nextDataKey = 1;
   let revision = 1;
 
@@ -45,6 +46,16 @@ export function createModelCache({
 
   return {
     read(request) {
+      if (isLoadedModel(request.asset)) {
+        const asset = request.asset;
+        let entry = assets.get(asset);
+        if (!entry) {
+          entry = { status: 'ready', model: asset, revision: revision++ };
+          assets.set(asset, entry);
+        }
+        return entry;
+      }
+
       if (request.data instanceof ArrayBuffer) {
         const buffer = request.data;
         const existing = data.get(buffer);
@@ -81,58 +92,8 @@ export function createModelCache({
   };
 }
 
-async function loadUrlModel(src: string): Promise<TypeGpuLoadedModel> {
-  const response = await fetch(src);
-
-  if (!response.ok) {
-    throw new Error(`Failed to load model ${src}: ${response.status}`);
-  }
-
-  const data = await response.arrayBuffer();
-  const key = `url:${src}`;
-  return isObjUrl(src)
-    ? loadObjModel(new TextDecoder().decode(data), key)
-    : loadGlbModel(data, key);
-}
-
-async function loadDataModel(data: ArrayBuffer, key: string): Promise<TypeGpuLoadedModel> {
-  if (isGlbBuffer(data)) return loadGlbModel(data, key);
-
-  const text = new TextDecoder().decode(data);
-  if (hasInvalidObjTextCharacters(text) || !looksLikeObjText(text)) {
-    throw new Error(`Unsupported model data format for ${key}. Expected GLB binary or OBJ text.`);
-  }
-
-  const model = loadObjModel(text, key);
-  if (model.meshes.length === 0) {
-    throw new Error(`OBJ model data for ${key} did not contain renderable geometry.`);
-  }
-
-  return model;
-}
-
-function isObjUrl(src: string): boolean {
-  const [withoutHash] = src.split('#', 1);
-  const [path] = (withoutHash ?? src).split('?', 1);
-  return (path ?? src).toLowerCase().endsWith('.obj');
-}
-
-function isGlbBuffer(data: ArrayBuffer): boolean {
-  if (data.byteLength < 4) return false;
-  return new DataView(data).getUint32(0, true) === 0x46546c67;
-}
-
-function looksLikeObjText(text: string): boolean {
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.split('#', 1)[0]?.trim() ?? '';
-    if (line.length === 0) continue;
-
-    if (/^(?:v|vt|vn|vp|f|o|g|s|usemtl|mtllib)\b/.test(line)) return true;
-  }
-
-  return false;
-}
-
-function hasInvalidObjTextCharacters(text: string): boolean {
-  return /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufffd]/.test(text);
+function isLoadedModel(value: unknown): value is TypeGpuLoadedModel {
+  return typeof value === 'object' && value !== null &&
+    'key' in value && typeof value.key === 'string' &&
+    'meshes' in value && Array.isArray(value.meshes);
 }

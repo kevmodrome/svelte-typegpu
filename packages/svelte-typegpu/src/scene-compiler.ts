@@ -418,6 +418,7 @@ function readModelDrawItems(
     modelNode.revision
   ]);
   const entry = cache.modelCache.read({
+    asset: modelNode.attributes.asset,
     src: modelNode.attributes.src,
     data: modelNode.attributes.data
   });

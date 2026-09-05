@@ -99,6 +99,12 @@ describe('TypeGPU primitive descriptors', () => {
 
   it('marks model source and instance fields with exact masks', () => {
     expectExactDirty(
+      dirtyForAttribute('model', 'asset', { key: 'old', meshes: [] }, { key: 'new', meshes: [] }),
+      Dirty.Geometry,
+      Dirty.DrawBatches,
+      Dirty.Interaction
+    );
+    expectExactDirty(
       dirtyForAttribute('model', 'src', '/models/a.glb', '/models/b.glb'),
       Dirty.Geometry,
       Dirty.DrawBatches,

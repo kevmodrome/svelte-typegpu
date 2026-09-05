@@ -13,6 +13,21 @@ function loadedModel(key: string): TypeGpuLoadedModel {
 }
 
 describe('TypeGPU model cache', () => {
+  it('reads resolved assets synchronously with stable weak entries and no loading work', () => {
+    const loadUrl = vi.fn();
+    const loadData = vi.fn();
+    const onSettled = vi.fn();
+    const cache = createModelCache({ loadUrl, loadData, onSettled });
+    const asset = loadedModel('asset:shared');
+    const first = cache.read({ asset, data: new ArrayBuffer(0), src: '/ignored.glb' });
+    expect(first).toMatchObject({ status: 'ready', model: asset });
+    expect(cache.read({ asset })).toBe(first);
+    expect(cache.read({ asset: loadedModel('asset:next') })).not.toBe(first);
+    expect(loadUrl).not.toHaveBeenCalled();
+    expect(loadData).not.toHaveBeenCalled();
+    expect(onSettled).not.toHaveBeenCalled();
+  });
+
   it('starts URL loading once and notifies when ready', async () => {
     const onSettled = vi.fn();
     const loadUrl = vi.fn(async (src: string) => loadedModel(`url:${src}`));
