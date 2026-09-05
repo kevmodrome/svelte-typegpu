@@ -155,12 +155,94 @@ describe('TypeGPU GPU renderer', () => {
     vi.stubGlobal('createImageBitmap', vi.fn(() => bitmapPromise.promise));
 
     cache.getOrLoad(urlTexture('/textures/stale-before-upload.png'));
+    await settleAsyncTextureLoad();
+    expect(createImageBitmap).toHaveBeenCalledOnce();
     cache.prune(new Set());
     bitmapPromise.resolve(bitmap);
     await settleAsyncTextureLoad();
 
     expect(root.createdTextures).toHaveLength(1);
     expect(bitmapClose).toHaveBeenCalledOnce();
+  });
+
+  it.each(['prune', 'dispose'] as const)('cancels a pending texture fetch on %s without a late frame', async (operation) => {
+    const root = createFakeRoot();
+    const settled = vi.fn();
+    const cache = new TextureResourceCache(root as never, settled);
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal('fetch', vi.fn((_url, options) => new Promise((_resolve, reject) => {
+      signal = options?.signal;
+      signal?.addEventListener('abort', () => reject(signal?.reason), { once: true });
+    })));
+    vi.stubGlobal('createImageBitmap', vi.fn());
+    const source = urlTexture('/pending.png');
+    const resource = cache.getOrLoad(source);
+    expect(cache.getOrLoad(source)).toBe(resource);
+    cache.prune(new Set([source.key!]));
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal!.aborted).toBe(false);
+    if (operation === 'prune') cache.prune(new Set()); else cache.dispose();
+    expect(signal!.aborted).toBe(true);
+    await settleAsyncTextureLoad();
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(createImageBitmap).not.toHaveBeenCalled();
+    expect(settled).not.toHaveBeenCalled();
+    expect(root.createdTextures).toHaveLength(1);
+    if (operation === 'prune') cache.dispose();
+  });
+
+  it('keeps a new same-key request owned when an obsolete load settles', async () => {
+    const root = createFakeRoot();
+    const settled = vi.fn();
+    const cache = new TextureResourceCache(root as never, settled);
+    const requests: { signal: AbortSignal; response: ReturnType<typeof deferred<Response>> }[] = [];
+    vi.stubGlobal('fetch', vi.fn((_url, options) => {
+      const response = deferred<Response>();
+      requests.push({ signal: options?.signal, response });
+      return response.promise; // Deliberately ignores abort to exercise late completion.
+    }));
+    vi.stubGlobal('createImageBitmap', vi.fn());
+    const source = urlTexture('/reused.png');
+    const old = cache.getOrLoad(source);
+    cache.prune(new Set());
+    const current = cache.getOrLoad(source);
+    expect(current).not.toBe(old);
+    expect(requests[0].signal?.aborted).toBe(true);
+    requests[0].response.resolve(new Response(new Blob(['stale'])));
+    await settleAsyncTextureLoad();
+    expect(createImageBitmap).not.toHaveBeenCalled();
+    expect(requests[1].signal.aborted).toBe(false);
+    cache.prune(new Set());
+    expect(requests[1].signal.aborted).toBe(true);
+    requests[1].response.resolve(new Response(new Blob(['stale'])));
+    await settleAsyncTextureLoad();
+    expect(settled).not.toHaveBeenCalled();
+    expect(root.createdTextures).toHaveLength(1);
+    cache.dispose();
+  });
+
+  it('releases pending ownership after successful upload without aborting a completed request', async () => {
+    const root = createFakeRoot();
+    const settled = vi.fn();
+    const cache = new TextureResourceCache(root as never, settled);
+    let signal!: AbortSignal;
+    const close = vi.fn();
+    vi.stubGlobal('fetch', vi.fn(async (_url, options) => {
+      signal = options?.signal;
+      return new Response(new Blob(['png']));
+    }));
+    vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 8, height: 4, close })));
+    const source = urlTexture('/ready.png');
+    const resource = cache.getOrLoad(source);
+    await settleAsyncTextureLoad();
+    expect(resource.status).toBe('ready');
+    expect(close).toHaveBeenCalledOnce();
+    expect(settled).toHaveBeenCalledOnce();
+    expect(cache.getOrLoad(source)).toBe(resource);
+    cache.prune(new Set());
+    expect(signal?.aborted).toBe(false);
+    expect(root.createdTextures[1].destroy).toHaveBeenCalledOnce();
+    cache.dispose();
   });
 
   it('destroys created textures when a load becomes stale after upload', async () => {
@@ -253,7 +335,7 @@ describe('TypeGPU GPU renderer', () => {
     expect(cacheSource).toContain('let image: LoadedTextureImage | null = null;');
     expect(cacheSource).toContain('let texture: TypeGpuMaterialTexture | null = null;');
     expect(cacheSource).toMatch(/catch\s*{\s*texture\?\.destroy\(\);/s);
-    expect(cacheSource).toMatch(/finally\s*{\s*image\?\.close\(\);\s*}/s);
+    expect(cacheSource).toMatch(/finally\s*{\s*image\?\.close\(\);/s);
   });
 
   it('falls back to an HTML image source when createImageBitmap cannot decode a texture blob', async () => {
@@ -313,9 +395,89 @@ describe('TypeGPU GPU renderer', () => {
     expect(getImageData).toHaveBeenCalledWith(0, 0, 64, 64);
 
     image.close();
+    image.close();
 
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:checker');
+    expect(revokeObjectURL).toHaveBeenCalledOnce();
     expect((createdImage as FakeImage | null)?.src).toBe('');
+  });
+
+  it.each(['url', 'embedded', 'data'] as const)('does not start an already-cancelled %s texture load', async kind => {
+    const controller = new AbortController();
+    controller.abort(new Error('Cancelled by owner'));
+    vi.stubGlobal('fetch', vi.fn());
+    vi.stubGlobal('createImageBitmap', vi.fn());
+    const source = kind === 'url' ? urlTexture('/cancelled.png') : {
+      kind, key: 'cancelled', src: '', mimeType: 'image/png', data: new Uint8Array(4)
+    };
+    await expect(loadMaterialTextureImageSource(source, controller.signal)).rejects.toBe(controller.signal.reason);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(createImageBitmap).not.toHaveBeenCalled();
+  });
+
+  it('skips decoding when cancellation occurs while reading the response body', async () => {
+    const body = deferred<Blob>();
+    const blob = vi.fn(() => body.promise);
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, blob })));
+    vi.stubGlobal('createImageBitmap', vi.fn());
+    const controller = new AbortController();
+    const loading = loadMaterialTextureImageSource(urlTexture('/body.png'), controller.signal);
+    const reason = new Error('Cancelled while reading body');
+    const rejected = expect(loading).rejects.toBe(reason);
+    await Promise.resolve();
+    expect(blob).toHaveBeenCalledOnce();
+    controller.abort(reason);
+    body.resolve(new Blob(['late']));
+    await rejected;
+    expect(createImageBitmap).not.toHaveBeenCalled();
+  });
+
+  it.each(['resolve', 'reject'] as const)('does not enter HTML fallback when an aborted bitmap decode later %ss', async outcome => {
+    const decoded = deferred<{ width: number; height: number; close(): void }>();
+    const bitmap = { width: 8, height: 4, close: vi.fn() };
+    const image = vi.fn();
+    vi.stubGlobal('Image', image);
+    vi.stubGlobal('createImageBitmap', vi.fn(() => decoded.promise));
+    const controller = new AbortController();
+    const loading = loadMaterialTextureImageSource({
+      kind: 'embedded', key: 'decode', mimeType: 'image/png', data: new Uint8Array(4)
+    }, controller.signal);
+    controller.abort();
+    const rejected = expect(loading).rejects.toBe(controller.signal.reason);
+    if (outcome === 'resolve') decoded.resolve(bitmap); else decoded.reject(new Error('Decode failed'));
+    await rejected;
+    expect(image).not.toHaveBeenCalled();
+    expect(bitmap.close).toHaveBeenCalledTimes(outcome === 'resolve' ? 1 : 0);
+  });
+
+  it.each(['resolve', 'reject', 'throw'] as const)('releases an HTML decoder without late rasterization (%s)', async outcome => {
+    const decoded = deferred<void>();
+    const remove = vi.fn();
+    class Image {
+      decoding = '';
+      src = '';
+      decode() { if (outcome === 'throw') throw new Error('Synchronous decoder failure'); return decoded.promise; }
+      removeAttribute = remove;
+    }
+    vi.stubGlobal('Image', Image);
+    vi.stubGlobal('createImageBitmap', undefined);
+    vi.stubGlobal('document', { createElement: vi.fn() });
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:cancelled');
+    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const controller = new AbortController();
+    const loading = loadMaterialTextureImageSource({
+      kind: 'embedded', key: 'html', mimeType: 'image/svg+xml', data: new Uint8Array(4)
+    }, controller.signal);
+    const rejected = expect(loading).rejects.toBeInstanceOf(Error);
+    controller.abort();
+    await rejected; // Cancellation settles even when decode has not settled.
+    expect(revoke).toHaveBeenCalledExactlyOnceWith('blob:cancelled');
+    expect(remove).toHaveBeenCalledExactlyOnceWith('src');
+    if (outcome === 'reject') decoded.reject(new Error('Late decode error')); else decoded.resolve();
+    await settleAsyncTextureLoad();
+    expect(document.createElement).not.toHaveBeenCalled();
+    expect(revoke).toHaveBeenCalledOnce();
+    expect(remove).toHaveBeenCalledOnce();
   });
 
   it('decodes embedded material texture bytes without fetching', async () => {

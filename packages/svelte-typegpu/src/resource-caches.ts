@@ -213,6 +213,7 @@ export class TextureResourceCache {
   #disposed = false;
   readonly #fallback: TypeGpuTextureResource;
   readonly #resources = new Map<string, TypeGpuTextureResource>();
+  readonly #loads = new Map<string, AbortController>();
 
   constructor(
     private readonly root: TgpuRoot,
@@ -273,11 +274,16 @@ export class TextureResourceCache {
 
       resource.generation += 1;
       this.#resources.delete(key);
+      this.#loads.get(key)?.abort();
+      this.#loads.delete(key);
     }
   }
 
   dispose(): void {
     this.#disposed = true;
+
+    for (const controller of this.#loads.values()) controller.abort();
+    this.#loads.clear();
 
     for (const resource of this.#resources.values()) {
       resource.generation += 1;
@@ -298,9 +304,11 @@ export class TextureResourceCache {
   ): Promise<void> {
     let image: LoadedTextureImage | null = null;
     let texture: TypeGpuMaterialTexture | null = null;
+    const controller = source.kind === 'data' ? undefined : new AbortController();
+    if (controller) this.#loads.set(resource.key, controller);
 
     try {
-      image = await loadMaterialTextureImageSource(source);
+      image = await loadMaterialTextureImageSource(source, controller?.signal);
 
       if (!this.#isLiveResource(resource, generation)) {
         image.close();
@@ -349,6 +357,8 @@ export class TextureResourceCache {
       }
     } finally {
       image?.close();
+      // An obsolete same-key load must not release a newer request's ownership.
+      if (controller && this.#loads.get(resource.key) === controller) this.#loads.delete(resource.key);
     }
   }
 
@@ -557,8 +567,10 @@ function packMaterialUniforms(material: TypeGpuMaterialDescriptor): ArrayBuffer 
 }
 
 export async function loadMaterialTextureImageSource(
-  source: TypeGpuTextureSource
+  source: TypeGpuTextureSource,
+  signal?: AbortSignal
 ): Promise<LoadedTextureImage> {
+  signal?.throwIfAborted();
   if (source.kind === 'data') {
     return {
       source: source.data,
@@ -571,14 +583,15 @@ export async function loadMaterialTextureImageSource(
   if (source.kind === 'embedded') {
     const bytes = new Uint8Array(source.data.byteLength);
     bytes.set(source.data);
-    return loadTextureBlob(new Blob([bytes], { type: source.mimeType }));
+    return loadTextureBlob(new Blob([bytes], { type: source.mimeType }), signal);
   }
 
-  return loadUrlTextureImageSource(source.src);
+  return loadUrlTextureImageSource(source.src, signal);
 }
 
-async function loadUrlTextureImageSource(src: string): Promise<LoadedTextureImage> {
-  const response = await fetch(src);
+async function loadUrlTextureImageSource(src: string, signal?: AbortSignal): Promise<LoadedTextureImage> {
+  const response = await (signal ? fetch(src, { signal }) : fetch(src));
+  signal?.throwIfAborted();
 
   if (!response.ok) {
     throw new Error(`Failed to load material texture ${src}: ${response.status}`);
@@ -586,13 +599,18 @@ async function loadUrlTextureImageSource(src: string): Promise<LoadedTextureImag
 
   const blob = await response.blob();
 
-  return loadTextureBlob(blob);
+  return loadTextureBlob(blob, signal);
 }
 
-async function loadTextureBlob(blob: Blob): Promise<LoadedTextureImage> {
+async function loadTextureBlob(blob: Blob, signal?: AbortSignal): Promise<LoadedTextureImage> {
+  signal?.throwIfAborted();
   if (typeof createImageBitmap === 'function') {
     try {
       const bitmap = await createImageBitmap(blob);
+      if (signal?.aborted) {
+        bitmap.close();
+        signal.throwIfAborted();
+      }
 
       return {
         source: bitmap,
@@ -601,12 +619,13 @@ async function loadTextureBlob(blob: Blob): Promise<LoadedTextureImage> {
         close: () => bitmap.close()
       };
     } catch {
+      signal?.throwIfAborted();
       // Some browsers cannot decode SVG blobs through createImageBitmap, but they can
       // decode them as HTML images that we rasterize before uploading with TypeGPU.
     }
   }
 
-  return loadHtmlTextureImage(blob);
+  return loadHtmlTextureImage(blob, signal);
 }
 
 function textureSourceLabel(source: TypeGpuTextureSource): string {
@@ -625,28 +644,36 @@ function textureSourceHeight(source: TypeGpuTextureSource): number {
   return source.kind === 'data' ? (source.height ?? 1) : 1;
 }
 
-function loadHtmlTextureImage(blob: Blob): Promise<LoadedTextureImage> {
-  const objectUrl = URL.createObjectURL(blob);
+function loadHtmlTextureImage(blob: Blob, signal?: AbortSignal): Promise<LoadedTextureImage> {
+  signal?.throwIfAborted();
   const image = new Image();
-  image.decoding = 'async';
-  image.src = objectUrl;
-
-  return image
-    .decode()
-    .then(() => ({
-      width: image.naturalWidth || image.width,
-      height: image.naturalHeight || image.height,
-      source: rasterizeImage(image, image.naturalWidth || image.width, image.naturalHeight || image.height),
-      close: () => {
-        URL.revokeObjectURL(objectUrl);
-        image.removeAttribute('src');
-      }
-    }))
-    .catch((error: unknown) => {
+  const objectUrl = URL.createObjectURL(blob);
+  return new Promise((resolve, reject) => {
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      signal?.removeEventListener('abort', abort);
       URL.revokeObjectURL(objectUrl);
       image.removeAttribute('src');
-      throw error;
-    });
+    };
+    const abort = () => { close(); reject(signal?.reason); };
+    const fail = (error: unknown) => { close(); reject(error); };
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) { abort(); return; }
+    try {
+      image.decoding = 'async';
+      image.src = objectUrl;
+      void image.decode().then(() => {
+        signal?.throwIfAborted();
+        const width = image.naturalWidth || image.width;
+        const height = image.naturalHeight || image.height;
+        const source = rasterizeImage(image, width, height);
+        signal?.removeEventListener('abort', abort);
+        resolve({ width, height, source, close });
+      }).catch(fail);
+    } catch (error) { fail(error); }
+  });
 }
 
 function writeLoadedTexture(texture: TypeGpuMaterialTexture, image: LoadedTextureImage): void {
