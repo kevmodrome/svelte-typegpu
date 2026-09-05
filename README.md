@@ -84,6 +84,8 @@ options, lifecycle ownership, and manual rendering. The low-level
 
 See [Animation and frame tasks](docs/scene-animation-guide.md) for Svelte motion,
 animated shader uniforms, dynamic collections, and reusable behavior components.
+See [Scene events](docs/scene-events-guide.md) for ordinary event attributes,
+group hover boundaries, and delegated mesh interactions.
 See [Svelte compatibility](docs/svelte-compatibility.md) for attachments, component
 bindings, async model loading, lifecycle guarantees, and the pinned compiler's
 current limitations.

@@ -2,7 +2,7 @@
   import { onDestroy } from 'svelte';
   import { Spring, Tween } from 'svelte/motion';
   import { cubicInOut } from 'svelte/easing';
-  import type { Vector3Tuple } from 'svelte-typegpu';
+  import type { TypeGpuNodeEvent, Vector3Tuple } from 'svelte-typegpu';
   import MotionMarker from './MotionMarker.typegpu.svelte';
   import { motionField, type MotionControls } from './motion-field';
 
@@ -14,6 +14,11 @@
   const position = new Tween<Vector3Tuple>([-7, 2, -7], { duration: 1600, easing: cubicInOut });
   const lift = new Spring(0, { stiffness: 0.06, damping: 0.45 });
   const appearance = new Tween(0, { duration: 900, easing: cubicInOut });
+
+  function selectCell(event: TypeGpuNodeEvent) {
+    const position = event.target.attributes.position as Vector3Tuple;
+    onTargetChange(position[0], position[2]);
+  }
 
   $effect(() => {
     position.target = [controls.x, 2, controls.z];
@@ -47,16 +52,14 @@
   <ambientLight intensity={0.4} color={[1, 1, 1]} />
   <directionalLight position={[8, 20, 10]} lookAt={[0, 0, 0]} intensity={0.9} />
 
-  {#each motionField.slice(0, controls.count) as cell (cell.id)}
-    <mesh
-      position={cell.position}
-      scale={cell.scale}
-      onclick={() => onTargetChange(cell.position[0], cell.position[2])}
-    >
-      <boxGeometry />
-      <standardMaterial color={cell.color} />
-    </mesh>
-  {/each}
+  <group onclick={selectCell}>
+    {#each motionField.slice(0, controls.count) as cell (cell.id)}
+      <mesh position={cell.position} scale={cell.scale}>
+        <boxGeometry />
+        <standardMaterial color={cell.color} />
+      </mesh>
+    {/each}
+  </group>
 
   <MotionMarker position={position.current} lift={lift.current} visible={controls.visible} appearance={appearance.current} />
 </scene>

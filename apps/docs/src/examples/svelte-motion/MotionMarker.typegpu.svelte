@@ -1,16 +1,19 @@
 <script lang="ts">
   import type { Vector3Tuple } from 'svelte-typegpu';
   import { markerFragment } from './marker-fragment';
-  import { trackHover } from './hover';
   let { position, lift, visible, appearance }: {
     position: Vector3Tuple; lift: number; visible: boolean; appearance: number
   } = $props();
   let hovered = $state(false);
-  const hover = trackHover((value) => { hovered = value; });
 </script>
 
-<group {position} {visible}>
-  <mesh position={[0, lift, 0]} scale={[1.2, 1.2, 1.2]} {@attach hover}>
+<group
+  {position}
+  {visible}
+  onpointerenter={() => hovered = true}
+  onpointerleave={() => hovered = false}
+>
+  <mesh position={[0, lift, 0]} scale={[1.2, 1.2, 1.2]}>
     <boxGeometry />
     <standardMaterial
       color={hovered

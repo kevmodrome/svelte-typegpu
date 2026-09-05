@@ -79,50 +79,40 @@ fetch, or GPU validation errors. Use `{#await ... :catch}` for loader failures.
 </svelte:boundary>
 ```
 
-## Attach reusable behavior
+## Ordinary event attributes
 
-An attachment receives the actual scene node. Use `TypeGpuAttachment` and
-`onNodeEvent` from `svelte-typegpu` for renderer-local event behavior:
-
-```ts
-import { onNodeEvent, type TypeGpuAttachment } from 'svelte-typegpu';
-
-export function trackHover(onChange: (hovered: boolean) => void): TypeGpuAttachment {
-  return (node) => {
-    const enter = onNodeEvent(node, 'pointerenter', () => onChange(true));
-    const leave = onNodeEvent(node, 'pointerleave', () => onChange(false));
-    return () => {
-      enter();
-      leave();
-      onChange(false);
-    };
-  };
-}
-```
+Use normal Svelte event attributes for hover and clicks. No attachment is needed:
 
 ```svelte
 <script lang="ts">
-  import { trackHover } from './hover';
   let hovered = $state(false);
-  const hover = trackHover((value) => hovered = value);
 </script>
 
-<mesh {@attach hover}>
+<mesh onpointerenter={() => hovered = true} onpointerleave={() => hovered = false}>
   <boxGeometry />
   <standardMaterial color={hovered ? [1, 1, 1, 1] : [1, 0.2, 0.3, 1]} />
 </mesh>
 ```
 
 There is no target ID or additional animation loop. The event changes Svelte
-state, and the material binding uses the normal targeted upload path. Keep the
-attachment function stable when its setup need not change on every motion tick.
+state, and the material binding uses the normal targeted upload path. A group can
+own these handlers for its descendants. Moving between its meshes keeps the group
+hovered. Use the explicit enter/leave pair, not `onhover`, which is not a supported
+event. See [scene events](scene-events-guide.md) for propagation and picking rules.
+
+## Attach reusable behavior
+
+Attachments remain useful for reusable setup/cleanup that needs the scene node,
+not as a requirement for event handling. An attachment receives the actual scene
+node. Use `TypeGpuAttachment` and `onNodeEvent` from `svelte-typegpu`, and keep the
+attachment function stable when setup need not change on every motion tick.
 
 `onNodeEvent` returns an idempotent unsubscribe function. Each subscription owns
 its listener, even when another attachment uses the same callback. The runtime
 routes click, pointer down/up/move/enter/leave, and drag start/move/end events from
 canvas picking. These are `TypeGpuNodeEvent` values, not DOM events; the original
-browser event is available as `originalEvent`. No new bubbling/capture semantics
-are added by this helper.
+browser event is available as `originalEvent`. The helper uses the same scene
+propagation rules as event attributes; it does not add a separate event system.
 
 Svelte runs attachment cleanup on reactive replacement or unmount. Keyed moves
 preserve the attachment; `visible={false}` does not unmount it. Return cleanup for

@@ -71,6 +71,13 @@ object per dispatch has prototype methods, not per-listener object/closure copie
    unchanged interaction sets/buffers/pipelines, demand idle, and disposal. Verify
    desktop/mobile motion and clicks; commit example/docs separately.
 
+Implemented verification: 563 workspace tests pass, including real compiled
+Svelte event props and the 60/120/144 Hz Tween/Spring matrix in both callback
+orders. Renderer typechecking and both app production builds pass. The example
+uses normal pointer enter/leave attributes instead of its hover attachment.
+Live desktop/mobile verification is pending: computer-use reported the Mac
+locked. Synthetic cadence results do not establish physical display throughput.
+
 ## 6. Risks and alternatives
 
 Per-child wrapper callbacks duplicate listeners and prevent reusable group-level

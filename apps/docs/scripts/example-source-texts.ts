@@ -24,11 +24,10 @@ import svelteMotion from '../src/examples/svelte-motion/SvelteMotion.typegpu.sve
 import motionMarker from '../src/examples/svelte-motion/MotionMarker.typegpu.svelte' with { type: 'text' };
 import motionField from '../src/examples/svelte-motion/motion-field.ts' with { type: 'text' };
 import markerFragment from '../src/examples/svelte-motion/marker-fragment.ts' with { type: 'text' };
-import hover from '../src/examples/svelte-motion/hover.ts' with { type: 'text' };
 import gravityFrameTask from '../src/examples/gravity/GravityFrameTask.typegpu.svelte' with { type: 'text' };
 
 export const exampleSourceTexts = {
-  'svelte-motion': [svelteMotion, motionMarker, motionField, markerFragment, hover],
+  'svelte-motion': [svelteMotion, motionMarker, motionField, markerFragment],
   'two-boxes': [twoBoxes, floor, sceneBox, boxGeometry, boxInteraction],
   'phong-reflection': [phongReflection, phongLights],
   'simple-shadow': [simpleShadow, shadowLights, shadowSubject],

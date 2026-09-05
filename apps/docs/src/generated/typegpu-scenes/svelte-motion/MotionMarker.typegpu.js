@@ -5,7 +5,6 @@ import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
 import { markerFragment } from './marker-fragment.js';
-import { trackHover } from './hover.js';
 
 var root = $.from_tree([
 	[
@@ -21,15 +20,7 @@ var root = $.from_tree([
 
 export default function MotionMarker_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
-
-	$.push($$props, true);
-
 	let hovered = $.state(false);
-
-	const hover = trackHover((value) => {
-		$.set(hovered, value, true);
-	});
-
 	var group = root();
 	var mesh = $.child(group);
 
@@ -38,7 +29,6 @@ export default function MotionMarker_typegpu($$anchor, $$props) {
 	var standardMaterial = $.sibling($.child(mesh));
 
 	$.reset(mesh);
-	$.attach(mesh, () => hover);
 
 	var mesh_1 = $.sibling(mesh, 2);
 
@@ -79,7 +69,8 @@ export default function MotionMarker_typegpu($$anchor, $$props) {
 		$.set_attribute(shaderMaterial, 'uniforms', { value0: $$props.appearance });
 	});
 
+	$.event('pointerenter', group, () => $.set(hovered, true));
+	$.event('pointerleave', group, () => $.set(hovered, false));
 	$.append($$anchor, group);
-	$.pop();
 	$$pop_renderer();
 }

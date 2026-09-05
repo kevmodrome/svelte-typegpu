@@ -32,7 +32,8 @@ var root_1 = $.from_tree([
 		['ambientLight'],
 		' ',
 		['directionalLight'],
-		' ',,
+		' ',
+		['group'],
 		' ',,
 	]
 ]);
@@ -45,6 +46,12 @@ export default function SvelteMotion_typegpu($$anchor, $$props) {
 	const position = new Tween([-7, 2, -7], { duration: 1600, easing: cubicInOut });
 	const lift = new Spring(0, { stiffness: 0.06, damping: 0.45 });
 	const appearance = new Tween(0, { duration: 900, easing: cubicInOut });
+
+	function selectCell(event) {
+		const position = event.target.attributes.position;
+
+		$$props.onTargetChange(position[0], position[2]);
+	}
 
 	$.user_effect(() => {
 		position.target = [$$props.controls.x, 2, $$props.controls.z];
@@ -94,9 +101,9 @@ export default function SvelteMotion_typegpu($$anchor, $$props) {
 	$.set_attribute(directionalLight, 'lookAt', [0, 0, 0]);
 	$.set_attribute(directionalLight, 'intensity', 0.9);
 
-	var node = $.sibling(directionalLight, 2);
+	var group = $.sibling(directionalLight, 2);
 
-	$.each(node, 17, () => motionField.slice(0, $$props.controls.count), (cell) => cell.id, ($$anchor, cell) => {
+	$.each(group, 21, () => motionField.slice(0, $$props.controls.count), (cell) => cell.id, ($$anchor, cell) => {
 		var mesh = root();
 		var standardMaterial = $.sibling($.child(mesh));
 
@@ -108,13 +115,14 @@ export default function SvelteMotion_typegpu($$anchor, $$props) {
 			$.set_attribute(standardMaterial, 'color', $.get(cell).color);
 		});
 
-		$.event('click', mesh, () => $$props.onTargetChange($.get(cell).position[0], $.get(cell).position[2]));
 		$.append($$anchor, mesh);
 	});
 
-	var node_1 = $.sibling(node, 2);
+	$.reset(group);
 
-	MotionMarker(node_1, {
+	var node = $.sibling(group, 2);
+
+	MotionMarker(node, {
 		get position() {
 			return position.current;
 		},
@@ -133,6 +141,7 @@ export default function SvelteMotion_typegpu($$anchor, $$props) {
 	});
 
 	$.reset(scene);
+	$.event('click', group, selectCell);
 	$.append($$anchor, scene);
 	$.pop();
 	$$pop_renderer();

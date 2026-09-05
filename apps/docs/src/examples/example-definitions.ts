@@ -33,8 +33,7 @@ export const exampleDefinitions = [
       new URL('./svelte-motion/SvelteMotion.typegpu.svelte', import.meta.url),
       new URL('./svelte-motion/MotionMarker.typegpu.svelte', import.meta.url),
       new URL('./svelte-motion/motion-field.ts', import.meta.url),
-      new URL('./svelte-motion/marker-fragment.ts', import.meta.url),
-      new URL('./svelte-motion/hover.ts', import.meta.url)
+      new URL('./svelte-motion/marker-fragment.ts', import.meta.url)
     ],
     typeGpuSourceFiles: []
   },
