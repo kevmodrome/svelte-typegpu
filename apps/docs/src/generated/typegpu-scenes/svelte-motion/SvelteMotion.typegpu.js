@@ -4,6 +4,7 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
+import * as TypeGpuAttributeValues from 'svelte-typegpu/internal/attribute-values';
 import { onDestroy } from 'svelte';
 import { Spring, Tween } from 'svelte/motion';
 import { cubicInOut } from 'svelte/easing';
@@ -109,11 +110,18 @@ export default function SvelteMotion_typegpu($$anchor, $$props) {
 
 		$.reset(mesh);
 
-		$.template_effect(() => {
-			$.set_attribute(mesh, 'position', $.get(cell).position);
-			$.set_attribute(mesh, 'scale', $.get(cell).scale);
-			$.set_attribute(standardMaterial, 'color', $.get(cell).color);
-		});
+		$.template_effect(
+			($0, $1, $2) => {
+				$.set_attribute(mesh, 'position', $0);
+				$.set_attribute(mesh, 'scale', $1);
+				$.set_attribute(standardMaterial, 'color', $2);
+			},
+			[
+				() => TypeGpuAttributeValues.value("position", $.get(cell).position),
+				() => TypeGpuAttributeValues.value("scale", $.get(cell).scale),
+				() => TypeGpuAttributeValues.value("color", $.get(cell).color)
+			]
+		);
 
 		$.append($$anchor, mesh);
 	});

@@ -4,6 +4,7 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
+import * as TypeGpuAttributeValues from 'svelte-typegpu/internal/attribute-values';
 import TypeGpuViewportCanvas from "svelte-typegpu/internal/viewport-canvas";
 import * as TypeGpuCanvasBindings from 'svelte-typegpu/internal/canvas-bindings';
 
@@ -56,7 +57,7 @@ export default function NativeEvents_typegpu($$anchor, $$props) {
 			name: 'Coral',
 			color: [0.94, 0.24, 0.2],
 			x: -2.8,
-			angle: 0,
+			rotation: [0, 0, 0],
 			size: 1
 		},
 
@@ -64,7 +65,7 @@ export default function NativeEvents_typegpu($$anchor, $$props) {
 			name: 'Jade',
 			color: [0.15, 0.76, 0.46],
 			x: 0,
-			angle: 0,
+			rotation: [0, 0, 0],
 			size: 1
 		},
 
@@ -72,7 +73,7 @@ export default function NativeEvents_typegpu($$anchor, $$props) {
 			name: 'Cobalt',
 			color: [0.22, 0.48, 0.96],
 			x: 2.8,
-			angle: 0,
+			rotation: [0, 0, 0],
 			size: 1
 		}
 	]);
@@ -84,7 +85,7 @@ export default function NativeEvents_typegpu($$anchor, $$props) {
 	const compact = $.derived(() => $.get(width) > 0 && $.get(width) < 600);
 
 	function reset(object) {
-		object.angle = 0;
+		object.rotation[1] = 0;
 		object.size = 1;
 	}
 
@@ -170,25 +171,34 @@ export default function NativeEvents_typegpu($$anchor, $$props) {
 
 					$.reset(mesh_1);
 
-					$.template_effect(() => {
-						$.set_attribute(mesh_1, 'position', [$.get(object).x, $.get(object).size * 0.75 - 0.15, 0]);
-						$.set_attribute(mesh_1, 'rotation', [0, $.get(object).angle * Math.PI / 180, 0]);
+					$.template_effect(
+						($0, $1) => {
+							$.set_attribute(mesh_1, 'position', [$.get(object).x, $.get(object).size * 0.75 - 0.15, 0]);
+							$.set_attribute(mesh_1, 'rotation', $0);
 
-						$.set_attribute(mesh_1, 'scale', [
-							$.get(object).size * 1.5,
-							$.get(object).size * 1.5,
-							$.get(object).size * 1.5
-						]);
+							$.set_attribute(mesh_1, 'scale', [
+								$.get(object).size * 1.5,
+								$.get(object).size * 1.5,
+								$.get(object).size * 1.5
+							]);
 
-						$.set_attribute(standardMaterial_1, 'color', $.get(hovered) === $.get(index) ? [1, 0.85, 0.4] : $.get(object).color);
-					});
+							$.set_attribute(standardMaterial_1, 'color', $1);
+						},
+						[
+							() => TypeGpuAttributeValues.value("rotation", $.get(object).rotation),
+							() => TypeGpuAttributeValues.value("color", $.get(hovered) === $.get(index) ? [1, 0.85, 0.4] : $.get(object).color)
+						]
+					);
 
 					$.event('pointerenter', mesh_1, () => $.set(hovered, $.get(index), true));
 					$.event('pointerleave', mesh_1, () => $.set(hovered, null));
 
 					$.event('click', mesh_1, () => {
 						$.set(selected, $.get(index), true);
-						($.get(object).angle = ($.get(object).angle + 15) % 360);
+
+						(
+							$.get(object).rotation[1] = ($.get(object).rotation[1] + Math.PI / 12) % (Math.PI * 2)
+						);
 					});
 
 					$.event('dblclick', mesh_1, () => reset($.get(object)));
@@ -221,11 +231,16 @@ export default function NativeEvents_typegpu($$anchor, $$props) {
 				$.reset(mesh_2);
 				$.reset(scene);
 
-				$.template_effect(() => {
-					$.set_attribute(perspectiveCamera, 'fov', $.get(compact) ? 50 : 42);
-					$.set_attribute(mesh_2, 'position', [objects[$.get(selected)].x, -0.12, 0]);
-					$.set_attribute(basicMaterial, 'color', objects[$.get(selected)].color);
-				});
+				$.template_effect(
+					($0) => {
+						$.set_attribute(perspectiveCamera, 'fov', $.get(compact) ? 50 : 42);
+						$.set_attribute(mesh_2, 'position', [objects[$.get(selected)].x, -0.12, 0]);
+						$.set_attribute(basicMaterial, 'color', $0);
+					},
+					[
+						() => TypeGpuAttributeValues.value("color", objects[$.get(selected)].color)
+					]
+				);
 
 				$.append($$anchor, scene);
 			}),

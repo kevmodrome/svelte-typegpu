@@ -6,6 +6,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | Feature | Current status |
 | --- | --- |
 | Reactive state, component props, `{#if}`, keyed `{#each}` | Supported and tested |
+| Deep `$state` value props | Small vectors, colors, matrices, bounds, uniforms and material descriptors update through named props and spreads; bulk resource inputs remain reference-based |
 | DOM `Canvas` host | Reactive scene/canvas props, native DOM events/attachments, inherited context, SSR shell, and async startup/unmount cleanup tested |
 | Dedicated `<canvas>` viewport | Experimental compiler path: native attributes/events/attachments, `bind:this`, read-only size bindings, scoped CSS, SSR/hydration, scene switching and frame cadence tested; other canvas directives are explicitly rejected |
 | Consumer component types | Canvas props/callbacks/bindings checked; scene-element declarations deferred due to language-tools casing and action-target gaps |
@@ -46,6 +47,52 @@ Their successful ready paths do not establish safe lifecycle behavior. See the
 [async investigation](async-expressions-design.md) and the
 [pending-boundary teardown reproducer](../packages/svelte-typegpu/repros/README.md).
 Continue using ordinary `{#await}` for supported async scene composition.
+
+## Mutable value props
+
+Small structured scene values work with ordinary deep `$state` mutations. This
+applies inside snippets, keyed lists and wrapper components as well as directly
+on primitives:
+
+```svelte
+<script>
+  const position = $state([0, 0, 0]);
+  const rotation = $state({ x: 0, y: 0, z: 0 });
+</script>
+
+<mesh {position} {rotation} onclick={() => {
+  position[0] += 1;
+  rotation.y += Math.PI / 12;
+}}>
+  <boxGeometry /><standardMaterial color={[0.2, 0.7, 0.4]} />
+</mesh>
+```
+
+The shared compiler integration (`typegpuSvelte` or `compileTypeGpu`) tracks the
+small fields consumed by the renderer inside Svelte's existing attribute effects.
+It keeps unchanged value snapshots stable and uses the ordinary targeted dirty
+path when they change. There are no per-node observers or additional frame loops.
+Inline tuples such as `position={[x.current, 0, 0]}` retain their existing fast path.
+
+Supported shapes are transform/camera vectors, color tuples, quaternions, matrices,
+`bounds.min/max`, shader `uniforms.time/resolution/value0..value7`, texture
+descriptors (`map`/`texture`) and sampler descriptors. Array snapshots are bounded
+to 32 entries; this is not general deep cloning of arbitrary scene data.
+Native canvas and component props are left intact; a receiving scene primitive
+adapts its own value props. Spreads preserve event and attachment identities.
+
+Typed arrays, vertex/index buffers, loaded model assets, texture bytes and shader
+functions remain opaque inputs. Typed-array writes are not reactive: replace the
+input to request an update. Existing explicit resource keys still identify
+immutable resource contents, so change the key when replacing keyed contents.
+Node attribute snapshots are renderer-owned; mutate your state, not a retained
+node's internals. Using only the raw upstream custom-renderer compiler does not
+include this adaptation.
+
+The Native Events example mutates `object.rotation[1]` from a mesh click handler.
+Compiled Tween/Spring tests cover deep mutations through named props and spreads
+at 60/120/144 Hz, both callback orders, demand/manual modes, exact upload ranges,
+resource reuse, settled idling and disposal.
 
 ## Dynamic primitives
 

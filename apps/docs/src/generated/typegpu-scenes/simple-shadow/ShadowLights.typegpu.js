@@ -4,6 +4,7 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
+import * as TypeGpuAttributeValues from 'svelte-typegpu/internal/attribute-values';
 
 var root = $.from_tree([['ambientLight'], ' ', ['directionalLight']], 1);
 
@@ -41,12 +42,17 @@ export default function ShadowLights_typegpu($$anchor, $$props) {
 	$.set_attribute(directionalLight, 'shadowBias', TYPEGPU_SHADOW_DEPTH_BIAS);
 	$.set_attribute(directionalLight, 'shadowSlopeBias', TYPEGPU_SHADOW_SLOPE_BIAS);
 
-	$.template_effect(() => {
-		$.set_attribute(ambientLight, 'intensity', $.get(ambientIntensity));
-		$.set_attribute(directionalLight, 'position', $.get(lightPosition));
-		$.set_attribute(directionalLight, 'intensity', $.get(lightIntensity));
-		$.set_attribute(directionalLight, 'shadowMapSize', shadowMapSize());
-	});
+	$.template_effect(
+		($0) => {
+			$.set_attribute(ambientLight, 'intensity', $.get(ambientIntensity));
+			$.set_attribute(directionalLight, 'position', $0);
+			$.set_attribute(directionalLight, 'intensity', $.get(lightIntensity));
+			$.set_attribute(directionalLight, 'shadowMapSize', shadowMapSize());
+		},
+		[
+			() => TypeGpuAttributeValues.value("position", $.get(lightPosition))
+		]
+	);
 
 	$.append($$anchor, fragment);
 	$.pop();

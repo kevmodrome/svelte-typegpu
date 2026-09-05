@@ -4,11 +4,14 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
+import * as TypeGpuAttributeValues from 'svelte-typegpu/internal/attribute-values';
 
 var root = $.from_tree([['ambientLight'], ' ', ['directionalLight']], 1);
 
 export default function PhongLights_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
+
+	$.push($$props, true);
 
 	let lightColor = $.prop($$props, 'lightColor', 19, () => [0.8, 0.8, 0.8]),
 		lightDirection = $.prop($$props, 'lightDirection', 19, () => [0, 7, -7]),
@@ -22,13 +25,21 @@ export default function PhongLights_typegpu($$anchor, $$props) {
 	$.set_attribute(directionalLight, 'lookAt', [0, 0, 0]);
 	$.set_attribute(directionalLight, 'intensity', 1);
 
-	$.template_effect(() => {
-		$.set_attribute(ambientLight, 'color', ambientColor());
-		$.set_attribute(ambientLight, 'intensity', ambientStrength());
-		$.set_attribute(directionalLight, 'position', lightDirection());
-		$.set_attribute(directionalLight, 'color', lightColor());
-	});
+	$.template_effect(
+		($0, $1, $2) => {
+			$.set_attribute(ambientLight, 'color', $0);
+			$.set_attribute(ambientLight, 'intensity', ambientStrength());
+			$.set_attribute(directionalLight, 'position', $1);
+			$.set_attribute(directionalLight, 'color', $2);
+		},
+		[
+			() => TypeGpuAttributeValues.value("color", ambientColor()),
+			() => TypeGpuAttributeValues.value("position", lightDirection()),
+			() => TypeGpuAttributeValues.value("color", lightColor())
+		]
+	);
 
 	$.append($$anchor, fragment);
+	$.pop();
 	$$pop_renderer();
 }

@@ -4,11 +4,15 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
+import * as TypeGpuAttributeValues from 'svelte-typegpu/internal/attribute-values';
 
 var root = $.from_tree([['mesh', null, ['boxGeometry'], ['phongMaterial']]], 4);
 
 export default function ShadowSubject_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
+
+	$.push($$props, true);
+
 	var mesh = root();
 
 	$.set_attribute(mesh, 'position', [0, 0.5, 0]);
@@ -28,11 +32,15 @@ export default function ShadowSubject_typegpu($$anchor, $$props) {
 	$.set_attribute(phongMaterial, 'metalness', 0);
 	$.reset(mesh);
 
-	$.template_effect(() => {
-		$.set_attribute(boxGeometry, 'depth', $$props.cuboidThickness);
-		$.set_attribute(phongMaterial, 'color', $$props.color);
-	});
+	$.template_effect(
+		($0) => {
+			$.set_attribute(boxGeometry, 'depth', $$props.cuboidThickness);
+			$.set_attribute(phongMaterial, 'color', $0);
+		},
+		[() => TypeGpuAttributeValues.value("color", $$props.color)]
+	);
 
 	$.append($$anchor, mesh);
+	$.pop();
 	$$pop_renderer();
 }

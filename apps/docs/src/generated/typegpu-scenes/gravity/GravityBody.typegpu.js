@@ -4,6 +4,7 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
+import * as TypeGpuAttributeValues from 'svelte-typegpu/internal/attribute-values';
 
 var root = $.from_tree([['mesh', null, ['sphereGeometry'], ['phongMaterial']]], 4);
 
@@ -26,17 +27,23 @@ export default function GravityBody_typegpu($$anchor, $$props) {
 	$.set_attribute(phongMaterial, 'specularExponent', 10);
 	$.reset(mesh);
 
-	$.template_effect(() => {
-		$.set_attribute(mesh, 'position', $$props.body.position);
+	$.template_effect(
+		($0, $1) => {
+			$.set_attribute(mesh, 'position', $0);
 
-		$.set_attribute(mesh, 'scale', [
-			$$props.body.radius,
-			$$props.body.radius,
-			$$props.body.radius
-		]);
+			$.set_attribute(mesh, 'scale', [
+				$$props.body.radius,
+				$$props.body.radius,
+				$$props.body.radius
+			]);
 
-		$.set_attribute(phongMaterial, 'color', $$props.body.color);
-	});
+			$.set_attribute(phongMaterial, 'color', $1);
+		},
+		[
+			() => TypeGpuAttributeValues.value("position", $$props.body.position),
+			() => TypeGpuAttributeValues.value("color", $$props.body.color)
+		]
+	);
 
 	$.append($$anchor, mesh);
 	$.pop();

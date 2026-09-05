@@ -4,6 +4,7 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
+import * as TypeGpuAttributeValues from 'svelte-typegpu/internal/attribute-values';
 import { createSmokyTriangleFragment, defaultSmokyTriangleControls } from './smoky-triangle-fragment.js';
 
 var root = $.from_tree([
@@ -48,10 +49,15 @@ export default function SmokyTriangle_typegpu($$anchor, $$props) {
 
 	$.reset(scene);
 
-	$.template_effect(() => {
-		$.set_attribute(shaderPass, 'fragment', $.get(smokyTriangleFragment));
-		$.set_attribute(shaderPass, 'uniforms', $.get(smokyTriangleUniforms));
-	});
+	$.template_effect(
+		($0) => {
+			$.set_attribute(shaderPass, 'fragment', $.get(smokyTriangleFragment));
+			$.set_attribute(shaderPass, 'uniforms', $0);
+		},
+		[
+			() => TypeGpuAttributeValues.value("uniforms", $.get(smokyTriangleUniforms))
+		]
+	);
 
 	$.append($$anchor, scene);
 	$.pop();

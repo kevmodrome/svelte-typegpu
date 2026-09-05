@@ -4,6 +4,7 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
+import * as TypeGpuAttributeValues from 'svelte-typegpu/internal/attribute-values';
 
 var root = $.from_tree(
 	[
@@ -19,6 +20,9 @@ var root = $.from_tree(
 
 export default function SceneBox_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
+
+	$.push($$props, true);
+
 	var mesh = root();
 	var bufferGeometry = $.child(mesh);
 	var basicMaterial = $.sibling(bufferGeometry);
@@ -26,17 +30,24 @@ export default function SceneBox_typegpu($$anchor, $$props) {
 	$.set_attribute(basicMaterial, 'color', [1, 1, 1, 1]);
 	$.reset(mesh);
 
-	$.template_effect(() => {
-		$.set_attribute(mesh, 'position', $$props.position);
-		$.set_attribute(bufferGeometry, 'key', $$props.geometryKey);
-		$.set_attribute(bufferGeometry, 'vertices', $$props.vertices);
-		$.set_attribute(bufferGeometry, 'bounds', $$props.bounds);
-	});
+	$.template_effect(
+		($0, $1) => {
+			$.set_attribute(mesh, 'position', $0);
+			$.set_attribute(bufferGeometry, 'key', $$props.geometryKey);
+			$.set_attribute(bufferGeometry, 'vertices', $$props.vertices);
+			$.set_attribute(bufferGeometry, 'bounds', $1);
+		},
+		[
+			() => TypeGpuAttributeValues.value("position", $$props.position),
+			() => TypeGpuAttributeValues.value("bounds", $$props.bounds)
+		]
+	);
 
 	$.event('dragmove', mesh, function (...$$args) {
 		$$props.onDragMove?.apply(this, $$args);
 	});
 
 	$.append($$anchor, mesh);
+	$.pop();
 	$$pop_renderer();
 }

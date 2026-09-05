@@ -4,6 +4,7 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
+import * as TypeGpuAttributeValues from 'svelte-typegpu/internal/attribute-values';
 import { floorBounds, floorVertices } from './box-geometry.js';
 
 var root = $.from_tree(
@@ -18,8 +19,11 @@ var root = $.from_tree(
 	4
 );
 
-export default function Floor_typegpu($$anchor) {
+export default function Floor_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
+
+	$.push($$props, true);
+
 	var mesh = root();
 
 	$.set_attribute(mesh, 'position', [0, -2, 0]);
@@ -31,11 +35,15 @@ export default function Floor_typegpu($$anchor) {
 	$.set_attribute(basicMaterial, 'color', [1, 1, 1, 1]);
 	$.reset(mesh);
 
-	$.template_effect(() => {
-		$.set_attribute(bufferGeometry, 'vertices', floorVertices);
-		$.set_attribute(bufferGeometry, 'bounds', floorBounds);
-	});
+	$.template_effect(
+		($0) => {
+			$.set_attribute(bufferGeometry, 'vertices', floorVertices);
+			$.set_attribute(bufferGeometry, 'bounds', $0);
+		},
+		[() => TypeGpuAttributeValues.value("bounds", floorBounds)]
+	);
 
 	$.append($$anchor, mesh);
+	$.pop();
 	$$pop_renderer();
 }

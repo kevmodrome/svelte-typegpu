@@ -4,9 +4,9 @@
   let { onready, onfps, onrenderererror, frameloop = 'demand' } = $props();
 
   let objects = $state([
-    { name: 'Coral', color: [0.94, 0.24, 0.2] as Vector3Tuple, x: -2.8, angle: 0, size: 1 },
-    { name: 'Jade', color: [0.15, 0.76, 0.46] as Vector3Tuple, x: 0, angle: 0, size: 1 },
-    { name: 'Cobalt', color: [0.22, 0.48, 0.96] as Vector3Tuple, x: 2.8, angle: 0, size: 1 }
+    { name: 'Coral', color: [0.94, 0.24, 0.2] as Vector3Tuple, x: -2.8, rotation: [0, 0, 0] as Vector3Tuple, size: 1 },
+    { name: 'Jade', color: [0.15, 0.76, 0.46] as Vector3Tuple, x: 0, rotation: [0, 0, 0] as Vector3Tuple, size: 1 },
+    { name: 'Cobalt', color: [0.22, 0.48, 0.96] as Vector3Tuple, x: 2.8, rotation: [0, 0, 0] as Vector3Tuple, size: 1 }
   ]);
   let selected = $state(0);
   let hovered = $state<number | null>(null);
@@ -14,8 +14,8 @@
   let height = $state(0);
   const compact = $derived(width > 0 && width < 600);
 
-  function reset(object: { angle: number; size: number }) {
-    object.angle = 0;
+  function reset(object: { rotation: Vector3Tuple; size: number }) {
+    object.rotation[1] = 0;
     object.size = 1;
   }
 </script>
@@ -48,13 +48,13 @@
     {#each objects as object, index (object.name)}
       <mesh
         position={[object.x, object.size * 0.75 - 0.15, 0]}
-        rotation={[0, object.angle * Math.PI / 180, 0]}
+        rotation={object.rotation}
         scale={[object.size * 1.5, object.size * 1.5, object.size * 1.5]}
         onpointerenter={() => hovered = index}
         onpointerleave={() => hovered = null}
         onclick={() => {
           selected = index;
-          object.angle = (object.angle + 15) % 360;
+          object.rotation[1] = (object.rotation[1] + Math.PI / 12) % (Math.PI * 2);
         }}
         ondblclick={() => reset(object)}
         oncontextmenu={(event) => {

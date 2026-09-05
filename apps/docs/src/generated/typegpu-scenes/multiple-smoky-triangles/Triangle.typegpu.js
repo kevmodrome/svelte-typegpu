@@ -4,6 +4,7 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
+import * as TypeGpuAttributeValues from 'svelte-typegpu/internal/attribute-values';
 import { smokyTriangleMaterialFragment } from './smoky-triangle-material.js';
 import { triangleBounds, triangleVertices } from './triangle-geometry.js';
 
@@ -13,6 +14,8 @@ var root_2 = $.from_tree([['mesh', null, ['bufferGeometry'],,]], 4);
 
 export default function Triangle_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
+
+	$.push($$props, true);
 
 	let scale = $.prop($$props, 'scale', 19, () => [1, 1, 1]),
 		rotation = $.prop($$props, 'rotation', 19, () => [0, 0, 0]),
@@ -45,16 +48,26 @@ export default function Triangle_typegpu($$anchor, $$props) {
 
 	$.reset(mesh);
 
-	$.template_effect(() => {
-		$.set_attribute(mesh, 'position', $$props.position);
-		$.set_attribute(mesh, 'rotation', rotation());
-		$.set_attribute(mesh, 'scale', scale());
-		$.set_attribute(mesh, 'color', $.get(displayColor));
-		$.set_attribute(bufferGeometry, 'key', `multiple-smoky-triangles:${$$props.id}`);
-		$.set_attribute(bufferGeometry, 'vertices', triangleVertices);
-		$.set_attribute(bufferGeometry, 'bounds', triangleBounds);
-	});
+	$.template_effect(
+		($0, $1, $2, $3, $4) => {
+			$.set_attribute(mesh, 'position', $0);
+			$.set_attribute(mesh, 'rotation', $1);
+			$.set_attribute(mesh, 'scale', $2);
+			$.set_attribute(mesh, 'color', $3);
+			$.set_attribute(bufferGeometry, 'key', `multiple-smoky-triangles:${$$props.id}`);
+			$.set_attribute(bufferGeometry, 'vertices', triangleVertices);
+			$.set_attribute(bufferGeometry, 'bounds', $4);
+		},
+		[
+			() => TypeGpuAttributeValues.value("position", $$props.position),
+			() => TypeGpuAttributeValues.value("rotation", rotation()),
+			() => TypeGpuAttributeValues.value("scale", scale()),
+			() => TypeGpuAttributeValues.value("color", $.get(displayColor)),
+			() => TypeGpuAttributeValues.value("bounds", triangleBounds)
+		]
+	);
 
 	$.append($$anchor, mesh);
+	$.pop();
 	$$pop_renderer();
 }

@@ -4,6 +4,7 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
+import * as TypeGpuAttributeValues from 'svelte-typegpu/internal/attribute-values';
 import ShadowLights from './ShadowLights.typegpu.js';
 import ShadowSubject from './ShadowSubject.typegpu.js';
 
@@ -136,10 +137,16 @@ export default function SimpleShadow_typegpu($$anchor, $$props) {
 
 	$.reset(scene);
 
-	$.template_effect(() => {
-		$.set_attribute(perspectiveCamera, 'position', simpleShadowControls().cameraPosition);
-		$.set_attribute(perspectiveCamera, 'target', simpleShadowControls().cameraTarget);
-	});
+	$.template_effect(
+		($0, $1) => {
+			$.set_attribute(perspectiveCamera, 'position', $0);
+			$.set_attribute(perspectiveCamera, 'target', $1);
+		},
+		[
+			() => TypeGpuAttributeValues.value("position", simpleShadowControls().cameraPosition),
+			() => TypeGpuAttributeValues.value("target", simpleShadowControls().cameraTarget)
+		]
+	);
 
 	$.event('camerachange', controls, function (...$$args) {
 		onCameraChange()?.apply(this, $$args);

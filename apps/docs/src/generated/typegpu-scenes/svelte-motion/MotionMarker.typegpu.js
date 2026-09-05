@@ -4,6 +4,7 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
+import * as TypeGpuAttributeValues from 'svelte-typegpu/internal/attribute-values';
 import { markerFragment } from './marker-fragment.js';
 
 var root = $.from_tree([
@@ -20,6 +21,9 @@ var root = $.from_tree([
 
 export default function MotionMarker_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
+
+	$.push($$props, true);
+
 	let hovered = $.state(false);
 	var group = root();
 	var mesh = $.child(group);
@@ -50,27 +54,33 @@ export default function MotionMarker_typegpu($$anchor, $$props) {
 	$.reset(mesh_2);
 	$.reset(group);
 
-	$.template_effect(() => {
-		$.set_attribute(group, 'position', $$props.position);
-		$.set_attribute(group, 'visible', $$props.visible);
-		$.set_attribute(mesh, 'position', [0, $$props.lift, 0]);
-
-		$.set_attribute(standardMaterial, 'color', $.get(hovered)
-			? [1, 1, 1, 1]
-			: [
-				1 - $$props.appearance * 0.85,
-				0.24 + $$props.appearance * 0.6,
-				0.3 + $$props.appearance * 0.6,
-				1
-			]);
-
-		$.set_attribute(standardMaterial, 'roughness', 0.7 - $$props.appearance * 0.6);
-		$.set_attribute(shaderMaterial, 'fragment', markerFragment);
-		$.set_attribute(shaderMaterial, 'uniforms', { value0: $$props.appearance });
-	});
+	$.template_effect(
+		($0, $1, $2) => {
+			$.set_attribute(group, 'position', $0);
+			$.set_attribute(group, 'visible', $$props.visible);
+			$.set_attribute(mesh, 'position', [0, $$props.lift, 0]);
+			$.set_attribute(standardMaterial, 'color', $1);
+			$.set_attribute(standardMaterial, 'roughness', 0.7 - $$props.appearance * 0.6);
+			$.set_attribute(shaderMaterial, 'fragment', markerFragment);
+			$.set_attribute(shaderMaterial, 'uniforms', $2);
+		},
+		[
+			() => TypeGpuAttributeValues.value("position", $$props.position),
+			() => TypeGpuAttributeValues.value("color", $.get(hovered)
+				? [1, 1, 1, 1]
+				: [
+					1 - $$props.appearance * 0.85,
+					0.24 + $$props.appearance * 0.6,
+					0.3 + $$props.appearance * 0.6,
+					1
+				]),
+			() => TypeGpuAttributeValues.value("uniforms", { value0: $$props.appearance })
+		]
+	);
 
 	$.event('pointerenter', group, () => $.set(hovered, true));
 	$.event('pointerleave', group, () => $.set(hovered, false));
 	$.append($$anchor, group);
+	$.pop();
 	$$pop_renderer();
 }

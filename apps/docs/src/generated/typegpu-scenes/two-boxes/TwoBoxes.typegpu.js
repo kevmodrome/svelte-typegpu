@@ -4,6 +4,7 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
+import * as TypeGpuAttributeValues from 'svelte-typegpu/internal/attribute-values';
 import Floor from './Floor.typegpu.js';
 import SceneBox from './SceneBox.typegpu.js';
 import { boxBounds, leftBoxVertices, rightBoxVertices } from './box-geometry.js';
@@ -114,7 +115,11 @@ export default function TwoBoxes_typegpu($$anchor, $$props) {
 
 	$.reset(group);
 	$.reset(scene);
-	$.template_effect(() => $.set_attribute(group, 'quaternion', $.get(boxRotation)));
+
+	$.template_effect(($0) => $.set_attribute(group, 'quaternion', $0), [
+		() => TypeGpuAttributeValues.value("quaternion", $.get(boxRotation))
+	]);
+
 	$.append($$anchor, scene);
 	$.pop();
 	$$pop_renderer();
