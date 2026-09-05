@@ -60,6 +60,13 @@ by identity so an old load cannot remove a newer same-key controller.
    drawing, hidden/shared retention, resource reuse and disposal. Retain the real
    Tween/Spring cadence matrix. Run full tests/builds and live scene checks.
 
+Integration evidence found an existing unnecessary uniform-buffer replacement
+when a texture changes from loading to ready. Keep the material-owned uniform
+buffer across binding refreshes; rewrite its contents only when the uniform key
+changes. The texture requires a new bind group, not a new uniform buffer. Verify
+shader values updated during loading survive settlement, and prune/dispose still
+destroy each buffer once. Keep this optimization in a separate commit.
+
 ## Risks and decisions
 
 Generation checks alone prevent stale GPU uploads but retain avoidable network

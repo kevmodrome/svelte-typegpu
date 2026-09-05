@@ -9,7 +9,8 @@ import {
   type TgpuFixedSampler,
   type TgpuRoot,
   type TgpuTexture,
-  type TgpuVertexLayout
+  type TgpuVertexLayout,
+  type UniformFlag
 } from 'typegpu';
 import { DEFAULT_SAMPLER, textureKeyFor } from './material-descriptors';
 import { createMeshPipeline } from './typegpu-pipeline';
@@ -78,7 +79,7 @@ export interface TypeGpuMaterialResource {
   textureKey: string;
   samplerKey: string;
   uniformKey: string;
-  uniformBuffer: TgpuBuffer<typeof materialBindGroupLayout.entries.uniforms.uniform>;
+  uniformBuffer: TgpuBuffer<typeof materialBindGroupLayout.entries.uniforms.uniform> & UniformFlag;
   bindGroup: TgpuBindGroup<typeof materialBindGroupLayout.entries>;
   status: TypeGpuTextureResource['status'];
 }
@@ -432,11 +433,11 @@ export class MaterialResourceCache {
     }
 
     const root = this.root;
-    const uniforms = root
+    const uniforms = existing?.uniformBuffer ?? root
       .createBuffer(materialBindGroupLayout.entries.uniforms.uniform)
       .$usage('uniform')
       .$name(`TypeGPU material uniforms ${key}`);
-    uniforms.write(packMaterialUniforms(material));
+    if (!existing || existing.uniformKey !== uniformKey) uniforms.write(packMaterialUniforms(material));
     const resource = {
       key,
       textureKey: textureResource.key,
@@ -451,7 +452,6 @@ export class MaterialResourceCache {
       status: textureResource.status
     };
 
-    existing?.uniformBuffer.destroy();
     this.#resources.set(key, resource);
     return resource;
   }

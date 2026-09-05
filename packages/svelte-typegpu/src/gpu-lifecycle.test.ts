@@ -92,6 +92,107 @@ afterEach(() => {
 });
 
 describe('GPU resource and frame lifecycle', () => {
+  it.each([60, 120, 144].flatMap(hz => ['demand', 'manual'].flatMap(frameloop =>
+    [false, true].map(settleFirst => ({ hz, frameloop: frameloop as 'demand' | 'manual', settleFirst })))))
+    ('owns conditional texture loads at $hz Hz ($frameloop, settlement first: $settleFirst)', async ({ hz, frameloop, settleFirst }) => {
+    const clock = optionClock(hz);
+    const { renderer, root: gpu, buffers, submissions } = await setupRenderer(frameloop);
+    const requests: { signal: AbortSignal; resolve(value: unknown): void }[] = [];
+    vi.stubGlobal('fetch', vi.fn((_url, options) => new Promise(resolve => {
+      requests.push({ signal: options.signal, resolve });
+    })));
+    const close = vi.fn();
+    vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 8, height: 4, close })));
+    const Scene = compileTypeGpuSource<{ configure(values: Record<string, unknown>): void }>(`
+      <script>
+        let controls = $state({ first: true, second: true, visible: true, src: '/shared.png' });
+        export function configure(values) { Object.assign(controls, values); }
+      </script>
+      <scene>
+        <mesh position={[10, 0, 0]}><boxGeometry /><standardMaterial /></mesh>
+        <group visible={controls.visible}>
+          {#if controls.first}<mesh><boxGeometry /><standardMaterial map={controls.src} /></mesh>{/if}
+          {#if controls.second}<mesh position={[2, 0, 0]}><boxGeometry /><standardMaterial map={controls.src} /></mesh>{/if}
+        </group>
+      </scene>
+    `);
+    const root = createFragment();
+    const runtime = createTypeGpuRuntimeForTest(root, new EventTarget() as HTMLCanvasElement, renderer);
+    root.runtime = runtime;
+    const instance = mount(Scene, { renderer: sceneRenderer, target: root });
+    async function flush() { flushSync(); for (let i = 0; i < 12; i++) await Promise.resolve(); }
+    async function settle() { await flush(); for (let i = 0; i < 3; i++) { clock.step(); await flush(); } }
+    function finish(index: number) { requests[index].resolve({ ok: true, blob: async () => new Blob(['png']) }); }
+    try {
+      await settle();
+      if (frameloop === 'manual') renderer.renderFrame(clock.now);
+      expect(clock.pending.size).toBe(0);
+      expect(requests).toHaveLength(1);
+      const initialTextures = gpu.createTexture.mock.calls.length;
+      flushSync(() => instance.configure({ visible: false }));
+      await settle();
+      expect(requests[0].signal.aborted).toBe(false);
+      flushSync(() => instance.configure({ visible: true, first: false }));
+      await settle();
+      expect(requests).toHaveLength(1);
+      expect(requests[0].signal.aborted).toBe(false);
+      expect(gpu.createTexture).toHaveBeenCalledTimes(initialTextures);
+      flushSync(() => instance.configure({ second: false }));
+      await settle();
+      expect(requests[0].signal.aborted).toBe(true);
+      flushSync(() => instance.configure({ first: true }));
+      await settle();
+      expect(requests).toHaveLength(2);
+      const frames = submissions.length;
+      finish(0);
+      await settle();
+      expect(createImageBitmap).not.toHaveBeenCalled();
+      expect(submissions).toHaveLength(frames);
+      expect(requests[1].signal.aborted).toBe(false);
+      const buffersBefore = gpu.createBuffer.mock.calls.length;
+      const bindingsBefore = gpu.createBindGroup.mock.calls.length;
+      const pipelinesBefore = vi.mocked(createMeshPipeline).mock.calls.length;
+      for (const buffer of buffers) buffer.write.mockClear();
+      renderer.invalidate();
+      if (settleFirst) { finish(1); await flush(); clock.step(); }
+      else { clock.step(); finish(1); await flush(); }
+      await settle();
+      if (frameloop === 'manual') {
+        expect(clock.request).not.toHaveBeenCalled();
+        expect(submissions).toHaveLength(frames);
+        renderer.renderFrame(clock.now);
+        expect(submissions).toHaveLength(frames + 1);
+      } else {
+        expect(submissions.length - frames).toBeGreaterThanOrEqual(1);
+        expect(submissions.length - frames).toBeLessThanOrEqual(2);
+      }
+      expect(clock.pending.size).toBe(0);
+      expect(close).toHaveBeenCalledOnce();
+      expect(gpu.createTexture).toHaveBeenCalledTimes(initialTextures + 1);
+      expect(gpu.createBuffer).toHaveBeenCalledTimes(buffersBefore);
+      expect(gpu.createBindGroup).toHaveBeenCalledTimes(bindingsBefore + 1);
+      expect(createMeshPipeline).toHaveBeenCalledTimes(pipelinesBefore);
+      for (const buffer of buffers.filter(buffer => buffer.label.endsWith('instances'))) {
+        expect(buffer.write).not.toHaveBeenCalled();
+      }
+      flushSync(() => instance.configure({ src: '/unmount.png' }));
+      await flush();
+      expect(requests).toHaveLength(3);
+    } finally {
+      await unmount(instance);
+      runtime.dispose();
+    }
+    expect(requests.at(-1)!.signal.aborted).toBe(true);
+    const allocations = gpu.createTexture.mock.calls.length;
+    const frames = submissions.length;
+    finish(2);
+    await settle();
+    expect(gpu.createTexture).toHaveBeenCalledTimes(allocations);
+    expect(submissions).toHaveLength(frames);
+    expect(clock.pending.size).toBe(0);
+    expect(gpu.destroy).toHaveBeenCalledOnce();
+  });
+
   describe('live renderer options', () => {
     const modes = ['always', 'demand', 'manual'] as const;
     it.each([60, 120, 144].flatMap(hz => modes.flatMap(from => modes.map(to => ({ hz, from, to })))))
@@ -1775,6 +1876,42 @@ describe('GPU resource and frame lifecycle', () => {
     materials.dispose();
     expect(second.destroy).toHaveBeenCalledOnce();
     textures.dispose();
+  });
+
+  it.each(['standard', 'shader'].flatMap(kind => [false, true].map(failed => ({ kind: kind as 'standard' | 'shader', failed }))))
+    ('retains $kind uniform contents and ownership across texture settlement (failed: $failed)', async ({ kind, failed }) => {
+    const { root, buffers } = fakeRoot();
+    const textures = new TextureResourceCache(root as never);
+    const samplers = new SamplerResourceCache(root as never);
+    const materials = new MaterialResourceCache(root as never, textures, samplers);
+    let resolve!: (response: unknown) => void;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(yes => { resolve = yes; })));
+    vi.stubGlobal('createImageBitmap', vi.fn(async () => ({ width: 4, height: 4, close() {} })));
+    const fragment = tgpu.fragmentFn({ out: d.vec4f })(() => d.vec4f(1));
+    const descriptor = (value: number) => createMaterialDescriptor(kind, {
+      map: '/material.png', uniformOwner: 'fixture', fragment, uniforms: { value0: [value, 0, 0, 1] }
+    });
+    const loading = materials.getOrCreate(descriptor(1));
+    const buffer = buffers.at(-1)!;
+    buffer.write.mockClear();
+    const changed = materials.getOrCreate(descriptor(2));
+    expect(changed.uniformBuffer).toBe(loading.uniformBuffer);
+    expect(changed.bindGroup).toBe(loading.bindGroup);
+    expect(buffer.write).toHaveBeenCalledTimes(kind === 'shader' ? 1 : 0);
+    resolve({ ok: !failed, status: failed ? 404 : 200, blob: async () => new Blob(['png']) });
+    for (let i = 0; i < 12; i++) await Promise.resolve();
+    const ready = materials.getOrCreate(descriptor(3));
+    expect(ready.status).toBe(failed ? 'failed' : 'ready');
+    expect(ready.uniformBuffer).toBe(loading.uniformBuffer);
+    expect(ready.bindGroup).not.toBe(loading.bindGroup);
+    expect(root.createBuffer).toHaveBeenCalledOnce();
+    expect(buffer.write).toHaveBeenCalledTimes(kind === 'shader' ? 2 : 0);
+    expect(buffer.data[0]).toBe(kind === 'shader' ? 3 : 0);
+    expect(materials.getOrCreate(descriptor(3))).toBe(ready);
+    expect(buffer.destroy).not.toHaveBeenCalled();
+    materials.prune(new Set());
+    materials.dispose(); textures.dispose();
+    expect(buffer.destroy).toHaveBeenCalledOnce();
   });
 });
 
