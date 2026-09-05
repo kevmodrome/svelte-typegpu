@@ -7,6 +7,7 @@ export const BUBBLING_NODE_EVENTS = new Set([
   'wheel',
   'pointerdown',
   'pointerup',
+  'pointercancel',
   'pointermove',
   'pointerover',
   'pointerout',

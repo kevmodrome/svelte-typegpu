@@ -188,9 +188,11 @@ function createRuntime(
       : undefined
   });
   let activeDrag: ActiveObjectDrag | null = null;
-  let objectDragWindowListenersAttached = false;
+  const pendingPointers = new Map<number, TypeGpuInteractionHit>();
+  let hasPointerCancellation = false;
+  let pointerWindowListening = false;
   let suppressNextDragClick = false;
-  const objectDragWindowTarget = windowTargetForObjectDrag(options.windowTarget);
+  const pointerWindowTarget = windowTargetForScenePointers(options.windowTarget);
   const cameraInteraction = createCameraInteractionController({
     canvas,
     renderer: gpu,
@@ -259,7 +261,19 @@ function createRuntime(
     });
     gpu.setScene(scene);
     if (scene.interaction !== currentScene?.interaction) {
-      setWheelListening(scene.interaction.targets.some((target) => target.handlers.has('wheel')));
+      const targets = scene.interaction.targets;
+      setWheelListening(targets.some((target) => target.handlers.has('wheel')));
+      hasPointerCancellation = targets.some(target => target.handlers.has('pointercancel'));
+      for (const [id, hit] of pendingPointers) {
+        if (!targets.some(target => sameInteractionTarget(hit.target, target) && target.handlers.has('pointercancel'))) {
+          pendingPointers.delete(id);
+        }
+      }
+      const drag = activeDrag;
+      if (drag && !targets.some(target => sameInteractionTarget(drag.target, target) && hasDragHandler(target))) {
+        releaseActiveDrag(drag);
+      }
+      reconcilePointerWindowListeners();
     }
     cameraInteraction.reconcile(scene);
     currentScene = scene;
@@ -302,17 +316,30 @@ function createRuntime(
 
   function dispatchCanvasPointerDown(event: PointerEvent) {
     const pointerHit = pickCanvasTarget(event, 'pointerdown');
-    if (pointerHit) {
-      dispatchNodeEvent(pointerHit.node, 'pointerdown', {
-        originalEvent: event,
-        detail: {
-          instanceId: pointerHit.instanceId,
-          point: pointerHit.point
-        }
-      });
+    const pointerId = pointerIdFromEvent(event);
+    const cancelCandidate = pointerHit ?? (hasPointerCancellation ? pickCanvasTarget(event, 'pointercancel') : null);
+    const cancelHit = cancelCandidate?.target.handlers.has('pointercancel') ? cancelCandidate : null;
+    pendingPointers.delete(pointerId);
+    if (cancelHit) pendingPointers.set(pointerId, cancelHit);
+    reconcilePointerWindowListeners();
+    try {
+      if (pointerHit) {
+        dispatchNodeEvent(pointerHit.node, 'pointerdown', {
+          originalEvent: event,
+          detail: {
+            instanceId: pointerHit.instanceId,
+            point: pointerHit.point
+          }
+        });
+      }
+    } catch (error) {
+      if (pendingPointers.get(pointerId) === cancelHit) pendingPointers.delete(pointerId);
+      reconcilePointerWindowListeners();
+      throw error;
     }
 
     if (disposed || activeDrag) return;
+    if (cancelHit && pendingPointers.get(pointerId) !== cancelHit) return;
 
     const hit = pickCanvasTarget(event);
     if (!hit || !hasDragHandler(hit.target)) return;
@@ -320,12 +347,15 @@ function createRuntime(
 
     event.preventDefault();
     const drag = activeDrag = createActiveDrag(hit, event);
+    if (hit.target.handlers.has('pointercancel')) pendingPointers.set(pointerId, hit);
     try {
       capturePointer(canvas, drag.pointerId);
-      attachObjectDragWindowListeners();
+      reconcilePointerWindowListeners();
       dispatchDragEvent('dragstart', event);
     } catch (error) {
+      if (pendingPointers.get(pointerId) === hit || pendingPointers.get(pointerId) === cancelHit) pendingPointers.delete(pointerId);
       releaseActiveDrag(drag);
+      reconcilePointerWindowListeners();
       throw error;
     }
   }
@@ -353,6 +383,8 @@ function createRuntime(
   }
 
   function dispatchCanvasPointerUp(event: PointerEvent) {
+    pendingPointers.delete(pointerIdFromEvent(event));
+    reconcilePointerWindowListeners();
     if (finishActiveDrag(event, false)) return;
 
     const hit = pickCanvasTarget(event, 'pointerup');
@@ -368,19 +400,35 @@ function createRuntime(
   }
 
   function dispatchCanvasPointerCancel(event: PointerEvent) {
-    finishActiveDrag(event, true);
+    const hit = pendingPointers.get(pointerIdFromEvent(event));
+    pendingPointers.delete(pointerIdFromEvent(event));
+    const drag = takeActiveDrag(event);
+    reconcilePointerWindowListeners();
+    try {
+      if (hit && !disposed) dispatchNodeEvent(hit.node, 'pointercancel', {
+        originalEvent: event, cancelable: false,
+        detail: { instanceId: hit.instanceId, point: hit.point }
+      });
+    } finally {
+      if (drag && !disposed) dispatchDragEventFor(drag, 'dragend', event, true);
+    }
   }
 
   function dispatchCanvasLostPointerCapture(event: PointerEvent) {
+    pendingPointers.delete(pointerIdFromEvent(event));
+    reconcilePointerWindowListeners();
     finishActiveDrag(event, true, { releasePointerCapture: false });
   }
 
   function dispatchWindowPointerUp(event: Event) {
+    if (event.target === canvas) return;
+    pendingPointers.delete(pointerIdFromEvent(event as PointerEvent));
+    reconcilePointerWindowListeners();
     finishActiveDrag(event as PointerEvent, false);
   }
 
   function dispatchWindowPointerCancel(event: Event) {
-    finishActiveDrag(event as PointerEvent, true);
+    if (event.target !== canvas) dispatchCanvasPointerCancel(event as PointerEvent);
   }
 
   function updateHoveredTarget(hit: TypeGpuInteractionHit | null, event: PointerEvent) {
@@ -494,17 +542,16 @@ function createRuntime(
   function releaseActiveDrag(drag: ActiveObjectDrag, releaseCapture = true) {
     if (activeDrag !== drag) return;
     activeDrag = null;
-    detachObjectDragWindowListeners();
+    reconcilePointerWindowListeners();
     if (releaseCapture) releasePointer(canvas, drag.pointerId);
   }
 
-  function finishActiveDrag(
+  function takeActiveDrag(
     event: PointerEvent,
-    cancelled: boolean,
-    options: { releasePointerCapture?: boolean } = {}
-  ): boolean {
+    releaseCapture = true
+  ): ActiveObjectDrag | null {
     const drag = activeDrag;
-    if (!drag || !samePointer(event, drag)) return false;
+    if (!drag || !samePointer(event, drag)) return null;
 
     event.preventDefault();
     const endCanvas = canvasPointFromEvent(canvas, event);
@@ -515,7 +562,17 @@ function createRuntime(
     suppressNextDragClick = suppressNextDragClick || moved;
 
     // Terminal callbacks may dispose the runtime or start a replacement gesture.
-    releaseActiveDrag(drag, options.releasePointerCapture !== false);
+    releaseActiveDrag(drag, releaseCapture);
+    return drag;
+  }
+
+  function finishActiveDrag(
+    event: PointerEvent,
+    cancelled: boolean,
+    options: { releasePointerCapture?: boolean } = {}
+  ): boolean {
+    const drag = takeActiveDrag(event, options.releasePointerCapture !== false);
+    if (!drag) return false;
     if (!cancelled) dispatchCapturedPointerUp(drag, event);
     if (!disposed) dispatchDragEventFor(drag, 'dragend', event, cancelled);
 
@@ -583,29 +640,19 @@ function createRuntime(
   canvas.addEventListener('pointerleave', dispatchCanvasPointerExit);
   canvas.addEventListener('pointerout', dispatchCanvasPointerExit);
 
-  const objectDragWindowListeners: ListenerRegistration[] = [
+  const pointerWindowListeners: ListenerRegistration[] = [
     ['pointerup', dispatchWindowPointerUp],
     ['pointercancel', dispatchWindowPointerCancel]
   ];
 
-  function attachObjectDragWindowListeners(): void {
-    if (!objectDragWindowTarget || objectDragWindowListenersAttached) return;
-
-    for (const [type, listener] of objectDragWindowListeners) {
-      objectDragWindowTarget.addEventListener(type, listener);
+  function reconcilePointerWindowListeners(): void {
+    const listening = !disposed && (activeDrag !== null || pendingPointers.size > 0);
+    if (!pointerWindowTarget || pointerWindowListening === listening) return;
+    pointerWindowListening = listening;
+    for (const [type, listener] of pointerWindowListeners) {
+      if (listening) pointerWindowTarget.addEventListener(type, listener);
+      else pointerWindowTarget.removeEventListener(type, listener);
     }
-
-    objectDragWindowListenersAttached = true;
-  }
-
-  function detachObjectDragWindowListeners(): void {
-    if (!objectDragWindowTarget || !objectDragWindowListenersAttached) return;
-
-    for (const [type, listener] of objectDragWindowListeners) {
-      objectDragWindowTarget.removeEventListener(type, listener);
-    }
-
-    objectDragWindowListenersAttached = false;
   }
 
   return {
@@ -638,8 +685,9 @@ function createRuntime(
       canvas.removeEventListener('lostpointercapture', dispatchCanvasLostPointerCapture);
       canvas.removeEventListener('pointerleave', dispatchCanvasPointerExit);
       canvas.removeEventListener('pointerout', dispatchCanvasPointerExit);
-      detachObjectDragWindowListeners();
+      pendingPointers.clear();
       if (activeDrag) releaseActiveDrag(activeDrag);
+      reconcilePointerWindowListeners();
       gpu.dispose();
     }
   };
@@ -784,7 +832,7 @@ function releasePointer(canvas: HTMLCanvasElement, pointerId: number): void {
   }
 }
 
-function windowTargetForObjectDrag(windowTarget?: ListenerTarget): ListenerTarget | null {
+function windowTargetForScenePointers(windowTarget?: ListenerTarget): ListenerTarget | null {
   if (windowTarget) return windowTarget;
 
   return typeof globalThis.window === 'undefined' ? null : globalThis.window;

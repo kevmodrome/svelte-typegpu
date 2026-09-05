@@ -95,6 +95,46 @@ function hoverFixture() {
 }
 
 describe('composable canvas events', () => {
+  it('routes a retained cancellation sequence through its current ancestry after reparenting', async () => {
+    const { scene, group, left, canvas, runtime } = hoverFixture();
+    const oldParent = vi.fn();
+    const newParent = vi.fn();
+    const other = createElement('group');
+    addEventListener(group, 'pointercancel', oldParent);
+    addEventListener(other, 'pointercancel', newParent);
+    insert(scene, other, null);
+    await Promise.resolve();
+    canvas.dispatch<PointerEvent>('pointerdown', { pointerId: 1, offsetX: 30, offsetY: 50 });
+    insert(other, left, null);
+    await Promise.resolve();
+    canvas.dispatch<PointerEvent>('pointercancel', { pointerId: 1, offsetX: 70, offsetY: 50 });
+    expect(oldParent).not.toHaveBeenCalled();
+    expect(newParent).toHaveBeenCalledOnce();
+    expect(newParent.mock.calls[0][0].target).toBe(left);
+    runtime.dispose();
+  });
+
+  it.each(['throw', 'dispose'])('cleans a cancelled drag when its pointercancel callback %ss', async operation => {
+    const { left, canvas, runtime } = hoverFixture();
+    const ended = vi.fn();
+    addEventListener(left, 'dragend', ended);
+    addEventListener(left, 'pointercancel', () => {
+      if (operation === 'throw') throw new Error('cancel failed');
+      runtime.dispose();
+    });
+    await Promise.resolve();
+    const pointer = { pointerId: 1, offsetX: 30, offsetY: 50, button: 0 };
+    canvas.dispatch<PointerEvent>('pointerdown', pointer);
+    const cancel = () => canvas.dispatch<PointerEvent>('pointercancel', pointer);
+    if (operation === 'throw') expect(cancel).toThrow('cancel failed');
+    else expect(cancel).not.toThrow();
+    expect(canvas.releasePointerCapture).toHaveBeenCalledExactlyOnceWith(1);
+    expect(ended).toHaveBeenCalledTimes(operation === 'throw' ? 1 : 0);
+    expect(cancel).not.toThrow();
+    expect(canvas.releasePointerCapture).toHaveBeenCalledOnce();
+    runtime.dispose();
+  });
+
   it.each(['pointerdown', 'dragstart', 'dragmove', 'pointerup', 'dragend'])(
     'releases drag ownership when a %s handler disposes the runtime', async type => {
       const { left, canvas, runtime } = hoverFixture();
