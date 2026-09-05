@@ -53,6 +53,12 @@ Cancellation and scene/native event separation stay unchanged. Removed scene nod
 remain outside picking; ordinary listeners on retained detached nodes follow the
 existing lifetime contract.
 
+Follow-up found during review: `NodeEvent.invoke` also needs to call ordinary
+function listeners with `this = currentTarget`. Export `TypeGpuNodeEventHandler`
+with a typed `this` parameter, and have `onNodeEvent` preserve that receiver through
+its independent wrapper. This requires no extra registrations or per-frame work;
+verify both direct subscriptions and real compiled Svelte function handlers.
+
 ## 5. Vertical slices and verification
 
 1. Protocol through actual compiled Svelte: capture order, phase identity, capture-only
@@ -63,6 +69,12 @@ existing lifetime contract.
    uploads and GPU reuse. Check demand idle/disposal; update docs and commit.
 3. Live browser hover/click regression check when computer access is available.
    Current Mac lock is a verification limitation, not a reason to skip automated work.
+
+Verification result: all 594 workspace tests pass (523 renderer, 42 docs,
+24 example, 5 workspace). The 24-case real Tween/Spring matrix covers both listener
+phases, both RAF orders, and 60/120/144 Hz. Renderer typechecking and both app
+production builds pass. Live browser checks remain pending because computer-use
+still reports the Mac locked; the preview server is restored on port 3334.
 
 ## 6. Risks and unresolved decisions
 

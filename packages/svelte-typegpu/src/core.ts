@@ -1,9 +1,14 @@
 import { Dirty, mergeDirty } from './dirty';
-import { captureOption, type TypeGpuEventListenerOptions, type TypeGpuNodeEvent } from './node-events';
+import {
+  captureOption,
+  type TypeGpuEventListenerOptions,
+  type TypeGpuNodeEventHandler
+} from './node-events';
 export {
   dispatchNodeEvent,
   type TypeGpuEventListenerOptions,
   type TypeGpuNodeEvent,
+  type TypeGpuNodeEventHandler,
   type TypeGpuNodeEventInit
 } from './node-events';
 import {
@@ -31,8 +36,8 @@ export interface TypeGpuNode {
   nextSibling: TypeGpuNode | null;
   children: TypeGpuNode[];
   attributes: Record<string, unknown>;
-  listeners: Map<string, Set<(event: TypeGpuNodeEvent) => void>>;
-  captureListeners?: Map<string, Set<(event: TypeGpuNodeEvent) => void>>;
+  listeners: Map<string, Set<TypeGpuNodeEventHandler>>;
+  captureListeners?: Map<string, Set<TypeGpuNodeEventHandler>>;
   runtime?: TypeGpuRuntime;
   value?: string;
 }
@@ -181,7 +186,7 @@ export function getNextSibling(node: TypeGpuNode): TypeGpuNode | null {
 export function addEventListener(
   node: TypeGpuNode,
   type: string,
-  handler: (event: TypeGpuNodeEvent) => void,
+  handler: TypeGpuNodeEventHandler,
   options?: TypeGpuEventListenerOptions
 ): void {
   const registry = captureOption(options)
@@ -198,7 +203,7 @@ export function addEventListener(
 export function removeEventListener(
   node: TypeGpuNode,
   type: string,
-  handler: (event: TypeGpuNodeEvent) => void,
+  handler: TypeGpuNodeEventHandler,
   options?: TypeGpuEventListenerOptions
 ): void {
   const capture = captureOption(options);

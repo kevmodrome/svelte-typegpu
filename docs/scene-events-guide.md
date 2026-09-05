@@ -66,6 +66,9 @@ Handlers receive `TypeGpuNodeEvent`, not a DOM `PointerEvent`:
   is the node whose boundary changed.
 - `currentTarget` is the node whose listener is running; it becomes `null` after
   dispatch. Save it synchronously if needed in asynchronous work.
+- An ordinary function handler's `this` is the same scene node as `currentTarget`.
+  Arrow functions retain their lexical `this`. Use `TypeGpuNodeEventHandler` to
+  type reusable callbacks, including their scene-node receiver.
 - `eventPhase` is 1 for ancestor capture, 2 at the target (capture and ordinary
   listeners), 3 for ancestor bubbling, and 0 after dispatch.
 - `relatedTarget` is the previous/next picked node for hover transitions, or null.

@@ -16,6 +16,7 @@ export const POINTER_NODE_EVENTS = new Set([
 ]);
 
 export type TypeGpuEventListenerOptions = boolean | { capture?: boolean };
+export type TypeGpuNodeEventHandler = (this: TypeGpuNode, event: TypeGpuNodeEvent) => void;
 
 export function captureOption(options: TypeGpuEventListenerOptions = false): boolean {
   return typeof options === 'boolean' ? options : options.capture === true;
@@ -93,7 +94,7 @@ class NodeEvent implements TypeGpuNodeEvent {
     this.eventPhase = current === this.target ? 2 : capture ? 1 : 3;
     for (const handler of [...listeners]) {
       if (!listeners.has(handler)) continue;
-      handler(this);
+      handler.call(current, this);
       if (this.immediatePropagationStopped) break;
     }
   }

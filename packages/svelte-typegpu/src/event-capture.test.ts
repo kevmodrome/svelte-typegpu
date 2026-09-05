@@ -26,6 +26,48 @@ function tree() {
 }
 
 describe('scene capture events', () => {
+  it.each([false, true])('binds callback this to the current node (capture: %s)', (capture) => {
+    const { group, mesh } = tree();
+    const calls: unknown[] = [];
+    function handler(this: unknown, event: TypeGpuNodeEvent) {
+      calls.push(this);
+      expect(this).toBe(event.currentTarget);
+    }
+    addEventListener(mesh, 'click', handler, capture);
+    const off = onNodeEvent(group, 'click', handler, { capture });
+    dispatchNodeEvent(mesh, 'click');
+    expect(calls).toEqual(capture ? [group, mesh] : [mesh, group]);
+    off();
+  });
+
+  it('preserves callback this through compiled Svelte function handlers', async () => {
+    const Scene = compileTypeGpuSource(`
+      <script>
+        let { record } = $props();
+        function handler(event) {
+          record(this === event.currentTarget, event.currentTarget.name, event.eventPhase);
+        }
+      </script>
+      <scene onclickcapture={handler}>
+        <mesh onclick={handler}><boxGeometry /></mesh>
+      </scene>
+    `);
+    const root = createFragment();
+    const record = vi.fn();
+    const instance = mount(Scene, { renderer, target: root, props: { record } });
+    try {
+      flushSync();
+      const mesh = createSceneState(root).interaction.targets[0].node;
+      dispatchNodeEvent(mesh, 'click');
+      expect(record.mock.calls).toEqual([
+        [true, 'scene', 1],
+        [true, 'mesh', 2]
+      ]);
+    } finally {
+      await unmount(instance);
+    }
+  });
+
   it('uses one event for capture, target, and bubble phases in order', () => {
     const { scene, group, mesh } = tree();
     const calls: unknown[] = [];
