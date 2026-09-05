@@ -95,3 +95,39 @@ remains separate. No saved-data migration is needed; rollback removes additive
 cancellation support while retaining the independently useful drag teardown fix.
 
 The non-cancelable event follows [W3C pointercancel](https://www.w3.org/TR/pointerevents3/#the-pointercancel-event).
+
+## Implementation notes
+
+- `f2349d2` fixes stale drag teardown independently. Eight regression cases cover
+  disposal from down/start/move/up/end, starting a replacement in dragend, a failing
+  dragstart and preventing a stale move from overwriting replacement coordinates.
+- A captured object drag takes cancellation ownership when its target has an
+  eligible handler. Ordinary pointerdown picking otherwise retains precedence.
+- Terminal canvas events are handled once; their window bubble is ignored so a
+  callback-created replacement sequence with the same pointer ID survives.
+- Pending records and active drags are pruned on interaction membership changes.
+  The cadence fixture now supplies an EventTarget-backed window instead of a
+  devicePixelRatio-only object, so temporary pointer subscriptions are exercised.
+
+## Verification results
+
+- All 1,061 workspace tests pass: 975 renderer, 47 docs, 34 example and 5 workspace.
+  The cancellation slice adds 19 compiled ownership cases, three runtime
+  reparenting/error/disposal cases and nine cadence cases, in addition to the
+  eight prerequisite drag lifecycle cases.
+- The 60/120/144 Hz input matrix delivers one frame and one changed 96-byte
+  instance per active tick, in either input/renderer order. Buffers, bind groups
+  and pipelines are reused; demand mode settles, manual mode never schedules
+  RAF and disposal leaves no pending work. The real Tween/Spring matrix also
+  includes inherited pointercancel handlers and unchanged interaction/listener
+  identity during motion.
+- Production builds and renderer TypeScript pass; Svelte checking reports zero
+  diagnostics. The DOM-only autofixer's GPU-tag HTML/a11y warnings do not apply
+  to custom scene nodes. No DOM roles or actions were added to suppress them.
+- A fresh live Two Boxes page rendered nonblank, responded to camera dragging
+  and reported no console warnings/errors. Its FPS display remained around 120;
+  this is not an independent physical-refresh or GPU-throughput measurement.
+  OS-driven cancellation was not manually reproduced; native PointerEvent
+  cancellation and fallback ownership are covered by the compiled tests.
+- Vite retains its 500 kB bundle warning for the 501.64 kB main example chunk.
+  The warning threshold was not changed.

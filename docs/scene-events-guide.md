@@ -28,7 +28,7 @@ to the event path. The Svelte Motion example uses one group click handler for
 ## Events and propagation
 
 `click`, `dblclick`, `contextmenu`, `wheel`, `pointerdown`, `pointerup`, `pointermove`,
-`pointerover`, `pointerout`,
+`pointerover`, `pointerout`, `pointercancel`,
 `dragstart`, `dragmove`, and `dragend` bubble from the picked mesh/model through scene-node ancestors. A parent
 handler makes eligible descendant geometry pickable, even without mesh listeners.
 Picking still chooses the nearest eligible geometry for the event, not every hit
@@ -96,6 +96,57 @@ the same as [Svelte's capture event attributes](https://svelte.dev/docs/svelte/v
 For an attachment subscription, pass `{ capture: true }` as the fourth argument
 to `onNodeEvent`. Its unsubscribe function retains the original capture flag.
 Only `capture` is supported in listener options, not DOM once/passive/signal options.
+
+## Interrupted presses
+
+Use `onpointercancel` to reset state when the browser interrupts a pointer sequence:
+
+```svelte
+<script>
+  let pressed = $state(false);
+</script>
+
+<mesh
+  onpointerdown={() => pressed = true}
+  onpointerup={() => pressed = false}
+  onpointerleave={() => pressed = false}
+  onpointercancel={() => pressed = false}
+>
+  <boxGeometry />
+  <standardMaterial color={pressed ? [1, 0.6, 0.2] : [0.3, 0.7, 0.5]} />
+</mesh>
+```
+
+Register cancellation handlers before the press. The runtime retains one eligible
+hit per native pointer ID; cancellation goes to that original object even when
+its geometry moves or the input's coordinates are elsewhere. A registered
+pointerdown recipient takes precedence; without one, a cancellation-only handler
+can make geometry eligible. A down recipient without cancellation handlers does
+not redirect cancellation to another object behind it. An object drag that captures
+the pointer owns cancellation when that dragged object has a handler.
+
+Cancellation supports normal capture and bubbling through the node's current
+ancestry, including callback replacement during the press. `detail` carries the
+original instance ID and down hit point; current native coordinates and pointer ID
+remain on `originalEvent`. It is non-cancelable and does not synthesize pointerup
+or a click. This follows the [native pointercancel contract](https://www.w3.org/TR/pointerevents3/#the-pointercancel-event).
+
+Up/cancel on either canvas or window releases the tracked sequence. Removing,
+hiding or opting out the geometry, removing the cancellation registration, lost
+capture and root disposal release tracking without synthesizing cancellation.
+Lost capture still ends an object drag with `detail.cancelled = true`; it is not
+reported as a fabricated native pointercancel. An actual cancellation emits
+pointercancel before cancelled dragend. Ownership and native drag capture are
+released before terminal callbacks, so reentrancy and disposal cannot leave an
+old drag active. Disposal suppresses any remaining runtime notifications.
+
+This is not general pointer capture: ordinary pointerup still uses picking, and
+the example also clears pressed appearance when leaving the object. Tracking
+starts only for registered cancellation handlers, and temporary window listeners
+are shared with active object drags. Membership cleanup runs only when the
+interaction index changes, not on every motion update or frame.
+
+## Event object
 
 Handlers receive `TypeGpuNodeEvent`, not a DOM `PointerEvent`:
 
@@ -184,6 +235,6 @@ Tests cover compiled-Svelte event props, group boundaries, propagation controls,
 listener changes, reparenting, and disposal. The real Tween/Spring cadence matrix
 runs at synthetic 60/120/144 Hz with both callback orders, asserting targeted
 uploads, shared interaction data, GPU resource reuse, and demand-mode idle.
-The same clocks exercise double-click/context-menu/wheel/over/out-driven state changes in
+The same clocks exercise double-click/context-menu/wheel/over/out/cancel-driven state changes in
 demand and manual modes. A retained wheel subscription adds no per-frame scan or
 listener churn. Event dispatch without reactive changes does not request a frame.

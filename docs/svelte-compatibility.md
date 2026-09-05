@@ -16,6 +16,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | `<svelte:element>` | Dynamic geometry/materials, prop spreads, events, attachment cleanup, and keyed identity tested |
 | Component `$bindable` props and component `bind:this` | Supported and tested |
 | Scene event attributes and `onclickcapture` | Capture/target/bubble ordering, group boundaries, bubbling pointerover/pointerout, double-click/context-menu/wheel, and propagation controls supported |
+| `onpointercancel` | Original pressed-object routing, independent pointer IDs, capture/bubbling, callback replacement and terminal cleanup; no general scene pointer-capture API |
 | `Tween` / `Spring` bound to transforms and material values | Supported; frame delivery tested at 60/120/144 Hz in both RAF callback orders |
 | `{@attach}` | Supported on scene nodes, including reactive replacement and component prop spreads |
 | Scene node references in `$state` | Identity preserved for attachment/event targets, including nested state objects and arrays; node internals remain renderer-owned |
