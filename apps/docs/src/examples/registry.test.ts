@@ -26,6 +26,7 @@ describe('docs example registry', () => {
       'two-boxes',
       'svelte-motion',
       'native-events',
+      'shared-stores',
       'phong-reflection',
       'simple-shadow',
       'disco-shader-pass',
@@ -53,7 +54,7 @@ describe('docs example registry', () => {
       expect(example.code).not.toContain('layoutKey=');
       expect(example.sourceFiles.length).toBe(example.sourceStats.svelteFileCount);
       expect(example.sourceFiles[0]?.filename).toMatch(/\.(svelte|ts)$/);
-      expect(example.sourceFiles[0]?.source).toContain('<scene');
+      expect(example.sourceFiles.some(file => file.source.includes('<scene'))).toBe(true);
       expect(example.sourceFiles[0]?.highlightedCode.flat().some((token) => token.color)).toBe(
         true
       );
@@ -90,6 +91,19 @@ describe('docs example registry', () => {
     expect(example.code).not.toContain('canvasProps');
     expect(example.code).not.toContain('sceneProps');
     expect(example.code).not.toContain('requestAnimationFrame');
+  });
+
+  it('publishes shared stores with native DOM bindings and a dedicated viewport', () => {
+    const example = getExampleBySlug('shared-stores');
+    expect(example.sourceFiles.map(file => file.filename)).toEqual([
+      'SharedStores.svelte', 'StoreViewport.typegpu.svelte'
+    ]);
+    expect(example.sourceFiles[0].source).toContain('const position = writable<Vector3Tuple>');
+    expect(example.sourceFiles[0].source).toContain('bind:value={$position[0]}');
+    expect(example.sourceFiles[1].source).toContain('position={$position}');
+    expect(example.sourceFiles[1].source).toContain('onclick={() => $selected = !$selected}');
+    expect(example.code).not.toContain('requestAnimationFrame');
+    expect(example.code).not.toContain('sceneProps');
   });
 
   it('includes the Disco shader-pass example built from renderer primitives', () => {
@@ -229,12 +243,14 @@ describe('docs example registry', () => {
     expect(getExampleBySlug('unknown').slug).toBe('two-boxes');
   });
 
-  it('points every definition at a real typegpu scene source', () => {
+  it('points every definition at a real entry component with a typegpu scene in its source bundle', () => {
     for (const definition of exampleDefinitions) {
       const source = readFileSync(definition.sourceUrl, 'utf8');
 
-      expect(source).toContain('<scene');
-      expect(source).toContain('<perspectiveCamera');
+      expect(source).toContain('<');
+      const bundle = sourceBundleForSlug(definition.slug);
+      expect(bundle).toContain('<scene');
+      expect(bundle).toContain('<perspectiveCamera');
       expect(definition.sourceFiles[0]?.toString()).toBe(definition.sourceUrl.toString());
       expect(definition.sourceFiles.length).toBeGreaterThan(0);
       expect(definition.typeGpuSourceFiles.every((file) => file.loc > 0)).toBe(true);

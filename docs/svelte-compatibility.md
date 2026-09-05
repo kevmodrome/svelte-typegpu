@@ -129,6 +129,12 @@ and unmounting a component unsubscribes its reads. Shared derived stores keep th
 upstream subscription until their last subscriber leaves. Scope mutable stores to
 the relevant app/component instance rather than sharing server state globally.
 
+The [Shared Stores example](../apps/docs/src/examples/shared-stores/SharedStores.svelte)
+contains the native editor and its dedicated GPU viewport as two ordinary consumer
+files. Its sliders, selection checkbox, mesh click and canvas Escape handler all
+use the same per-instance stores. The generated example is tested in demand and
+manual modes, including exact upload ranges, resource reuse and canvas identity.
+
 ## Dynamic primitives
 
 Use `<svelte:element>` inside a stable mesh when the primitive type is dynamic.

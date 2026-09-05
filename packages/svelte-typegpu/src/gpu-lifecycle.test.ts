@@ -34,6 +34,7 @@ import type { TypeGpuLoadedModel } from './types';
 import SceneHost from './SceneHost.typegpu.svelte';
 import CanvasMotionHost from './test-fixtures/CanvasMotionHost.svelte';
 import NativeEvents from '../../../apps/docs/src/generated/typegpu-scenes/native-events/NativeEvents.typegpu.js';
+import SharedStores from '../../../apps/docs/src/generated/typegpu-scenes/shared-stores/SharedStores.svelte';
 import { createViewProjectionMatrix, readCameraState } from './camera';
 import { rotateVectorXyz, transformPoint4 } from './math3d';
 import { vectorTuple } from './attributes';
@@ -93,6 +94,87 @@ afterEach(() => {
 });
 
 describe('GPU resource and frame lifecycle', () => {
+  it.each(['demand', 'manual'] as const)('shares native bindings and mesh events in the generated store editor (%s)', async frameloop => {
+    const clock = optionClock(120);
+    const { root: gpu, buffers, submissions } = fakeRoot();
+    vi.mocked(tgpu.init).mockResolvedValue(gpu as never);
+    vi.stubGlobal('navigator', { gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
+    let root!: TypeGpuRoot;
+    const onready = vi.fn((value: TypeGpuRoot) => { root = value; });
+    const error = vi.fn();
+    const instance = mount(SharedStores, {
+      target: document.body, props: { frameloop, onready, onrenderererror: error }
+    });
+    async function settle() {
+      flushSync(); await tick(); await tick();
+      for (let i = 0; i < 3; i++) { clock.step(); flushSync(); await tick(); }
+    }
+    try {
+      await settle();
+      expect(onready).toHaveBeenCalledOnce();
+      expect(error).not.toHaveBeenCalled();
+      if (frameloop === 'manual') root.gpu.renderFrame(clock.now);
+      const canvas = document.querySelector('canvas')!;
+      const [x, z, rotation] = [...document.querySelectorAll<HTMLInputElement>('input[type="range"]')];
+      const selected = document.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+      const mesh = createSceneState(root).interaction.targets[0].node;
+      const buffer = buffers.find(buffer => buffer.label.endsWith('instances'))!;
+      const initialColor = mesh.children.find(node => node.name === 'standardMaterial')!.attributes.color;
+      gpu.createBuffer.mockClear(); gpu.createBindGroup.mockClear(); vi.mocked(createMeshPipeline).mockClear();
+      buffer.write.mockClear();
+      const before = submissions.length;
+      x.value = '2'; x.dispatchEvent(new Event('input', { bubbles: true }));
+      await settle();
+      expect(mesh.attributes.position).toEqual([2, 1, 0]);
+      expect(document.querySelector('output')!.textContent).toBe('2.0');
+      expect(buffer.write).toHaveBeenCalledOnce();
+      expect(buffer.write.mock.lastCall![1]).toEqual({ startOffset: 63 * 96, endOffset: 64 * 96 });
+      expect(submissions.length - before).toBe(frameloop === 'manual' ? 0 : 1);
+      if (frameloop === 'manual') {
+        root.gpu.renderFrame(clock.now);
+        expect(submissions).toHaveLength(before + 1);
+      }
+      z.value = '-1'; z.dispatchEvent(new Event('input', { bubbles: true }));
+      rotation.value = '1'; rotation.dispatchEvent(new Event('input', { bubbles: true }));
+      await settle();
+      expect(mesh.attributes.position).toEqual([2, 1, -1]);
+      expect(mesh.attributes.rotation).toEqual([0, 1, 0]);
+      const size = root.gpu.getRenderSize();
+      const matrix = createViewProjectionMatrix(size.width / size.height, readCameraState(root).settings);
+      const point = transformPoint4(matrix, [2, 1, -1]);
+      const event = new MouseEvent('click', { bubbles: true });
+      Object.defineProperties(event, {
+        offsetX: { value: (point[0] + 1) * size.width / 2 },
+        offsetY: { value: (1 - point[1]) * size.height / 2 }
+      });
+      canvas.dispatchEvent(event);
+      await settle();
+      expect(selected.checked).toBe(true);
+      expect(mesh.children.find(node => node.name === 'standardMaterial')!.attributes.color).toEqual([1, 0.8, 0.2]);
+      canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await settle();
+      expect(selected.checked).toBe(false);
+      selected.click(); await settle();
+      expect(mesh.children.find(node => node.name === 'standardMaterial')!.attributes.color).toEqual([1, 0.8, 0.2]);
+      document.querySelector<HTMLButtonElement>('.store-actions button')!.click();
+      await settle();
+      expect([x.value, z.value, rotation.value, selected.checked]).toEqual(['0', '0', '0', false]);
+      expect(mesh.attributes.position).toEqual([0, 1, 0]);
+      expect(mesh.attributes.rotation).toEqual([0, 0, 0]);
+      expect(mesh.children.find(node => node.name === 'standardMaterial')!.attributes.color).toEqual(initialColor);
+      expect(createSceneState(root).interaction.targets[0].node).toBe(mesh);
+      expect(document.querySelector('canvas')).toBe(canvas);
+      expect(onready).toHaveBeenCalledOnce();
+      expect(gpu.createBuffer).not.toHaveBeenCalled();
+      expect(gpu.createBindGroup).not.toHaveBeenCalled();
+      expect(createMeshPipeline).not.toHaveBeenCalled();
+      expect(clock.pending.size).toBe(0);
+      if (frameloop === 'manual') expect(clock.request).not.toHaveBeenCalled();
+    } finally { await unmount(instance); document.body.replaceChildren(); }
+    expect(clock.pending.size).toBe(0);
+    expect(gpu.destroy).toHaveBeenCalledOnce();
+  });
+
   it.each([60, 120, 144].flatMap(hz => ['Tween', 'Spring'].flatMap(kind => [
     { hz, kind, frameloop: 'demand' as const, rendererFirst: false },
     { hz, kind, frameloop: 'demand' as const, rendererFirst: true },

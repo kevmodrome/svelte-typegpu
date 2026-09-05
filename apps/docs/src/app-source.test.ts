@@ -88,7 +88,7 @@ describe('docs app source wiring', () => {
     const source = read('../scripts/compile-typegpu-scenes.ts');
     const generated = read('./generated/typegpu-scenes/two-boxes/TwoBoxes.typegpu.js');
 
-    expect(source).toContain("import { compile } from 'svelte/compiler'");
+    expect(source).toContain("import { compileTypeGpu } from 'svelte-typegpu/compiler'");
     expect(source).toContain("import.meta.resolve('svelte-typegpu/svelte-renderer')");
     expect(source).toContain('resolveRendererPath');
     expect(source).toContain('customRenderer: rendererPath');
@@ -115,13 +115,25 @@ describe('docs app source wiring', () => {
     expect(orbitField).not.toMatch(/from ['"]\.\/disco-fragment['"]/);
   });
 
+  it('leaves DOM example components to the app compiler instead of importing client code on the server', () => {
+    const wrapper = read('./generated/typegpu-scenes/shared-stores/SharedStores.svelte');
+    const viewport = read('./generated/typegpu-scenes/shared-stores/StoreViewport.typegpu.js');
+    const exports = read('./generated/typegpu-scenes/index.ts');
+    expect(wrapper).toContain('<script lang="ts">');
+    expect(wrapper).toContain("import StoreViewport from './StoreViewport.typegpu.js'");
+    expect(wrapper).not.toContain('svelte/internal/init-operations');
+    expect(viewport).toContain('$.push_renderer(null)');
+    expect(viewport).toContain('$.renderer_snippet($renderer');
+    expect(exports).toContain("from './shared-stores/SharedStores.svelte'");
+  });
+
   it('runs the self-contained native event scene in the standard demand preview', () => {
     const scene = read('./generated/typegpu-scenes/native-events/NativeEvents.typegpu.js');
     expect(scene).toContain("from 'svelte-typegpu/svelte-renderer'");
     const preview = read('./components/ExamplePreview.svelte');
     expect(preview).not.toContain('NativeEventsPreview');
     expect(preview).toContain('scene={sceneComponents[slug]}');
-    expect(preview).toContain("slug === 'native-events' ? 'demand' : 'always'");
+    expect(preview).toContain("slug === 'native-events' || slug === 'shared-stores' ? 'demand' : 'always'");
   });
 
   it('hydrates the live preview but keeps the code panel static on the examples route', () => {

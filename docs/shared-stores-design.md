@@ -40,6 +40,14 @@ state directly from `onclick`. No module-global mutable scene state. The existin
 docs generator supports ordinary Svelte entry components and GPU viewport imports.
 Generated sources are regenerated, not edited manually.
 
+Build evidence changed the generator assumption: precompiled DOM client modules
+import `svelte/internal/init-operations`, which accesses `window` when the docs
+server loads its module graph. Preserve ordinary `.svelte` files as generated
+source with rewritten local imports so Mochi/Vite own their client/SSR compilation.
+Only `.typegpu.svelte` files become precompiled `.js`; keep declarations for those
+JS entry modules. Add generator-output checks and run the production build to
+verify this boundary, not just happy-dom component tests.
+
 ## Contracts and invariants
 
 - `$store` has Svelte's normal subscription/replacement/unsubscribe behavior.
@@ -85,3 +93,19 @@ vector store using same-object `update` calls: 18 additional cases pass across
 60/120/144 Hz, both demand callback orders and manual mode. Targeted uploads,
 shared resource reuse and settled/disposed scheduling invariants remain intact.
 This is controlled-clock evidence, not a hardware refresh-rate measurement.
+
+The generated Shared Stores editor also passes demand/manual integration tests:
+native sliders write the shared vector/rotation, picked mesh clicks update the
+native selection checkbox, Escape clears selection, and Reset restores state.
+The single changed instance writes bytes 6048..6144 of the shared buffer; GPU
+buffers, bind groups, pipelines and canvas identity are retained. No renderer
+scheduler change was needed.
+
+The DOM-source generator adjustment fixes the observed server `window` error.
+The full build, renderer TypeScript/Svelte checks and all 1,115 workspace tests
+pass. The dev route `/examples/shared-stores` returns HTTP 200 on port 3334.
+The existing example app's 501.64 kB chunk warning is unchanged.
+
+Live desktop/mobile layout, pixel and actual GPU interaction checks remain
+pending: the computer-use tool reports the Mac locked. The user has been asked
+to unlock it. HTTP and mocked-GPU tests do not substitute for those checks.

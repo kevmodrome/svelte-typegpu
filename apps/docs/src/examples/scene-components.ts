@@ -4,6 +4,7 @@ import {
   DiscoShaderPass,
   Gravity,
   NativeEvents,
+  SharedStores,
   MultipleSmokyTriangles,
   PhongReflection,
   SimpleShadow,
@@ -16,6 +17,7 @@ type TypeGpuSceneComponent = Component<any>;
 
 export const sceneComponents = {
   'native-events': NativeEvents,
+  'shared-stores': SharedStores,
   'svelte-motion': SvelteMotion,
   'two-boxes': TwoBoxes,
   'phong-reflection': PhongReflection,

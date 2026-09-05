@@ -26,9 +26,12 @@ import motionField from '../src/examples/svelte-motion/motion-field.ts' with { t
 import markerFragment from '../src/examples/svelte-motion/marker-fragment.ts' with { type: 'text' };
 import gravityFrameTask from '../src/examples/gravity/GravityFrameTask.typegpu.svelte' with { type: 'text' };
 import nativeEvents from '../src/examples/native-events/NativeEvents.typegpu.svelte' with { type: 'text' };
+import sharedStores from '../src/examples/shared-stores/SharedStores.svelte' with { type: 'text' };
+import storeViewport from '../src/examples/shared-stores/StoreViewport.typegpu.svelte' with { type: 'text' };
 
 export const exampleSourceTexts = {
   'native-events': [nativeEvents],
+  'shared-stores': [sharedStores, storeViewport],
   'svelte-motion': [svelteMotion, motionMarker, motionField, markerFragment],
   'two-boxes': [twoBoxes, floor, sceneBox, boxGeometry, boxInteraction],
   'phong-reflection': [phongReflection, phongLights],

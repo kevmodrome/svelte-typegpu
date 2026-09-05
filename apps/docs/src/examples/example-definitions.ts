@@ -51,6 +51,21 @@ export const exampleDefinitions = [
     typeGpuSourceFiles: []
   },
   {
+    slug: 'shared-stores',
+    title: 'Shared Stores',
+    category: 'interaction',
+    tags: ['3d', 'stores', 'bindings', 'interaction'],
+    description: 'A cube editor with shared position, rotation, and selection state.',
+    notes: 'Native DOM bindings and scene event handlers read and write the same per-instance Svelte stores. Small vector updates use the renderer\'s targeted upload path.',
+    exportName: 'SharedStores',
+    sourceUrl: new URL('./shared-stores/SharedStores.svelte', import.meta.url),
+    sourceFiles: [
+      new URL('./shared-stores/SharedStores.svelte', import.meta.url),
+      new URL('./shared-stores/StoreViewport.typegpu.svelte', import.meta.url)
+    ],
+    typeGpuSourceFiles: []
+  },
+  {
     slug: 'phong-reflection',
     title: 'Phong Reflection Model',
     category: 'rendering',
