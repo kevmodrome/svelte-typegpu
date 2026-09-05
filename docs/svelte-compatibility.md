@@ -7,6 +7,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | --- | --- |
 | Reactive state, component props, `{#if}`, keyed `{#each}` | Supported and tested |
 | Deep `$state` value props | Small vectors, colors, matrices, bounds, uniforms and material descriptors update through named props and spreads; bulk resource inputs remain reference-based |
+| Store auto-subscriptions (`$store`) | Same-object vector updates, named props/spreads, writable event assignments, store replacement, shared derived producers and unsubscribe cleanup tested; real Tween/Spring-to-store cadence verified |
 | DOM `Canvas` host | Reactive scene/canvas props, native DOM events/attachments, inherited context, SSR shell, and async startup/unmount cleanup tested |
 | Dedicated `<canvas>` viewport | Experimental compiler path: native attributes/events/attachments, `bind:this`, read-only size bindings, scoped CSS, SSR/hydration, scene switching and frame cadence tested; other canvas directives are explicitly rejected |
 | `<svelte:window>`, `<svelte:document>`, `<svelte:body>` | Not supported in `.typegpu.svelte`; the pinned compiler rejects them under a custom renderer. Keep them in an ordinary DOM parent component |
@@ -101,6 +102,32 @@ The Native Events example mutates `object.rotation[1]` from a mesh click handler
 Compiled Tween/Spring tests cover deep mutations through named props and spreads
 at 60/120/144 Hz, both callback orders, demand/manual modes, exact upload ranges,
 resource reuse, settled idling and disposal.
+
+## Shared stores
+
+Use ordinary Svelte stores to share state between DOM controls, scene components
+and non-component producers. No renderer-specific store or attachment is needed:
+
+```svelte
+<script>
+  let { position } = $props();
+</script>
+
+<mesh position={$position} onclick={() => $position[0] += 1}>
+  <boxGeometry /><standardMaterial />
+</mesh>
+```
+
+A DOM input can bind to the same writable store with
+`bind:value={$position[0]}`. A `store.update` callback may mutate and return the
+same small vector; the shared compiler snapshots its consumed values before
+Svelte's attribute identity cache. A no-op notification does not dirty the scene.
+Bulk typed arrays are still opaque resource inputs, not deeply observed buffers.
+
+Svelte owns subscriptions: replacing a store prop releases the old subscription,
+and unmounting a component unsubscribes its reads. Shared derived stores keep their
+upstream subscription until their last subscriber leaves. Scope mutable stores to
+the relevant app/component instance rather than sharing server state globally.
 
 ## Dynamic primitives
 

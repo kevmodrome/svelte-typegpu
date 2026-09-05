@@ -23,6 +23,7 @@ import { createMaterialDescriptor } from './material-descriptors';
 import { createMeshPipeline } from './typegpu-pipeline';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import { Spring, Tween } from 'svelte/motion';
+import { writable } from 'svelte/store';
 import * as svelteClient from 'svelte/internal/client';
 import sceneRenderer, { createTypeGpuRuntimeForTest, type TypeGpuRoot } from './svelte-renderer';
 import { compileTypeGpuSource } from './component-test-utils';
@@ -96,8 +97,9 @@ describe('GPU resource and frame lifecycle', () => {
     { hz, kind, frameloop: 'demand' as const, rendererFirst: false },
     { hz, kind, frameloop: 'demand' as const, rendererFirst: true },
     { hz, kind, frameloop: 'manual' as const, rendererFirst: false }
-  ])))('retains motion cadence across keyed resets at $hz Hz ($kind, $frameloop, renderer first: $rendererFirst)',
-    async ({ hz, kind, frameloop, rendererFirst }) => {
+  ].flatMap(clock => [false, true].map(store => ({ ...clock, store }))))))(
+    'retains motion cadence across keyed resets at $hz Hz ($kind, $frameloop, renderer first: $rendererFirst, store: $store)',
+    async ({ hz, kind, frameloop, rendererFirst, store }) => {
     const pending = new Map<number, FrameRequestCallback>();
     const producers = new WeakSet<FrameRequestCallback>();
     let now = 0, id = 0;
@@ -116,15 +118,20 @@ describe('GPU resource and frame lifecycle', () => {
       new Spring(0, { stiffness: 0.01, damping: 0.5, precision: 1e-8 });
     const stop = () => motion instanceof Tween ? motion.set(motion.current, { duration: 0 }) :
       motion.set(motion.current, { instant: true });
-    const Scene = compileTypeGpuSource<{ reset(): void }>(`<script>
-      let { motion, setup } = $props();
+    const Scene = compileViewportSource<{ reset(): void }>(`<script>
+      let { motion, setup, writable } = $props();
       let revision = $state(0);
       export function reset() { revision += 1; }
+      ${store ? `const position = writable([0, 0, 0]);
+        $effect(() => {
+          const x = motion.current;
+          position.update(value => { value[0] = x; return value; });
+        });` : ''}
     </script><scene>
       {#each Array.from({ length: 300 }, (_, i) => i) as i (i)}
         <mesh position={[i + 10, 0, 0]}><boxGeometry /><standardMaterial /></mesh>
       {/each}
-      {#key revision}<mesh position={[motion.current, 0, 0]} {@attach setup}>
+      {#key revision}<mesh position={${store ? '$position' : '[motion.current, 0, 0]'}} {@attach setup}>
         <boxGeometry /><standardMaterial />
       </mesh>{/key}
     </scene>`);
@@ -134,7 +141,7 @@ describe('GPU resource and frame lifecycle', () => {
     root.runtime = runtime;
     const cleanup = vi.fn();
     const setup = vi.fn<TypeGpuAttachment>(node => () => cleanup(node));
-    const instance = mount(Scene, { renderer: sceneRenderer, target: root, props: { motion, setup } });
+    const instance = mount(Scene, { renderer: sceneRenderer, target: root, props: { motion, setup, writable } });
     const order: string[] = [];
     async function step() {
       now += 1000 / hz;
