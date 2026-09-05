@@ -1,7 +1,16 @@
 import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
+import { svelte } from '@sveltejs/vite-plugin-svelte';
 
 export default defineConfig({
+  plugins: [
+    svelte({
+      configFile: false,
+      hot: false,
+      compilerOptions: { runes: true },
+      dynamicCompileOptions: () => ({ generate: 'client' })
+    })
+  ],
   test: {
     alias: [
       {

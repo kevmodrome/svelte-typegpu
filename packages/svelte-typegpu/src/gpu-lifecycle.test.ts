@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import tgpu, { d } from 'typegpu';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createElement, createFragment, insert, remove, setAttribute } from './core';
@@ -20,6 +21,7 @@ import { compileTypeGpuSource } from './component-test-utils';
 import type { TypeGpuAttachment } from './attachments';
 import { loadModel } from './model-loader';
 import type { TypeGpuLoadedModel } from './types';
+import SceneHost from './SceneHost.svelte';
 
 const captured = vi.hoisted(() => ({ bindings: [] as unknown[][], counts: [] as number[] }));
 
@@ -208,10 +210,10 @@ describe('GPU resource and frame lifecycle', () => {
       root.runtime = runtime;
       const cleanup = vi.fn();
       const setup = vi.fn<TypeGpuAttachment>(() => cleanup);
-      const instance = mount(Scene, {
+      const instance = mount(SceneHost, {
         renderer: sceneRenderer,
         target: root,
-        props: { motion, setup }
+        props: { scene: Scene, sceneProps: { motion, setup } }
       });
       async function step() {
         now += 1000 / hz;

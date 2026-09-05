@@ -127,7 +127,7 @@ export async function createTypeGpuRoot({
   depth,
   alphaMode
 }: TypeGpuRootOptions): Promise<TypeGpuRoot> {
-  canvas.className = 'renderer-root-canvas';
+  canvas.classList.add('renderer-root-canvas');
   if (!canvas.parentNode) target.append(canvas);
 
   const gpu = await createTypeGpuRenderer({

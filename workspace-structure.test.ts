@@ -66,6 +66,7 @@ describe('pnpm workspace layout', () => {
     expect(packageJson.files).toEqual([
       'src',
       '!src/**/*.test.ts',
+      '!src/test-fixtures',
       '!src/glb-test-fixtures.ts',
       '!src/test-paths.ts',
       '!src/component-test-utils.ts',
