@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createElement, createFragment, addEventListener, insert, setAttribute } from './core';
+import { createElement, createFragment, addEventListener, insert, remove, removeEventListener, setAttribute } from './core';
 import { createTypeGpuRuntimeForTest } from './svelte-renderer';
 import type { TypeGpuRenderer } from './gpu-renderer';
 import type { TypeGpuLoadedModel } from './glb-loader';
@@ -64,6 +64,129 @@ function fakeRenderer(): TypeGpuRenderer {
 function loadedModel(key: string): TypeGpuLoadedModel {
   return { key, meshes: [] };
 }
+
+function hoverFixture() {
+  const root = createFragment();
+  const scene = createElement('scene');
+  const camera = createElement('perspectiveCamera');
+  const group = createElement('group');
+  const left = createElement('mesh');
+  const right = createElement('mesh');
+  insert(root, scene, null);
+  insert(scene, camera, null);
+  insert(scene, group, null);
+  setAttribute(camera, 'position', [0, 0, 10]);
+  setAttribute(camera, 'target', [0, 0, 0]);
+  for (const [mesh, x] of [[left, -2], [right, 2]] as const) {
+    setAttribute(mesh, 'position', [x, 0, 0]);
+    insert(group, mesh, null);
+    insert(mesh, createElement('boxGeometry'), null);
+  }
+  const canvas = new FakeCanvas();
+  canvas.clientWidth = canvas.clientHeight = 100;
+  const gpu = fakeRenderer();
+  const runtime = createTypeGpuRuntimeForTest(root, canvas as unknown as HTMLCanvasElement, gpu);
+  root.runtime = runtime;
+  runtime.scheduleSync(root);
+  const move = (x: number) => canvas.dispatch<PointerEvent>('pointermove', { offsetX: x, offsetY: 50 });
+  return { root, scene, group, left, right, canvas, gpu, runtime, move };
+}
+
+describe('composable canvas events', () => {
+  it('keeps common ancestors hovered across siblings, then exits leaf first', async () => {
+    const { scene, group, left, right, canvas, runtime, move } = hoverFixture();
+    const events: string[] = [];
+    for (const [node, name] of [[scene, 'scene'], [group, 'group'], [left, 'left'], [right, 'right']] as const) {
+      for (const type of ['pointerenter', 'pointerleave']) {
+        addEventListener(node, type, event => {
+          expect(event.target).toBe(node);
+          expect(event.currentTarget).toBe(node);
+          expect(event.bubbles).toBe(false);
+          events.push(`${name}:${type}`);
+        });
+      }
+    }
+    const leave = vi.fn();
+    addEventListener(left, 'pointerleave', leave);
+    await Promise.resolve();
+    move(30); move(30); move(70);
+    expect(events).toEqual([
+      'scene:pointerenter', 'group:pointerenter', 'left:pointerenter',
+      'left:pointerleave', 'right:pointerenter'
+    ]);
+    expect(leave.mock.calls[0][0].relatedTarget).toBe(right);
+    canvas.dispatch('pointerleave');
+    expect(events.slice(-3)).toEqual(['right:pointerleave', 'group:pointerleave', 'scene:pointerleave']);
+    runtime.dispose();
+  });
+
+  it('picks descendants with only parent hover/click handlers and observes listener removal', async () => {
+    const { group, left, canvas, runtime, move } = hoverFixture();
+    const enter = vi.fn();
+    const click = vi.fn(event => {
+      expect(event.target).toBe(left);
+      expect(event.currentTarget).toBe(group);
+    });
+    addEventListener(group, 'pointerenter', enter);
+    addEventListener(group, 'click', click);
+    await Promise.resolve();
+    move(30); move(70);
+    canvas.dispatch<MouseEvent>('click', { offsetX: 30, offsetY: 50 });
+    expect(enter).toHaveBeenCalledOnce();
+    expect(click).toHaveBeenCalledOnce();
+    removeEventListener(group, 'click', click);
+    await Promise.resolve();
+    canvas.dispatch<MouseEvent>('click', { offsetX: 30, offsetY: 50 });
+    expect(click).toHaveBeenCalledOnce();
+    runtime.dispose();
+  });
+
+  it.each(['reparent', 'remove'] as const)('leaves saved ancestors after a hovered mesh is %s', async action => {
+    const { root, scene, group, left, runtime, move } = hoverFixture();
+    const events: string[] = [];
+    for (const [node, name] of [[group, 'group'], [left, 'left']] as const) {
+      addEventListener(node, 'pointerenter', () => events.push(`${name}:enter`));
+      addEventListener(node, 'pointerleave', () => events.push(`${name}:leave`));
+    }
+    await Promise.resolve();
+    move(30);
+    events.length = 0;
+    if (action === 'reparent') insert(scene, left, null);
+    else remove(left);
+    runtime.scheduleSync(root);
+    await Promise.resolve();
+    move(30);
+    expect(events).toEqual(action === 'reparent' ? ['left:leave', 'group:leave', 'left:enter'] : ['left:leave', 'group:leave']);
+    runtime.dispose();
+  });
+
+  it('stops an obsolete hover transition when a callback disposes the runtime', async () => {
+    const { group, left, runtime, move } = hoverFixture();
+    const enter = vi.fn();
+    const pointermove = vi.fn();
+    addEventListener(group, 'pointerenter', () => runtime.dispose());
+    addEventListener(left, 'pointerenter', enter);
+    addEventListener(left, 'pointermove', pointermove);
+    await Promise.resolve();
+    move(30);
+    expect(enter).not.toHaveBeenCalled();
+    expect(pointermove).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite a nested hover transition or dispatch its stale pointermove', async () => {
+    const { group, left, right, runtime, move } = hoverFixture();
+    const leftMove = vi.fn();
+    const rightEnter = vi.fn();
+    addEventListener(group, 'pointerenter', () => move(70));
+    addEventListener(left, 'pointermove', leftMove);
+    addEventListener(right, 'pointerenter', rightEnter);
+    await Promise.resolve();
+    move(30); move(70);
+    expect(leftMove).not.toHaveBeenCalled();
+    expect(rightEnter).toHaveBeenCalledOnce();
+    runtime.dispose();
+  });
+});
 
 describe('TypeGPU Svelte renderer runtime', () => {
   it('coalesces changed nodes into one targeted upload and discards pending motion on dispose', async () => {

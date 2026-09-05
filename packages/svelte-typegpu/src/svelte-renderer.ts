@@ -190,6 +190,7 @@ function createRuntime(
   });
   let currentScene: TypeGpuSceneState | null = null;
   let hoveredTarget: TypeGpuInteractionTarget | null = null;
+  let hoveredPath: TypeGpuNode[] = [];
 
   gpu.setFrameHandler?.((frame) => {
     if (disposed) return false;
@@ -290,7 +291,7 @@ function createRuntime(
     if (dispatchActiveDragMove(event)) return;
 
     const hit = pickCanvasTarget(event);
-    updateHoveredTarget(hit, event);
+    if (!updateHoveredTarget(hit, event)) return;
 
     if (hit?.target.handlers.has('pointermove')) {
       dispatchNodeEvent(hit.node, 'pointermove', {
@@ -336,42 +337,54 @@ function createRuntime(
 
   function updateHoveredTarget(hit: TypeGpuInteractionHit | null, event: PointerEvent) {
     const nextTarget = hit?.target ?? null;
-
-    if (sameInteractionTarget(hoveredTarget, nextTarget)) return;
-
-    if (hoveredTarget) {
-      dispatchNodeEvent(hoveredTarget.node, 'pointerleave', {
-        originalEvent: event,
-        detail: {
-          instanceId: hoveredTarget.instanceId
-        }
-      });
+    if (sameInteractionTarget(hoveredTarget, nextTarget)) {
+      let node = nextTarget?.node ?? null;
+      let index = 0;
+      while (node && hoveredPath[index] === node) {
+        node = node.parent;
+        index++;
+      }
+      if (!node && index === hoveredPath.length) return true;
     }
 
-    if (hit) {
-      dispatchNodeEvent(hit.node, 'pointerenter', {
-        originalEvent: event,
-        detail: {
-          instanceId: hit.instanceId,
-          point: hit.point
-        }
-      });
-    }
-
+    // Retain the old ancestry across reparenting; allocate only on hover transitions.
+    const previousTarget = hoveredTarget;
+    const previousPath = hoveredPath;
+    const nextPath: TypeGpuNode[] = [];
+    for (let node = nextTarget?.node; node; node = node.parent ?? undefined) nextPath.push(node);
+    let common = 0;
+    while (
+      common < previousPath.length && common < nextPath.length &&
+      previousPath[previousPath.length - common - 1] === nextPath[nextPath.length - common - 1]
+    ) common++;
+    // Separate primitives of one model retain leaf-level instance transitions.
+    if (previousTarget && nextTarget && previousTarget.node === nextTarget.node &&
+        previousTarget.instanceId !== nextTarget.instanceId && common === nextPath.length) common--;
     hoveredTarget = nextTarget;
+    hoveredPath = nextPath;
+
+    for (let i = 0; i < previousPath.length - common; i++) {
+      dispatchNodeEvent(previousPath[i], 'pointerleave', {
+        originalEvent: event,
+        relatedTarget: nextTarget?.node ?? null,
+        detail: { instanceId: previousTarget!.instanceId }
+      });
+      if (disposed || hoveredPath !== nextPath) return false;
+    }
+    for (let i = nextPath.length - common - 1; i >= 0; i--) {
+      dispatchNodeEvent(nextPath[i], 'pointerenter', {
+        originalEvent: event,
+        relatedTarget: previousTarget?.node ?? null,
+        detail: { instanceId: hit!.instanceId, point: hit!.point }
+      });
+      if (disposed || hoveredPath !== nextPath) return false;
+    }
+    return true;
   }
 
   function dispatchCanvasPointerExit(event: PointerEvent) {
     if (activeDrag) return;
-    if (!hoveredTarget) return;
-
-    dispatchNodeEvent(hoveredTarget.node, 'pointerleave', {
-      originalEvent: event,
-      detail: {
-        instanceId: hoveredTarget.instanceId
-      }
-    });
-    hoveredTarget = null;
+    updateHoveredTarget(null, event);
   }
 
   function createActiveDrag(hit: TypeGpuInteractionHit, event: PointerEvent): ActiveObjectDrag {
@@ -542,6 +555,7 @@ function createRuntime(
       sceneCache.cleanInteraction = { targets: [], pick: () => null };
       currentScene = null;
       hoveredTarget = null;
+      hoveredPath = [];
       cameraInteraction.dispose();
       canvas.removeEventListener('click', dispatchCanvasClick);
       canvas.removeEventListener('pointerdown', dispatchCanvasPointerDown);

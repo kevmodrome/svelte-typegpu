@@ -190,17 +190,18 @@ describe('GPU resource and frame lifecycle', () => {
           ? motion.set(motion.current, { duration: 0 })
           : motion.set(motion.current, { instant: true });
       const Scene = compileTypeGpuSource(`
-      <script>let { motion, setup } = $props();</script>
-      <scene>
+      <script>let { motion, setup, onclick } = $props();</script>
+      <scene><group {onclick}>
         {#each Array.from({ length: 300 }, (_, i) => i) as i (i)}
           <mesh position={[i, 0, -5]}><boxGeometry /><standardMaterial /></mesh>
         {/each}
         <mesh position={[motion.current, 0, 0]} {@attach setup}>
           <boxGeometry /><standardMaterial color={[motion.current / 10, 0, 0, 1]} />
         </mesh>
-      </scene>
+      </group></scene>
     `);
       const { renderer, root: gpuRoot, buffers, submissions } = await setupRenderer('demand');
+      const sceneUpdates = vi.spyOn(renderer, 'setScene');
       const root = createFragment();
       const runtime = createTypeGpuRuntimeForTest(
         root,
@@ -213,7 +214,7 @@ describe('GPU resource and frame lifecycle', () => {
       const instance = mount(SceneHost, {
         renderer: sceneRenderer,
         target: root,
-        props: { scene: Scene, sceneProps: { motion, setup } }
+        props: { scene: Scene, sceneProps: { motion, setup, onclick: vi.fn() } }
       });
       async function step() {
         now += 1000 / hz;
@@ -232,6 +233,12 @@ describe('GPU resource and frame lifecycle', () => {
         await Promise.resolve();
         for (let i = 0; i < 3; i++) await step();
         expect(pending.size).toBe(0);
+        const interaction = sceneUpdates.mock.lastCall![0].interaction;
+        expect(interaction.targets).toHaveLength(301);
+        const handlers = interaction.targets[0].handlers;
+        expect(handlers).toEqual(new Set(['click']));
+        expect(interaction.targets.every(target => target.handlers === handlers)).toBe(true);
+        sceneUpdates.mockClear();
         const buffer = buffers.find((buffer) => buffer.label.endsWith('instances'))!;
         gpuRoot.createBuffer.mockClear();
         gpuRoot.createBindGroup.mockClear();
@@ -253,6 +260,10 @@ describe('GPU resource and frame lifecycle', () => {
           expect(frameOrder).toEqual(rendererFirst ? ['render', 'motion'] : ['motion', 'render']);
         }
         expect(motion.current).toBeGreaterThan(0);
+        for (const [state] of sceneUpdates.mock.calls) {
+          expect(state.interaction).toBe(interaction);
+          expect(state.interaction.targets[300].handlers).toBe(handlers);
+        }
         expect(setup).toHaveBeenCalledOnce();
         expect(cleanup).not.toHaveBeenCalled();
         expect(gpuRoot.createBuffer).not.toHaveBeenCalled();
