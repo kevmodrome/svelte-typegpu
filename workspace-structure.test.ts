@@ -68,6 +68,7 @@ describe('pnpm workspace layout', () => {
       '!src/**/*.test.ts',
       '!src/glb-test-fixtures.ts',
       '!src/test-paths.ts',
+      '!src/component-test-utils.ts',
       '!src/svelte-internal-client.d.ts'
     ]);
     expect(packageJson.publishConfig?.access).toBe('public');

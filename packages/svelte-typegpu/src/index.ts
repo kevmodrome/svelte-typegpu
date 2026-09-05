@@ -1,4 +1,6 @@
 export { default } from './svelte-renderer';
+export { onNodeEvent, type TypeGpuAttachment } from './attachments';
+export type { TypeGpuNode, TypeGpuNodeEvent } from './core';
 export type { TypeGpuFrameContext, TypeGpuFrameCallback } from './frame-tasks';
 export {
   createTypeGpuRoot,

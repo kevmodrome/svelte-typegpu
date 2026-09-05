@@ -1,5 +1,4 @@
-import { compile } from 'svelte/compiler';
-import { flushSync, mount, unmount, type Component } from 'svelte';
+import { flushSync, mount, unmount } from 'svelte';
 import * as svelteClient from 'svelte/internal/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createFragment, type TypeGpuNode } from './core';
@@ -8,7 +7,7 @@ import { createTypeGpuRuntimeForTest } from './svelte-renderer';
 import { Tween } from 'svelte/motion';
 import type { TypeGpuRenderer } from './gpu-renderer';
 import type { TypeGpuFrameContext } from './frame-tasks';
-import { typeGpuRendererPath } from './test-paths';
+import { compileTypeGpuSource } from './component-test-utils';
 
 const instances: ReturnType<typeof mount>[] = [];
 afterEach(async () => {
@@ -306,28 +305,4 @@ function findChild(root: TypeGpuNode, name: string): TypeGpuNode | null {
     if (match) return match;
   }
   return null;
-}
-
-function compileTypeGpuSource<Exports extends Record<string, unknown> = Record<string, never>>(source: string) {
-  const result = compile(source, {
-    filename: 'Inline.typegpu.svelte',
-    generate: 'client',
-    runes: true,
-    experimental: {
-      customRenderer: typeGpuRendererPath
-    }
-  });
-  const componentName = result.js.code.match(/export default function ([^(]+)/)?.[1];
-  if (!componentName) throw new Error('Unable to find compiled component name');
-
-  const executableCode = result.js.code
-    .replace(`import $renderer from '${typeGpuRendererPath}';`, '')
-    .replace("import 'svelte/internal/disclose-version';", '')
-    .replace("import * as $ from 'svelte/internal/client';", '')
-    .replace(`export default function ${componentName}`, `function ${componentName}`);
-
-  return new Function('$', '$renderer', `${executableCode}\nreturn ${componentName};`)(
-    svelteClient,
-    renderer
-  ) as Component<any, Exports>;
 }

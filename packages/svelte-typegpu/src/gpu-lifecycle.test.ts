@@ -12,6 +12,12 @@ import {
 import { createSceneState, createTypeGpuSceneCache } from './scene-compiler';
 import { createMaterialDescriptor } from './material-descriptors';
 import { createMeshPipeline } from './typegpu-pipeline';
+import { flushSync, mount, unmount } from 'svelte';
+import { Spring, Tween } from 'svelte/motion';
+import * as svelteClient from 'svelte/internal/client';
+import sceneRenderer, { createTypeGpuRuntimeForTest } from './svelte-renderer';
+import { compileTypeGpuSource } from './component-test-utils';
+import type { TypeGpuAttachment } from './attachments';
 
 const captured = vi.hoisted(() => ({ bindings: [] as unknown[][], counts: [] as number[] }));
 
@@ -47,6 +53,135 @@ afterEach(() => {
 });
 
 describe('GPU resource and frame lifecycle', () => {
+  it.each(
+    [60, 120, 144].flatMap((hz) =>
+      [false, true].flatMap((rendererFirst) =>
+        ['Tween', 'Spring'].map((kind) => ({ hz, rendererFirst, kind }))
+      )
+    )
+  )(
+    'delivers real $kind motion at $hz Hz (renderer first: $rendererFirst)',
+    async ({ hz, rendererFirst, kind }) => {
+      const pending = new Map<number, FrameRequestCallback>();
+      let id = 0;
+      let now = 0;
+      const motionCallbacks = new WeakSet<FrameRequestCallback>();
+      const frameOrder: string[] = [];
+      vi.stubGlobal(
+        'requestAnimationFrame',
+        vi.fn((callback: FrameRequestCallback) => {
+          pending.set(++id, callback);
+          return id;
+        })
+      );
+      vi.stubGlobal(
+        'cancelAnimationFrame',
+        vi.fn((id: number) => pending.delete(id))
+      );
+      const raf = (
+        svelteClient as unknown as { raf: { now(): number; tick(callback: () => void): void } }
+      ).raf;
+      vi.spyOn(raf, 'now').mockImplementation(() => now);
+      vi.spyOn(raf, 'tick').mockImplementation((callback) => {
+        motionCallbacks.add(callback);
+        requestAnimationFrame(callback);
+      });
+      const motion =
+        kind === 'Tween'
+          ? new Tween(0, { duration: 2000 })
+          : new Spring(0, { stiffness: 0.01, damping: 0.5, precision: 1e-8 });
+      const stopMotion = () =>
+        motion instanceof Tween
+          ? motion.set(motion.current, { duration: 0 })
+          : motion.set(motion.current, { instant: true });
+      const Scene = compileTypeGpuSource(`
+      <script>let { motion, setup } = $props();</script>
+      <scene>
+        {#each Array.from({ length: 300 }, (_, i) => i) as i (i)}
+          <mesh position={[i, 0, -5]}><boxGeometry /><standardMaterial /></mesh>
+        {/each}
+        <mesh position={[motion.current, 0, 0]} {@attach setup}>
+          <boxGeometry /><standardMaterial color={[motion.current / 10, 0, 0, 1]} />
+        </mesh>
+      </scene>
+    `);
+      const { renderer, root: gpuRoot, buffers, submissions } = await setupRenderer('demand');
+      const root = createFragment();
+      const runtime = createTypeGpuRuntimeForTest(
+        root,
+        new EventTarget() as HTMLCanvasElement,
+        renderer
+      );
+      root.runtime = runtime;
+      const cleanup = vi.fn();
+      const setup = vi.fn<TypeGpuAttachment>(() => cleanup);
+      const instance = mount(Scene, {
+        renderer: sceneRenderer,
+        target: root,
+        props: { motion, setup }
+      });
+      async function step() {
+        now += 1000 / hz;
+        frameOrder.length = 0;
+        for (const [id, callback] of [...pending]) {
+          if (!pending.delete(id)) continue;
+          frameOrder.push(motionCallbacks.has(callback) ? 'motion' : 'render');
+          callback(now);
+          // Browsers perform microtask checkpoints between RAF callbacks.
+          flushSync();
+          await Promise.resolve();
+        }
+      }
+      try {
+        flushSync();
+        await Promise.resolve();
+        for (let i = 0; i < 3; i++) await step();
+        expect(pending.size).toBe(0);
+        const buffer = buffers.find((buffer) => buffer.label.endsWith('instances'))!;
+        gpuRoot.createBuffer.mockClear();
+        gpuRoot.createBindGroup.mockClear();
+        vi.mocked(createMeshPipeline).mockClear();
+        buffer.write.mockClear();
+        if (rendererFirst) {
+          renderer.invalidate();
+          renderer.invalidate();
+        }
+        void motion.set(10);
+        if (!rendererFirst) {
+          renderer.invalidate();
+          renderer.invalidate();
+        }
+        for (let frame = 0; frame < hz; frame++) {
+          const before = submissions.length;
+          await step();
+          expect(submissions.length - before).toBe(1);
+          expect(frameOrder).toEqual(rendererFirst ? ['render', 'motion'] : ['motion', 'render']);
+        }
+        expect(motion.current).toBeGreaterThan(0);
+        expect(setup).toHaveBeenCalledOnce();
+        expect(cleanup).not.toHaveBeenCalled();
+        expect(gpuRoot.createBuffer).not.toHaveBeenCalled();
+        expect(gpuRoot.createBindGroup).not.toHaveBeenCalled();
+        expect(createMeshPipeline).not.toHaveBeenCalled();
+        expect(buffer.write.mock.calls.length).toBeGreaterThan(hz - 4);
+        for (const [, range] of buffer.write.mock.calls) {
+          expect(range).toEqual({ startOffset: 300 * 96, endOffset: 301 * 96 });
+        }
+        expect(buffer.data[300 * 24]).toBeCloseTo(motion.current);
+        await stopMotion();
+        for (let i = 0; i < 4; i++) await step();
+        expect(pending.size).toBe(0);
+      } finally {
+        await stopMotion();
+        await unmount(instance);
+        runtime.dispose();
+        renderer.dispose();
+      }
+      expect(cleanup).toHaveBeenCalledOnce();
+      expect(pending.size).toBe(0);
+    }
+  );
+
   it.each([60, 120, 144])('keeps demand rendering in step with external motion at %i Hz', async (hz) => {
     const pending = new Map<number, FrameRequestCallback>();
     let id = 0;
