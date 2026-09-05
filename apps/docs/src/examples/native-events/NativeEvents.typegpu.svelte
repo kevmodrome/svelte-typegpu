@@ -51,8 +51,8 @@
         position={[object.x, object.size * 0.75 - 0.15, 0]}
         rotation={object.rotation}
         scale={[object.size * 1.5, object.size * 1.5, object.size * 1.5]}
-        onpointerenter={() => hovered = index}
-        onpointerleave={() => hovered = null}
+        onpointerover={() => hovered = index}
+        onpointerout={() => hovered = null}
         onclick={() => {
           selected = index;
           object.rotation[1] = (object.rotation[1] + Math.PI / 12) % (Math.PI * 2);

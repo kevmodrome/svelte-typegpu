@@ -28,6 +28,7 @@ to the event path. The Svelte Motion example uses one group click handler for
 ## Events and propagation
 
 `click`, `dblclick`, `contextmenu`, `wheel`, `pointerdown`, `pointerup`, `pointermove`,
+`pointerover`, `pointerout`,
 `dragstart`, `dragmove`, and `dragend` bubble from the picked mesh/model through scene-node ancestors. A parent
 handler makes eligible descendant geometry pickable, even without mesh listeners.
 Picking still chooses the nearest eligible geometry for the event, not every hit
@@ -46,7 +47,36 @@ when the input is cancelable. The original button/modifier values remain on
 `pointerenter` and `pointerleave` do not bubble. They describe each node's hover
 boundary: enter ancestors before children, leave children before ancestors.
 Moving between siblings does not leave/re-enter their common group. There is no
-ambiguous `onhover` alias. `camerachange` and custom events dispatched through the
+ambiguous `onhover` alias.
+
+Use `onpointerover` and `onpointerout` when a parent needs to observe each picked
+child change instead of just the group's outer boundary:
+
+```svelte
+<group
+  onpointerover={(event) => inspect(event.target)}
+  onpointerout={(event) => inspect(event.relatedTarget)}
+>
+  {@render children()}
+</group>
+```
+
+Here `inspect` is an application callback and `children` is a scene snippet.
+Over/out bubble from the picked mesh/model, including between siblings. The order
+is old target out, exited boundaries leave, new target over, then entered
+boundaries enter. Stopping one event's propagation does not cancel the remaining
+boundary events. Repeated input over the same target and ancestry emits no new
+over/out. Native canvas entry also establishes hover before the next pointermove.
+Canvas exit clears the previous target rather than picking at exit coordinates.
+Reparenting/removal exits through the saved ancestry on the next pointer input;
+moving between a model's primitive instances retains distinct instance IDs even
+when `target` and `relatedTarget` are the same model node.
+
+This distinction follows [Pointer Events boundary semantics](https://www.w3.org/TR/pointerevents3/#the-pointerenter-event),
+but scene hover remains input-driven, not a complete DOM layout or multi-pointer
+capture model. Object dragging retains its existing hover suppression.
+
+`camerachange` and custom events dispatched through the
 low-level API do not bubble unless `{ bubbles: true }` is set. Automatic
 keyboard/focus routing is not implemented.
 
@@ -154,6 +184,6 @@ Tests cover compiled-Svelte event props, group boundaries, propagation controls,
 listener changes, reparenting, and disposal. The real Tween/Spring cadence matrix
 runs at synthetic 60/120/144 Hz with both callback orders, asserting targeted
 uploads, shared interaction data, GPU resource reuse, and demand-mode idle.
-The same clocks exercise double-click/context-menu/wheel-driven state changes in
+The same clocks exercise double-click/context-menu/wheel/over/out-driven state changes in
 demand and manual modes. A retained wheel subscription adds no per-frame scan or
 listener churn. Event dispatch without reactive changes does not request a frame.

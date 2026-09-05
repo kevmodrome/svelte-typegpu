@@ -80,7 +80,7 @@ describe('docs example registry', () => {
       'NativeEvents.typegpu.svelte'
     ]);
     for (const event of [
-      'onclick', 'onpointerenter', 'onpointerleave', 'ondblclick', 'oncontextmenu', 'onwheel'
+      'onclick', 'onpointerover', 'onpointerout', 'ondblclick', 'oncontextmenu', 'onwheel'
     ]) {
       expect(example.code).toContain(event);
     }

@@ -195,8 +195,8 @@ export default function NativeEvents_typegpu($$anchor, $$props) {
 						]
 					);
 
-					$.event('pointerenter', mesh_1, () => $.set(hovered, $.get(index), true));
-					$.event('pointerleave', mesh_1, () => $.set(hovered, null));
+					$.event('pointerover', mesh_1, () => $.set(hovered, $.get(index), true));
+					$.event('pointerout', mesh_1, () => $.set(hovered, null));
 
 					$.event('click', mesh_1, () => {
 						$.set(selected, $.get(index), true);
