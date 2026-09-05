@@ -207,4 +207,53 @@ describe('scene capture events', () => {
       await unmount(instance);
     }
   });
+
+  it('replaces, disables, and re-enables capture callbacks forwarded through component spreads', async () => {
+    const Group = compileTypeGpuSource(`
+      <script>let { children, ...events } = $props();</script>
+      <group {...events}>{@render children()}</group>
+    `);
+    const Scene = compileTypeGpuSource<{ replace(): void; enable(value: boolean): void }>(`
+      <script>
+        let { Group, first, second } = $props();
+        let handler = $state(first);
+        let enabled = $state(true);
+        export function replace() { handler = second; }
+        export function enable(value) { enabled = value; }
+      </script>
+      <scene>
+        <Group onclickcapture={enabled ? handler : undefined}>
+          <mesh><boxGeometry /></mesh>
+        </Group>
+      </scene>
+    `);
+    const first = vi.fn();
+    const second = vi.fn();
+    const root = createFragment();
+    const instance = mount(Scene, { renderer, target: root, props: { Group, first, second } });
+    try {
+      flushSync();
+      const mesh = createSceneState(root).interaction.targets[0].node;
+      const group = mesh.parent!;
+      dispatchNodeEvent(mesh, 'click');
+      flushSync(() => instance.replace());
+      dispatchNodeEvent(mesh, 'click');
+      expect(first).toHaveBeenCalledOnce();
+      expect(second).toHaveBeenCalledOnce();
+      for (let i = 0; i < 3; i++) {
+        flushSync(() => instance.enable(false));
+        expect(group.captureListeners).toBeUndefined();
+        expect(createSceneState(root).interaction.targets).toEqual([]);
+        dispatchNodeEvent(mesh, 'click');
+        expect(second).toHaveBeenCalledTimes(i + 1);
+        flushSync(() => instance.enable(true));
+        expect(group.captureListeners?.get('click')?.size).toBe(1);
+        dispatchNodeEvent(mesh, 'click');
+        expect(second).toHaveBeenCalledTimes(i + 2);
+      }
+    } finally {
+      await unmount(instance);
+    }
+    expect(createSceneState(root).interaction.targets).toEqual([]);
+  });
 });

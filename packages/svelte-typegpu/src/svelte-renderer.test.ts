@@ -93,6 +93,33 @@ function hoverFixture() {
 }
 
 describe('composable canvas events', () => {
+  it.each(['click', 'pointerdown', 'pointerup', 'pointermove'])(
+    'runs parent %s capture before the picked mesh and honors interception', async type => {
+      const { group, left, canvas, runtime } = hoverFixture();
+      const calls: string[] = [];
+      let intercept = false;
+      addEventListener(group, type, event => {
+        expect(event.target).toBe(left);
+        expect(event.currentTarget).toBe(group);
+        expect(event.eventPhase).toBe(1);
+        calls.push('capture');
+        if (intercept) event.stopPropagation();
+      }, true);
+      addEventListener(left, type, event => {
+        expect(event.eventPhase).toBe(2);
+        calls.push('target');
+      });
+      await Promise.resolve();
+      canvas.dispatch<PointerEvent>(type, { offsetX: 30, offsetY: 50 });
+      expect(calls).toEqual(['capture', 'target']);
+      calls.length = 0;
+      intercept = true;
+      canvas.dispatch<PointerEvent>(type, { offsetX: 30, offsetY: 50 });
+      expect(calls).toEqual(['capture']);
+      runtime.dispose();
+    }
+  );
+
   it('keeps common ancestors hovered across siblings, then exits leaf first', async () => {
     const { scene, group, left, right, canvas, runtime, move } = hoverFixture();
     const events: string[] = [];

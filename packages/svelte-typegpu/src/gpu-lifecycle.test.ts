@@ -151,12 +151,14 @@ describe('GPU resource and frame lifecycle', () => {
   it.each(
     [60, 120, 144].flatMap((hz) =>
       [false, true].flatMap((rendererFirst) =>
-        ['Tween', 'Spring'].map((kind) => ({ hz, rendererFirst, kind }))
+        ['Tween', 'Spring'].flatMap((kind) =>
+          [false, true].map(capture => ({ hz, rendererFirst, kind, capture }))
+        )
       )
     )
   )(
-    'delivers real $kind motion at $hz Hz (renderer first: $rendererFirst)',
-    async ({ hz, rendererFirst, kind }) => {
+    'delivers real $kind motion at $hz Hz (renderer first: $rendererFirst, capture: $capture)',
+    async ({ hz, rendererFirst, kind, capture }) => {
       const pending = new Map<number, FrameRequestCallback>();
       let id = 0;
       let now = 0;
@@ -190,8 +192,8 @@ describe('GPU resource and frame lifecycle', () => {
           ? motion.set(motion.current, { duration: 0 })
           : motion.set(motion.current, { instant: true });
       const Scene = compileTypeGpuSource(`
-      <script>let { motion, setup, onclick } = $props();</script>
-      <scene><group {onclick}>
+      <script>let { motion, setup, events } = $props();</script>
+      <scene><group {...events}>
         {#each Array.from({ length: 300 }, (_, i) => i) as i (i)}
           <mesh position={[i, 0, -5]}><boxGeometry /><standardMaterial /></mesh>
         {/each}
@@ -214,7 +216,10 @@ describe('GPU resource and frame lifecycle', () => {
       const instance = mount(SceneHost, {
         renderer: sceneRenderer,
         target: root,
-        props: { scene: Scene, sceneProps: { motion, setup, onclick: vi.fn() } }
+        props: {
+          scene: Scene,
+          sceneProps: { motion, setup, events: { [capture ? 'onclickcapture' : 'onclick']: vi.fn() } }
+        }
       });
       async function step() {
         now += 1000 / hz;
@@ -238,6 +243,10 @@ describe('GPU resource and frame lifecycle', () => {
         const handlers = interaction.targets[0].handlers;
         expect(handlers).toEqual(new Set(['click']));
         expect(interaction.targets.every(target => target.handlers === handlers)).toBe(true);
+        expect(interaction.targets.every(target => target.node.captureListeners === undefined)).toBe(true);
+        const group = interaction.targets[0].node.parent!;
+        expect(group.captureListeners?.get('click')?.size ?? 0).toBe(capture ? 1 : 0);
+        expect(group.listeners.get('click')?.size ?? 0).toBe(capture ? 0 : 1);
         sceneUpdates.mockClear();
         const buffer = buffers.find((buffer) => buffer.label.endsWith('instances'))!;
         gpuRoot.createBuffer.mockClear();
