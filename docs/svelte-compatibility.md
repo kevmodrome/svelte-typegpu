@@ -9,6 +9,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | DOM `Canvas` host | Reactive scene/canvas props, native DOM events/attachments, inherited context, SSR shell, and async startup/unmount cleanup tested |
 | Dedicated `<canvas>` viewport | Experimental compiler path: native attributes/events/attachments, `bind:this`, read-only size bindings, scoped CSS, SSR/hydration, scene switching and frame cadence tested; other canvas directives are explicitly rejected |
 | Consumer component types | Canvas props/callbacks/bindings checked; scene-element declarations deferred due to language-tools casing and action-target gaps |
+| Scene authoring diagnostics | Build-time warnings for unknown static primitives and definitely invalid resource/control parenting; components, snippets and dynamic tags retain composition flexibility |
 | `{#snippet}` and `{@render}` | Supported, including attachment forwarding |
 | `<svelte:element>` | Dynamic geometry/materials, prop spreads, events, attachment cleanup, and keyed identity tested |
 | Component `$bindable` props and component `bind:this` | Supported and tested |
@@ -16,6 +17,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | `Tween` / `Spring` bound to transforms and material values | Supported; frame delivery tested at 60/120/144 Hz in both RAF callback orders |
 | `{@attach}` | Supported on scene nodes, including reactive replacement and component prop spreads |
 | `use:` | Not part of the renderer API; use attachments. The pinned preview may accept scene actions incidentally; the canvas boundary rejects them |
+| `class:` and `style:` | Not part of the scene API; use material/transform props, and ordinary class/style attributes on the native canvas |
 | Host-element bindings, including `<mesh bind:this>` | Rejected by the pinned upstream compiler |
 | `transition:`, `in:`, `out:`, `animate:` on host nodes | Rejected by the pinned upstream compiler |
 | `{#await}` | Pending/then/catch, replacement, stale results, and unmount cleanup tested |
@@ -35,6 +37,8 @@ mounting, remounting, or disposing the scene.
 See the [element typing investigation](scene-element-types-design.md) for the
 reproducer and current editor limitations. These are separate from the tested
 runtime attachment behavior below.
+See [scene diagnostics](scene-diagnostics-guide.md) for warning codes, static
+analysis limits, and build-level filtering. These checks add no frame-loop work.
 
 Async expressions (`await` in markup or `$derived`) are not enabled in the apps.
 Their successful ready paths do not establish safe lifecycle behavior. See the

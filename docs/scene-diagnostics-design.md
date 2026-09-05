@@ -93,3 +93,17 @@ rewrite it. Rollback removes analysis/transport only; rendering output is unchan
 Real Vite builds load the compiler directly in Node: compiler-relative imports
 use explicit `.ts` extensions. The compiler shares only the pure alias module
 with runtime code; it does not load the invalidation or event registries.
+
+## Verification outcome
+
+- `pnpm test`: 794 passing tests (5 workspace, 709 renderer, 46 docs, 34 example),
+  including the existing real Tween/Spring 60/120/144 Hz frame/upload matrix.
+- `pnpm build` and `pnpm --filter svelte-typegpu check:svelte`: passing; Svelte
+  check reports zero errors and warnings.
+- Real Vite client/SSR builds deliver original-source warnings once; inline
+  callbacks and static/async dynamic warning filters are tested. Development
+  requests reuse cached diagnostics without repeats and clear them after fixes.
+- Docs examples regenerate warning-free with no generated-file diff. The new
+  guide example compiles warning-free through the direct Node compiler entry.
+- Browser visual verification was unavailable because the Mac was locked. No
+  scheduling behavior changed, and no new physical refresh-rate claim is made.

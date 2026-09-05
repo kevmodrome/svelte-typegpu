@@ -21,6 +21,8 @@ options, but owns renderer selection and disables HMR for this experimental
 integration. Custom build tools can use `compileTypeGpu` from
 `svelte-typegpu/compiler`; consume both its JavaScript and CSS results, as with
 the Svelte compiler. The docs generator uses this same compilation path.
+Both integrations produce [scene authoring warnings](scene-diagnostics-guide.md)
+for misspelled primitives and definitely misplaced resources or controls.
 
 ## Authoring
 
