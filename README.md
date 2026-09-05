@@ -26,7 +26,7 @@ https://github.com/sveltejs/svelte/pull/18042
 
 ## Example
 
-A TypeGPU scene is written as Svelte markup:
+A viewport owns its canvas and scene in `Viewport.typegpu.svelte`:
 
 ```svelte
 <script lang="ts">
@@ -36,47 +36,47 @@ A TypeGPU scene is written as Svelte markup:
   let color: RgbaTuple = [0.94, 0.9, 0.82, 1];
 </script>
 
-<scene clearColor={[0.067, 0.078, 0.102, 1]}>
-  <perspectiveCamera
-    id="main"
-    active={true}
-    position={[4, 3, 6]}
-    target={[0, 0, 0]}
-    fov={45}
-    near={0.1}
-    far={100}
-  ></perspectiveCamera>
+<canvas frameloop="demand" aria-label="Model preview" style="height: 400px">
+  <scene clearColor={[0.067, 0.078, 0.102, 1]}>
+    <perspectiveCamera
+      active={true}
+      position={[4, 3, 6]}
+      target={[0, 0, 0]}
+      fov={45}
+      near={0.1}
+      far={100}
+    ></perspectiveCamera>
 
-  <ambientLight color={[1, 1, 1]} intensity={0.25}></ambientLight>
-  <directionalLight rotation={[-0.8, 0.4, 0]} intensity={1.4}></directionalLight>
+    <ambientLight color={[1, 1, 1]} intensity={0.25}></ambientLight>
+    <directionalLight rotation={[-0.8, 0.4, 0]} intensity={1.4}></directionalLight>
 
-  <mesh {position}>
-    <boxGeometry width={1} height={1} depth={1}></boxGeometry>
-    <standardMaterial {color} roughness={0.3} metalness={0.1}></standardMaterial>
-  </mesh>
-</scene>
+    <mesh {position}>
+      <boxGeometry width={1} height={1} depth={1}></boxGeometry>
+      <standardMaterial {color} roughness={0.3} metalness={0.1}></standardMaterial>
+    </mesh>
+  </scene>
+</canvas>
 ```
 
-Mount it into a WebGPU canvas root from ordinary Svelte code:
+Import it directly from ordinary Svelte code:
 
 ```svelte
 <script lang="ts">
-  import Canvas from 'svelte-typegpu/canvas';
-  import Scene from './Scene.typegpu.svelte';
+  import Viewport from './Viewport.typegpu.svelte';
 </script>
 
-<Canvas
-  scene={Scene}
-  sceneProps={{}}
-  options={{ frameloop: 'demand' }}
-  style="height: 400px"
-/>
+<Viewport />
 ```
 
 Until Svelte's custom renderer API lands upstream, `.typegpu.svelte` files also
 need to be compiled with the Svelte PR preview build described below.
 
 ## Setup
+
+For the new `<canvas><scene>...</scene></canvas>` authoring API, see
+[Declarative canvas viewports](docs/declarative-canvas-guide.md). Dedicated viewport
+components import directly into ordinary Svelte pages; their scene children keep
+using the same renderer primitives and Svelte reactivity.
 
 See [Canvas hosting](docs/canvas-guide.md) for reactive props, context, startup
 options, lifecycle ownership, and manual rendering. The low-level
@@ -119,3 +119,5 @@ The published Svelte peer range alone does not provide the experimental API;
 applications must install this preview until the PR lands.
 
 The example app shows the current Vite setup in `apps/example/vite.config.ts`.
+It uses `typegpuSvelte()` from `svelte-typegpu/vite`, which handles both GPU-only
+components and DOM-owned viewport entries, including the SSR compilation path.

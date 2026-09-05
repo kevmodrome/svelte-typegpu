@@ -257,10 +257,12 @@ is reviewed. Roll back by disabling the new compile path and using the original
 host; no persisted state, GPU resource format, or dependency change is required.
 Retain FPS/error diagnostics and prove no renderer remains alive after teardown.
 
-The public API has not been implemented. The current evidence supports a careful
-compile-boundary spike, not shipping a general DOM/custom-renderer bridge.
+The narrow public API is now implemented and Native Events is the first migrated
+example. It is not a general DOM/custom-renderer bridge. The shared Vite and docs
+compiler integrations are covered by client/SSR build tests; renderer-owned
+options and unsupported directives are documented in the viewport guide.
 
-Verification checkpoint: all nine isolated investigation tests and all 681
-existing workspace tests pass. No production build or live GPU benchmark was
-needed for these documentation/probe-only changes; neither establishes that the
-proposed boundary is ready to ship.
+Verification checkpoint: 723 workspace tests pass, including 646 renderer tests,
+and both production apps build. The isolated investigation now has ten passing
+tests. Live visual and physical-refresh verification is still pending while the
+user's Mac is locked; synthetic clocks and fake GPU tests are not a substitute.

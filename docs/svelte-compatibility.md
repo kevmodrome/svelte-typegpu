@@ -7,6 +7,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | --- | --- |
 | Reactive state, component props, `{#if}`, keyed `{#each}` | Supported and tested |
 | DOM `Canvas` host | Reactive scene/canvas props, native DOM events/attachments, inherited context, SSR shell, and async startup/unmount cleanup tested |
+| Dedicated `<canvas>` viewport | Experimental compiler path: native attributes/events/attachments, `bind:this`, scoped CSS, SSR/hydration, scene switching and frame cadence tested; other canvas directives are explicitly rejected |
 | Consumer component types | Canvas props/callbacks/bindings checked; scene-element declarations deferred due to language-tools casing and action-target gaps |
 | `{#snippet}` and `{@render}` | Supported, including attachment forwarding |
 | `<svelte:element>` | Dynamic geometry/materials, prop spreads, events, attachment cleanup, and keyed identity tested |
@@ -26,6 +27,9 @@ Svelte releases. We test compiled components against the actual host renderer.
 DOM-oriented libraries are not automatically compatible. Scene nodes are not
 HTMLElements and do not implement layout, CSS, Web Animations, or DOM event APIs.
 Keep DOM controls in an ordinary Svelte component outside the scene.
+See [Declarative canvas viewports](declarative-canvas-guide.md) for the new
+canvas-owned entry syntax. Its DOM canvas binding support does not enable
+`bind:this` on custom scene primitives.
 Use [Canvas hosting](canvas-guide.md) to cross that boundary without manually
 mounting, remounting, or disposing the scene.
 See the [element typing investigation](scene-element-types-design.md) for the
