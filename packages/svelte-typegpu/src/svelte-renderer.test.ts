@@ -52,6 +52,7 @@ class FakeCanvas {
 
 function fakeRenderer(): TypeGpuRenderer {
   return {
+    setOptions: vi.fn(),
     setScene: vi.fn(),
     setCamera: vi.fn(),
     invalidate: vi.fn(),

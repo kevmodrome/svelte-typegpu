@@ -15,6 +15,7 @@ function setup() {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 100;
   const gpu = {
+    setOptions: vi.fn(),
     setScene: vi.fn(),
     setCamera: vi.fn(),
     invalidate: vi.fn(),

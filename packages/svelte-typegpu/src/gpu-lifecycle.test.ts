@@ -11,7 +11,7 @@ import {
   type TypeGpuNode
 } from './core';
 import { Dirty } from './dirty';
-import { createTypeGpuRenderer } from './gpu-renderer';
+import { createTypeGpuRenderer, type TypeGpuRendererOptions } from './gpu-renderer';
 import {
   GeometryResourceCache,
   MaterialResourceCache,
@@ -92,6 +92,179 @@ afterEach(() => {
 });
 
 describe('GPU resource and frame lifecycle', () => {
+  describe('live renderer options', () => {
+    const modes = ['always', 'demand', 'manual'] as const;
+    it.each([60, 120, 144].flatMap(hz => modes.flatMap(from => modes.map(to => ({ hz, from, to })))))
+      ('switches $from to $to at $hz Hz without deferring queued work', async ({ hz, from, to }) => {
+      const clock = optionClock(hz);
+      const { renderer, root, submissions } = await setupRenderer(from);
+      try {
+        if (from === 'manual') renderer.renderFrame(0); else clock.step();
+        root.createBuffer.mockClear(); root.createBindGroup.mockClear(); root.createTexture.mockClear();
+        const queued = [...clock.pending.keys()];
+        const requests = clock.request.mock.calls.length;
+        renderer.setOptions({ frameloop: to });
+        if (to === from) expect(clock.request).toHaveBeenCalledTimes(requests);
+        if (to === 'manual') expect(clock.pending.size).toBe(0);
+        else if (queued.length) expect([...clock.pending.keys()]).toEqual(queued);
+        const before = submissions.length;
+        for (let index = 0; index < 6; index++) {
+          clock.step();
+          expect(clock.pending.size).toBeLessThanOrEqual(1);
+        }
+        expect(submissions.length - before).toBe(to === 'always' ? 6 : to === 'demand' && from !== to ? 1 : 0);
+        expect(root.createBuffer).not.toHaveBeenCalled();
+        expect(root.createBindGroup).not.toHaveBeenCalled();
+        expect(root.createTexture).not.toHaveBeenCalled();
+        renderer.setOptions({ frameloop: 'manual' });
+        const count = clock.request.mock.calls.length;
+        renderer.invalidate(); renderer.setOptions({ frameloop: 'manual' });
+        expect(clock.request).toHaveBeenCalledTimes(count);
+      } finally { renderer.dispose(); }
+      const count = clock.request.mock.calls.length;
+      renderer.setOptions({ frameloop: 'always', maxDevicePixelRatio: 2 });
+      expect(clock.request).toHaveBeenCalledTimes(count);
+      expect(clock.pending.size).toBe(0);
+    });
+
+    it.each([60, 120, 144])('handles mode changes inside an explicit or scheduled frame at %s Hz', async hz => {
+      const clock = optionClock(hz);
+      const { renderer, submissions } = await setupRenderer('manual');
+      try {
+        let next: 'always' | 'demand' | 'manual' = 'always';
+        renderer.setFrameHandler!(() => { renderer.setOptions({ frameloop: next }); return false; });
+        renderer.renderFrame(0);
+        expect(clock.pending.size).toBe(1);
+        for (let index = 0; index < 5; index++) { clock.step(); expect(submissions).toHaveLength(index + 2); }
+        next = 'manual';
+        clock.step();
+        expect(clock.pending.size).toBe(0);
+        const count = submissions.length;
+        clock.step(); expect(submissions).toHaveLength(count);
+        next = 'demand'; renderer.renderFrame(clock.now);
+        expect(clock.pending.size).toBe(1);
+        clock.step(); expect(clock.pending.size).toBe(0);
+        const settled = submissions.length;
+        clock.step(); expect(submissions).toHaveLength(settled);
+      } finally { renderer.dispose(); }
+    });
+
+    it('reuses one demand resize observer and ignores stale callbacks after manual/disposal', async () => {
+      const clock = optionClock(120);
+      const before = CanvasSizeObserver.instances.length;
+      const { renderer, canvas } = await setupRenderer('manual');
+      try {
+        for (let index = 0; index < 4; index++) {
+          renderer.setOptions({ frameloop: 'demand' }); clock.step();
+          expect(CanvasSizeObserver.instances).toHaveLength(before + 1);
+          const observer = CanvasSizeObserver.instances.at(-1)!;
+          expect(observer.targets.has(canvas)).toBe(true);
+          renderer.setOptions({ frameloop: 'always' });
+          expect(observer.targets.size).toBe(0);
+          renderer.setOptions({ frameloop: 'manual' });
+          observer.callback([], observer as unknown as ResizeObserver);
+          expect(clock.pending.size).toBe(0);
+        }
+      } finally { renderer.dispose(); }
+      const observer = CanvasSizeObserver.instances.at(-1)!;
+      observer.callback([], observer as unknown as ResizeObserver);
+      expect(clock.pending.size).toBe(0);
+      expect(observer.targets.size).toBe(0);
+    });
+
+    it('applies mode and resolution atomically and only replaces a changed depth target', async () => {
+      const clock = optionClock(144);
+      const { renderer, root, canvas } = await setupRenderer('always');
+      try {
+        clock.step();
+        const depth = root.createTexture.mock.results.at(-1)!.value;
+        root.createBuffer.mockClear(); root.createBindGroup.mockClear(); root.createTexture.mockClear();
+        renderer.setOptions({ maxDevicePixelRatio: 0.5, frameloop: 'manual' });
+        expect(clock.pending.size).toBe(0);
+        expect(root.createTexture).not.toHaveBeenCalled();
+        expect(renderer.getRenderSize()).toEqual({ width: 100, height: 100 });
+        renderer.renderFrame(clock.now);
+        expect(renderer.getRenderSize()).toEqual({ width: 50, height: 50 });
+        expect([canvas.width, canvas.height]).toEqual([50, 50]);
+        expect(depth.destroy).toHaveBeenCalledOnce();
+        expect(root.createTexture).toHaveBeenCalledOnce();
+        renderer.setOptions({ maxDevicePixelRatio: 2 }); renderer.renderFrame(clock.now);
+        expect(renderer.getRenderSize()).toEqual({ width: 100, height: 100 });
+        const count = root.createTexture.mock.calls.length;
+        renderer.setOptions({ maxDevicePixelRatio: 3 }); renderer.renderFrame(clock.now);
+        expect(root.createTexture).toHaveBeenCalledTimes(count);
+        expect(root.createBuffer).not.toHaveBeenCalled();
+        expect(root.createBindGroup).not.toHaveBeenCalled();
+        expect(clock.pending.size).toBe(0);
+        renderer.setOptions({ frameloop: 'demand' }); clock.step();
+        const requests = clock.request.mock.calls.length;
+        renderer.setOptions({ maxDevicePixelRatio: 3 }); renderer.setOptions({});
+        expect(clock.request).toHaveBeenCalledTimes(requests);
+        renderer.setOptions({ maxDevicePixelRatio: 0.75 });
+        expect(clock.pending.size).toBe(1); clock.step();
+        expect(renderer.getRenderSize()).toEqual({ width: 75, height: 75 });
+        expect(clock.pending.size).toBe(0);
+      } finally { renderer.dispose(); }
+    });
+
+    it('does not compound DPR when the canvas has no measurable CSS size', async () => {
+      optionClock(120);
+      const canvas = { width: 100, height: 60, clientWidth: 0, clientHeight: 0 };
+      const { renderer, root } = await setupRenderer('manual', undefined, { canvas: canvas as HTMLCanvasElement });
+      try {
+        window.devicePixelRatio = 2;
+        const textures = root.createTexture.mock.calls.length;
+        for (let index = 0; index < 6; index++) renderer.renderFrame(index);
+        expect(renderer.getRenderSize()).toEqual({ width: 150, height: 90 });
+        expect(root.createTexture).toHaveBeenCalledTimes(textures + 1);
+        canvas.clientWidth = 120; canvas.clientHeight = 80; renderer.renderFrame(7);
+        canvas.clientWidth = 0; canvas.clientHeight = 0;
+        renderer.setOptions({ maxDevicePixelRatio: 1 }); renderer.renderFrame(8);
+        expect(renderer.getRenderSize()).toEqual({ width: 120, height: 80 });
+      } finally { renderer.dispose(); }
+    });
+
+    it('retains a resolution update made by onFps after the current draw', async () => {
+      const clock = optionClock(120);
+      const onFps = vi.fn(() => renderer.setOptions({ maxDevicePixelRatio: 0.5 }));
+      const { renderer } = await setupRenderer('always', onFps);
+      try {
+        for (let index = 0; index < 65 && onFps.mock.calls.length === 0; index++) clock.step();
+        expect(onFps).toHaveBeenCalledOnce();
+        expect(renderer.getRenderSize()).toEqual({ width: 100, height: 100 });
+        expect(clock.pending.size).toBe(1);
+        clock.step();
+        expect(renderer.getRenderSize()).toEqual({ width: 50, height: 50 });
+        expect(clock.pending.size).toBe(1);
+      } finally { renderer.dispose(); }
+    });
+
+    it.each([undefined, 'toString', 'invalid'])('restores the default loop for %s without accepting prototype names', async frameloop => {
+      const clock = optionClock(60);
+      const { renderer, submissions } = await setupRenderer('manual');
+      try {
+        renderer.setOptions({ frameloop: frameloop as TypeGpuRendererOptions['frameloop'] });
+        for (let index = 0; index < 3; index++) clock.step();
+        expect(submissions).toHaveLength(3);
+        expect(clock.pending.size).toBe(1);
+      } finally { renderer.dispose(); }
+    });
+
+    it.each([undefined, 0, -1, NaN, Infinity])('normalizes resolution caps consistently (%s)', async maxDevicePixelRatio => {
+      optionClock(60);
+      const { renderer } = await setupRenderer('manual', undefined, { maxDevicePixelRatio });
+      try {
+        window.devicePixelRatio = 2;
+        renderer.renderFrame(0);
+        const size = maxDevicePixelRatio === Infinity ? 200 : 150;
+        expect(renderer.getRenderSize()).toEqual({ width: size, height: size });
+        renderer.setOptions({ maxDevicePixelRatio: 0.5 }); renderer.renderFrame(1);
+        renderer.setOptions({ maxDevicePixelRatio }); renderer.renderFrame(2);
+        expect(renderer.getRenderSize()).toEqual({ width: size, height: size });
+      } finally { renderer.dispose(); }
+    });
+  });
+
   it.each([60, 120, 144].flatMap(hz => (['demand', 'manual'] as const).map(frameloop => ({ hz, frameloop }))))(
     'reports idle without drawing or scheduling RAF at $hz Hz in $frameloop mode',
     async ({ hz, frameloop }) => {
@@ -1539,17 +1712,34 @@ function dispatchExampleInput(
   return event;
 }
 
-async function setupRenderer(frameloop: 'manual' | 'demand' | 'always' = 'manual', onFps?: (fps: number) => void) {
+function optionClock(hz: number) {
+  const pending = new Map<number, FrameRequestCallback>();
+  let id = 0, now = 0;
+  const request = vi.fn((callback: FrameRequestCallback) => { pending.set(++id, callback); return id; });
+  vi.stubGlobal('requestAnimationFrame', request);
+  vi.stubGlobal('cancelAnimationFrame', (key: number) => pending.delete(key));
+  return { pending, request, get now() { return now; }, step() {
+    now += 1000 / hz;
+    for (const [key, callback] of [...pending]) if (pending.delete(key)) callback(now);
+  } };
+}
+
+async function setupRenderer(
+  frameloop: 'manual' | 'demand' | 'always' = 'manual', onFps?: (fps: number) => void,
+  options: Partial<TypeGpuRendererOptions> = {}
+) {
   const fake = fakeRoot();
   vi.mocked(tgpu.init).mockResolvedValue(fake.root as never);
   vi.stubGlobal('navigator', { gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
   vi.stubGlobal('window', { devicePixelRatio: 1 });
+  const canvas = options.canvas ?? { clientWidth: 100, clientHeight: 100, width: 100, height: 100 } as HTMLCanvasElement;
   const renderer = await createTypeGpuRenderer({
-    canvas: { clientWidth: 100, clientHeight: 100, width: 100, height: 100 } as HTMLCanvasElement,
+    canvas,
     frameloop,
-    onFps
+    onFps,
+    ...options
   });
-  return { ...fake, renderer };
+  return { ...fake, renderer, canvas };
 }
 
 function fakeBuffer() {

@@ -33,7 +33,7 @@ describe('TypeGPU target primitive component rendering', () => {
     `);
     const root = createFragment();
     let frameHandler: ((frame: TypeGpuFrameContext) => boolean) | null = null;
-    const gpu = { setScene: vi.fn(), setCamera: vi.fn(), invalidate: vi.fn(), renderFrame: vi.fn(),
+    const gpu = { setOptions: vi.fn(), setScene: vi.fn(), setCamera: vi.fn(), invalidate: vi.fn(), renderFrame: vi.fn(),
       setFrameHandler: vi.fn(handler => { frameHandler = handler; }), getRenderSize: vi.fn(), dispose: vi.fn()
     } as TypeGpuRenderer;
     const runtime = createTypeGpuRuntimeForTest(root, new EventTarget() as HTMLCanvasElement, gpu);
@@ -83,7 +83,7 @@ describe('TypeGPU target primitive component rendering', () => {
       </scene>
     `);
     const root = createFragment();
-    const gpu = { setScene: vi.fn(), setCamera: vi.fn(), invalidate: vi.fn(), renderFrame: vi.fn(), getRenderSize: vi.fn(), dispose: vi.fn() } as TypeGpuRenderer;
+    const gpu = { setOptions: vi.fn(), setScene: vi.fn(), setCamera: vi.fn(), invalidate: vi.fn(), renderFrame: vi.fn(), getRenderSize: vi.fn(), dispose: vi.fn() } as TypeGpuRenderer;
     const runtime = createTypeGpuRuntimeForTest(root, new EventTarget() as HTMLCanvasElement, gpu);
     root.runtime = runtime;
     const instance = mount(Scene, { renderer, target: root, props: { motion } });

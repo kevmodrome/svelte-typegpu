@@ -227,6 +227,7 @@ function mountScene<Exports extends Record<string, unknown>>(source: string, pro
   const Scene = compileViewportSource<Exports>(source, dependencies);
   const root = createFragment();
   const gpu = {
+    setOptions: vi.fn(),
     setScene: vi.fn(), setCamera: vi.fn(), invalidate: vi.fn(), renderFrame: vi.fn(),
     setFrameHandler: vi.fn(), getRenderSize: vi.fn(), dispose: vi.fn()
   } as TypeGpuRenderer;

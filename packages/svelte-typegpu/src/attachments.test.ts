@@ -117,6 +117,7 @@ describe('scene attachments', () => {
       };
     const root = createFragment();
     const gpu = {
+      setOptions: vi.fn(),
       setScene: vi.fn(),
       setCamera: vi.fn(),
       invalidate: vi.fn(),

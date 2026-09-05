@@ -136,6 +136,8 @@ interface ShaderPassResource {
 }
 
 export interface TypeGpuRenderer {
+  /** Update supplied live options; undefined restores that option's default. */
+  setOptions(options: Pick<TypeGpuRendererOptions, 'frameloop' | 'maxDevicePixelRatio'>): void;
   setScene(scene: TypeGpuSceneState): void;
   setCamera(camera: TypeGpuCameraSettings): void;
   invalidate(): void;
@@ -207,6 +209,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #renderQueue: TypeGpuRenderQueueItem[] = [];
   #renderSettings: TypeGpuRenderSettings;
   #renderSize = { width: 0, height: 0 };
+  #displaySize: { width: number; height: number };
   #resizeObserver: ResizeObserver | null = null;
   #samplerResources: SamplerResourceCache;
   #sceneBindGroup: TgpuBindGroup<typeof sceneBindGroupLayout.entries>;
@@ -226,8 +229,8 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #uniformData = new Float32Array(SCENE_UNIFORM_FLOATS);
 
   readonly #format: GPUTextureFormat;
-  readonly #frameloop: TypeGpuFrameLoop;
-  readonly #maxDevicePixelRatio: number;
+  #frameloop: TypeGpuFrameLoop;
+  #maxDevicePixelRatio: number;
 
   constructor(
     private readonly root: TgpuRoot,
@@ -235,7 +238,8 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   ) {
     this.#format = navigator.gpu.getPreferredCanvasFormat();
     this.#frameloop = normalizeFrameloop(options.frameloop);
-    this.#maxDevicePixelRatio = options.maxDevicePixelRatio;
+    this.#maxDevicePixelRatio = normalizePixelRatio(options.maxDevicePixelRatio);
+    this.#displaySize = { width: options.canvas.width || 1, height: options.canvas.height || 1 };
     this.#renderSettings = {
       clearColor: options.clearColor,
       depth: options.depth,
@@ -280,7 +284,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       this.#samplerResources
     );
     this.#pipelines = new PipelineResourceCache(root, this.#format);
-    this.#resizeObserver = this.#createResizeObserver();
+    this.#syncResizeObserver();
     this.setScene({
       dirty: Dirty.None,
       camera: DEFAULT_TYPEGPU_CAMERA,
@@ -307,6 +311,29 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
         pipelines: new Set()
       }
     });
+  }
+
+  setOptions(options: Pick<TypeGpuRendererOptions, 'frameloop' | 'maxDevicePixelRatio'>): void {
+    if (this.#disposed) return;
+    const frameloop = 'frameloop' in options ? normalizeFrameloop(options.frameloop) : this.#frameloop;
+    const ratio = 'maxDevicePixelRatio' in options ? normalizePixelRatio(options.maxDevicePixelRatio) : this.#maxDevicePixelRatio;
+    const modeChanged = frameloop !== this.#frameloop;
+    if (!modeChanged && ratio === this.#maxDevicePixelRatio) return;
+    this.#maxDevicePixelRatio = ratio;
+    this.#frameloop = frameloop;
+    if (modeChanged) this.#syncResizeObserver();
+
+    if (frameloop === 'manual') {
+      if (this.#frame !== null) cancelAnimationFrame(this.#frame);
+      this.#frame = null;
+      this.#needsFollowUpFrame = false;
+      this.#continueFrame = false;
+    } else if (this.#rendering) {
+      // Options can change in a frame task or onFps, even after resizing/drawing.
+      this.#needsFollowUpFrame = true;
+    } else if (this.#frame === null) {
+      this.invalidate();
+    }
   }
 
   setScene(scene: TypeGpuSceneState): void {
@@ -455,6 +482,10 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       this.#drawFrame(timestamp);
     } finally {
       this.#rendering = false;
+      if (this.#needsFollowUpFrame && this.#frame === null) {
+        this.#needsFollowUpFrame = false;
+        this.invalidate();
+      }
     }
   }
 
@@ -595,7 +626,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#frame = null;
     this.renderFrame(timestamp);
 
-    if (!this.#disposed && (this.#frameloop === 'always' || this.#continueFrame || needsFollowUpFrame)) {
+    if (!this.#disposed && this.#frame === null && (this.#frameloop === 'always' || this.#continueFrame || needsFollowUpFrame)) {
       this.invalidate();
     }
   }
@@ -608,12 +639,14 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     });
   }
 
-  #createResizeObserver(): ResizeObserver | null {
-    if (this.#frameloop !== 'demand' || typeof ResizeObserver === 'undefined') return null;
-
-    const observer = new ResizeObserver(() => this.invalidate());
-    observer.observe(this.options.canvas);
-    return observer;
+  #syncResizeObserver(): void {
+    if (this.#frameloop !== 'demand') {
+      this.#resizeObserver?.disconnect();
+      return;
+    }
+    if (typeof ResizeObserver === 'undefined') return;
+    this.#resizeObserver ??= new ResizeObserver(() => this.invalidate());
+    this.#resizeObserver.observe(this.options.canvas);
   }
 
   #updateRenderSettings(settings: TypeGpuRenderSettings): void {
@@ -721,8 +754,12 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #resize(): void {
     const canvas = this.options.canvas;
     const dpr = Math.min(this.#maxDevicePixelRatio, window.devicePixelRatio || 1);
-    const width = Math.max(1, Math.floor((canvas.clientWidth || canvas.width || 1) * dpr));
-    const height = Math.max(1, Math.floor((canvas.clientHeight || canvas.height || 1) * dpr));
+    // Hidden canvases retain their last CSS size, never their DPR-scaled output.
+    const measuredWidth = canvas.clientWidth, measuredHeight = canvas.clientHeight;
+    if (measuredWidth > 0) this.#displaySize.width = measuredWidth;
+    if (measuredHeight > 0) this.#displaySize.height = measuredHeight;
+    const width = Math.max(1, Math.floor(this.#displaySize.width * dpr));
+    const height = Math.max(1, Math.floor(this.#displaySize.height * dpr));
     const sizeChanged = this.#renderSize.width !== width || this.#renderSize.height !== height;
     const needsDepthTexture = this.#renderSettings.depth && !this.#depthTexture;
 
@@ -1181,7 +1218,11 @@ function identityMatrix4(): Float32Array {
 }
 
 function normalizeFrameloop(frameloop: TypeGpuRendererOptions['frameloop']): TypeGpuFrameLoop {
-  return frameloop && frameloop in FRAMELOOP_OPTIONS ? frameloop : FRAMELOOP_OPTIONS.always.frameloop;
+  return frameloop && Object.hasOwn(FRAMELOOP_OPTIONS, frameloop) ? frameloop : FRAMELOOP_OPTIONS.always.frameloop;
+}
+
+function normalizePixelRatio(value: number | undefined): number {
+  return typeof value === 'number' && value > 0 ? value : MAX_DEVICE_PIXEL_RATIO;
 }
 
 function arrayBufferFor(data: Float32Array): ArrayBuffer {
