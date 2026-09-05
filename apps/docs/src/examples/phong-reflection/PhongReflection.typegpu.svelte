@@ -1,7 +1,10 @@
 <script lang="ts">
+  import { getAbortSignal } from 'svelte';
+  import { loadModel, type TypeGpuAttachment } from 'svelte-typegpu';
   import PhongLights from './PhongLights.typegpu.svelte';
 
   interface PhongControls {
+    model?: { src: string };
     lightColor: [number, number, number];
     lightDirection: [number, number, number];
     ambientColor: [number, number, number];
@@ -17,7 +20,15 @@
     specularExponent: 8
   };
 
-  let { controls: phongControls = defaultPhongControls }: { controls?: PhongControls } = $props();
+  let {
+    controls: phongControls = defaultPhongControls,
+    onModelStatus = () => {}
+  }: { controls?: PhongControls; onModelStatus?: (message: string) => void } = $props();
+
+  const request = $derived(loadModel(phongControls.model?.src ?? '/assets/phong/teapot.obj', {
+    signal: getAbortSignal()
+  }));
+  const reportStatus = (message: string): TypeGpuAttachment => () => { onModelStatus(message); };
 </script>
 
 <scene clearColor={[28 / 255, 28 / 255, 28 / 255, 1]}>
@@ -48,18 +59,27 @@
     ambientStrength={phongControls.ambientStrength}
   />
 
-  <model
-    src="/assets/phong/teapot.obj"
-    position={[0, 0, 0]}
-    rotation={[0, Math.PI, 0]}
-    scale={[1, 1, 1]}
-    hitTest="bounds"
-  >
-    <phongMaterial
-      color={[1, 1, 1, 1]}
-      roughness={0.72}
-      metalness={0}
-      specularExponent={phongControls.specularExponent}
-    ></phongMaterial>
-  </model>
+  {#await request}
+    <mesh position={[0, 1, 0]} {@attach reportStatus('Loading model...')}>
+      <boxGeometry /><basicMaterial color={[0.4, 0.4, 0.4, 1]} />
+    </mesh>
+  {:then asset}
+    <model
+      {asset}
+      rotation={[0, Math.PI, 0]}
+      hitTest="bounds"
+      {@attach reportStatus('Model ready')}
+    >
+      <phongMaterial
+        color={[1, 1, 1, 1]}
+        roughness={0.72}
+        metalness={0}
+        specularExponent={phongControls.specularExponent}
+      />
+    </model>
+  {:catch error}
+    <mesh position={[0, 1, 0]} {@attach reportStatus(error instanceof Error ? error.message : 'Unable to load model.')}>
+      <boxGeometry /><basicMaterial color={[1, 0.15, 0.15, 1]} />
+    </mesh>
+  {/await}
 </scene>

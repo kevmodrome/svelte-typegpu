@@ -111,7 +111,11 @@ describe('docs example registry', () => {
     expect(twoBoxes).toContain('rotateBothBoxes');
 
     expect(phong).toContain('<model');
-    expect(phong).toContain('src="/assets/phong/teapot.obj"');
+    expect(phong).toContain("'/assets/phong/teapot.obj'");
+    expect(phong).toContain('{#await request}');
+    expect(phong).toContain('{:then asset}');
+    expect(phong).toContain('getAbortSignal()');
+    expect(phong).toContain('{:catch error}');
 
     expect(simpleShadow).toContain('castShadow');
     expect(simpleShadow).toContain('receiveShadow');

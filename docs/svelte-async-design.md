@@ -82,3 +82,27 @@ state/context. No migration required; rollback removes only the new export and
 asset attribute. Asset mutation is unsupported. URL-cache eviction and worker
 parsing are separate future work, not hidden in this change. Boundary async
 pending semantics remain unclaimed unless the pinned compiler supports them.
+
+## Verified results
+
+- Public loader/cache/scene tests pass. Compiled components cover pending,
+  ready, failure, obsolete results, resolution/rejection after unmount, reactive
+  context, and cancellation through Svelte `getAbortSignal()`.
+- The pinned compiler crashes when `failed` is declared inside a boundary.
+  An externally declared snippet passed with `{failed}` works; failure cleanup,
+  reset, and sibling identity have runtime tests. Async boundary pending remains
+  unclaimed.
+- GPU tests at 60/120/144 Hz verify bounded demand work, no manual-mode RAF,
+  one shared geometry upload, a 96-byte affected instance range for material
+  edits, no replacement buffers/bind groups/pipelines, and cleanup on removal.
+  Existing real Tween/Spring tests retain both RAF callback orders.
+- Phong example now uses `{#await}` with explicit reload, error reporting, and
+  recovery. Its lighting controls no longer remount the scene. A compiled test
+  verifies unrelated material changes retain the request and model node while
+  explicit source-object replacement reloads even the same URL.
+- Workspace: 524 tests pass; renderer typecheck and both app production builds
+  pass. Browser: desktop 1280x720 and mobile 390x844, nonblank canvas pixel checks,
+  visible lighting updates, failed URL and successful recovery, no warning/error
+  logs. Displayed FPS remained 60 on this browser surface; synthetic 120/144 Hz
+  results are not physical monitor measurements. Mobile document width 375 is
+  within its 390-pixel viewport.

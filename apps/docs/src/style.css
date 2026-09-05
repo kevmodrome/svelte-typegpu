@@ -845,6 +845,38 @@ textarea {
   text-transform: uppercase;
 }
 
+.model-source {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  font-size: 0.8rem;
+}
+
+.model-source > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.model-source input,
+.model-source button {
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid rgb(237 248 234 / 18%);
+  border-radius: 6px;
+  color: var(--text);
+  background: #171c1d;
+  font: inherit;
+}
+
+.model-source p {
+  min-height: 2.5em;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+
 .control-row > span {
   min-width: 0;
 }

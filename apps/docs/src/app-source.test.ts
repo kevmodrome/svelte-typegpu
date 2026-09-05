@@ -234,6 +234,15 @@ describe('docs app source wiring', () => {
     expect(phongSource).toContain('phongControls');
     expect(phongSource).toContain('phongControls.lightDirection');
     expect(phongSource).toContain('specularExponent={phongControls.specularExponent}');
+    expect(phongSource).toContain('{#await request}');
+    expect(previewSource).toContain('onModelStatus:');
+    expect(previewSource).toContain('Model URL');
+    const phongInputs = previewSource.split("{:else if slug === 'phong-reflection'}")[1]
+      .split("{:else if slug === 'simple-shadow'}")[0];
+    expect(phongInputs).not.toContain('rerenderScene()');
+    const phongSetters = previewSource.split('function setColor(')[1]
+      .split('function setSimpleValue')[0];
+    expect(phongSetters).not.toContain('rerenderScene()');
     expect(simpleShadowSource).toContain('simpleShadowControls');
     expect(previewSource).toContain('handleSimpleShadowCameraChange');
     expect(previewSource).toContain('setSimpleCameraX');

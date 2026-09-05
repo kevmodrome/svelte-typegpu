@@ -183,6 +183,37 @@ describe('async Svelte scene composition', () => {
     }
   });
 
+  it('keeps model requests stable during material edits and reloads on an explicit source replacement', async () => {
+    const Scene = compileTypeGpuSource<{ tint(): void; reload(): void }>(`
+      <script>
+        let { load } = $props();
+        const controls = $state({ model: { src: '/teapot.obj' }, color: [1, 0, 0, 1] });
+        const request = $derived(load(controls.model.src));
+        export function tint() { controls.color = [0, 1, 0, 1]; }
+        export function reload() { controls.model = { src: '/teapot.obj' }; }
+      </script>
+      {#await request then asset}<model {asset} color={controls.color} />{/await}
+    `);
+    const load = vi.fn(async () => ({ key: 'asset', meshes: [] }));
+    const root = createFragment();
+    const instance = mount(Scene, { renderer, target: root, props: { load } });
+    try {
+      await tick();
+      expect(load).toHaveBeenCalledOnce();
+      const model = elements(root)[0];
+      flushSync(() => instance.tint());
+      await tick();
+      expect(load).toHaveBeenCalledOnce();
+      expect(elements(root)[0]).toBe(model);
+      expect(model.attributes.color).toEqual([0, 1, 0, 1]);
+      flushSync(() => instance.reload());
+      await tick();
+      expect(load).toHaveBeenCalledTimes(2);
+    } finally {
+      await unmount(instance);
+    }
+  });
+
   it('cleans a failed boundary and resets it without affecting its siblings', async () => {
     const Scene = compileTypeGpuSource<{ fail(): void; recover(): void }>(`
       <script>

@@ -102,7 +102,8 @@ need to be compiled with the Svelte PR preview build described below.
 See [Animation and frame tasks](docs/scene-animation-guide.md) for Svelte motion,
 animated shader uniforms, dynamic collections, and reusable behavior components.
 See [Svelte compatibility](docs/svelte-compatibility.md) for attachments, component
-bindings, lifecycle guarantees, and the pinned compiler's current limitations.
+bindings, async model loading, lifecycle guarantees, and the pinned compiler's
+current limitations.
 
 ```bash
 pnpm install

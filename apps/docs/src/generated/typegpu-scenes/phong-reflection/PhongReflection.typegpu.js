@@ -4,9 +4,15 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
+import { getAbortSignal } from 'svelte';
+import { loadModel } from 'svelte-typegpu';
 import PhongLights from './PhongLights.typegpu.js';
 
-var root = $.from_tree([
+var root = $.from_tree([['model', { hitTest: 'bounds' }, ['phongMaterial']]]);
+var root_1 = $.from_tree([['mesh', null, ['boxGeometry'], ['basicMaterial']]], 4);
+var root_2 = $.from_tree([['mesh', null, ['boxGeometry'], ['basicMaterial']]], 4);
+
+var root_3 = $.from_tree([
 	[
 		'scene',
 		null,
@@ -23,12 +29,7 @@ var root = $.from_tree([
 			]
 		],
 		' ',,
-		' ',
-		[
-			'model',
-			{ src: '/assets/phong/teapot.obj', hitTest: 'bounds' },
-			['phongMaterial']
-		]
+		' ',,
 	]
 ]);
 
@@ -45,8 +46,16 @@ export default function PhongReflection_typegpu($$anchor, $$props) {
 		specularExponent: 8
 	};
 
-	let phongControls = $.prop($$props, 'controls', 3, defaultPhongControls);
-	var scene = root();
+	let phongControls = $.prop($$props, 'controls', 3, defaultPhongControls),
+		onModelStatus = $.prop($$props, 'onModelStatus', 3, () => {});
+
+	const request = $.derived(() => loadModel(phongControls().model?.src ?? '/assets/phong/teapot.obj', { signal: getAbortSignal() }));
+
+	const reportStatus = (message) => () => {
+		onModelStatus()(message);
+	};
+
+	var scene = root_3();
 
 	$.set_attribute(scene, 'clearColor', [28 / 255, 28 / 255, 28 / 255, 1]);
 
@@ -91,20 +100,58 @@ export default function PhongReflection_typegpu($$anchor, $$props) {
 		}
 	});
 
-	var model = $.sibling(node, 2);
+	var node_1 = $.sibling(node, 2);
 
-	$.set_attribute(model, 'position', [0, 0, 0]);
-	$.set_attribute(model, 'rotation', [0, Math.PI, 0]);
-	$.set_attribute(model, 'scale', [1, 1, 1]);
+	$.await(
+		node_1,
+		() => $.get(request),
+		($$anchor) => {
+			var mesh_1 = root_2();
 
-	var phongMaterial = $.child(model);
+			$.set_attribute(mesh_1, 'position', [0, 1, 0]);
 
-	$.set_attribute(phongMaterial, 'color', [1, 1, 1, 1]);
-	$.set_attribute(phongMaterial, 'roughness', 0.72);
-	$.set_attribute(phongMaterial, 'metalness', 0);
-	$.reset(model);
+			var basicMaterial_1 = $.sibling($.child(mesh_1));
+
+			$.set_attribute(basicMaterial_1, 'color', [0.4, 0.4, 0.4, 1]);
+			$.reset(mesh_1);
+			$.attach(mesh_1, () => reportStatus('Loading model...'));
+			$.append($$anchor, mesh_1);
+		},
+		($$anchor, asset) => {
+			var model = root();
+
+			$.set_attribute(model, 'rotation', [0, Math.PI, 0]);
+
+			var phongMaterial = $.child(model);
+
+			$.set_attribute(phongMaterial, 'color', [1, 1, 1, 1]);
+			$.set_attribute(phongMaterial, 'roughness', 0.72);
+			$.set_attribute(phongMaterial, 'metalness', 0);
+			$.reset(model);
+			$.attach(model, () => reportStatus('Model ready'));
+
+			$.template_effect(() => {
+				$.set_attribute(model, 'asset', $.get(asset));
+				$.set_attribute(phongMaterial, 'specularExponent', phongControls().specularExponent);
+			});
+
+			$.append($$anchor, model);
+		},
+		($$anchor, error) => {
+			var mesh = root_1();
+
+			$.set_attribute(mesh, 'position', [0, 1, 0]);
+
+			var basicMaterial = $.sibling($.child(mesh));
+
+			$.set_attribute(basicMaterial, 'color', [1, 0.15, 0.15, 1]);
+			$.reset(mesh);
+			$.attach(mesh, () => reportStatus($.get(error) instanceof Error ? $.get(error).message : 'Unable to load model.'));
+			$.append($$anchor, mesh);
+		}
+	);
+
 	$.reset(scene);
-	$.template_effect(() => $.set_attribute(phongMaterial, 'specularExponent', phongControls().specularExponent));
 	$.append($$anchor, scene);
 	$.pop();
 	$$pop_renderer();

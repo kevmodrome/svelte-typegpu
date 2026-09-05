@@ -19,7 +19,10 @@
   let error = $state<string | null>(null);
   let ready = $state(false);
   let fps = $state<number | null>(null);
+  let modelUrl = $state('/assets/phong/teapot.obj');
+  let modelStatus = $state('Loading model...');
   let phongControls = $state({
+    model: { src: '/assets/phong/teapot.obj' },
     lightColor: [0.8, 0.8, 0.8] as [number, number, number],
     lightDirection: [0, 7, -7] as [number, number, number],
     ambientColor: [1, 0.7, 0] as [number, number, number],
@@ -72,7 +75,10 @@
         controls: motionControls,
         onTargetChange: (x: number, z: number) => { motionControls.x = x; motionControls.z = z; }
       };
-      if (slug === 'phong-reflection') return { controls: phongControls };
+      if (slug === 'phong-reflection') return {
+        controls: phongControls,
+        onModelStatus: (message: string) => { modelStatus = message; }
+      };
       if (slug === 'simple-shadow') {
         return {
           controls: simpleShadowControls,
@@ -154,13 +160,11 @@
 
   function setColor(target: 'lightColor' | 'ambientColor', value: string) {
     phongControls[target] = hexToRgb(value);
-    rerenderScene();
   }
 
   function setPhongVector(index: number, value: number) {
     phongControls.lightDirection[index] = value;
     phongControls.lightDirection = [...phongControls.lightDirection] as [number, number, number];
-    rerenderScene();
   }
 
   function setSimpleValue<K extends keyof typeof simpleShadowControls>(
@@ -301,6 +305,17 @@
           <output>{motionControls.count}</output>
         </label>
       {:else if slug === 'phong-reflection'}
+        <form class="model-source" onsubmit={(event) => {
+          event.preventDefault();
+          phongControls.model = { src: modelUrl.trim() };
+        }}>
+          <label for="model-url">Model URL</label>
+          <div>
+            <input id="model-url" type="text" bind:value={modelUrl} required />
+            <button type="submit" disabled={!modelUrl.trim()}>Load</button>
+          </div>
+          <p role="status">{modelStatus}</p>
+        </form>
         <label class="control-row">
           <span>light color</span>
           <input
@@ -344,7 +359,6 @@
             value={phongControls.ambientStrength}
             oninput={(event) => {
               phongControls.ambientStrength = event.currentTarget.valueAsNumber;
-              rerenderScene();
             }}
           />
           <output>{phongControls.ambientStrength.toFixed(2)}</output>
@@ -359,7 +373,6 @@
             value={phongControls.specularExponent}
             oninput={(event) => {
               phongControls.specularExponent = event.currentTarget.valueAsNumber;
-              rerenderScene();
             }}
           />
           <output>{phongControls.specularExponent.toFixed(1)}</output>
