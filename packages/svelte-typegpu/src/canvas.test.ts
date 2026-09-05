@@ -6,6 +6,7 @@ import CanvasHost from './test-fixtures/CanvasHost.svelte';
 import { createTypeGpuRoot, type TypeGpuRoot } from './svelte-renderer';
 import { createFragment, walk, type TypeGpuNode } from './core';
 import { compileTypeGpuSource } from './component-test-utils';
+import { createAttachmentKey } from 'svelte/attachments';
 
 vi.mock('./svelte-renderer', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./svelte-renderer')>();
@@ -35,6 +36,97 @@ function sceneNodes(root: TypeGpuNode) {
 }
 
 describe('Svelte Canvas boundary', () => {
+  it('updates native canvas attributes, events and attachments without replacing scene or GPU state', async () => {
+    const root = gpuRoot();
+    vi.mocked(createTypeGpuRoot).mockResolvedValue(root);
+    const Scene = compileTypeGpuSource(
+      '<script>let { setup } = $props();</script><mesh {@attach setup} />'
+    );
+    const sceneCleanup = vi.fn();
+    const sceneSetup = vi.fn(() => sceneCleanup);
+    const canvasCleanup = vi.fn();
+    const attach = vi.fn(() => canvasCleanup);
+    const key = createAttachmentKey();
+    const first = vi.fn((event: KeyboardEvent) => {
+      expect(event.currentTarget).toBe(document.querySelector('canvas'));
+    });
+    const second = vi.fn();
+    const instance = mount(CanvasHost, {
+      target: document.body,
+      props: {
+        Scene,
+        props: { setup: sceneSetup },
+        canvasProps: {
+          'aria-label': 'Model preview',
+          tabindex: -1,
+          class: ['viewport', { selected: true }],
+          style: 'touch-action: pan-y',
+          onkeydown: first,
+          [key]: attach
+        }
+      }
+    });
+    instances.push(instance);
+    await tick();
+    await tick();
+    const canvas = document.querySelector('canvas')!;
+    const mesh = sceneNodes(root)[0];
+    expect(canvas.getAttribute('aria-label')).toBe('Model preview');
+    expect(canvas.tabIndex).toBe(-1);
+    expect(canvas.style.touchAction).toBe('pan-y');
+    expect(canvas.classList.contains('viewport')).toBe(true);
+    expect(canvas.classList.contains('selected')).toBe(true);
+    expect(canvas.classList.contains('renderer-root-canvas')).toBe(true);
+    expect([...canvas.classList].some((name) => name.startsWith('svelte-'))).toBe(true);
+    expect(attach).toHaveBeenCalledExactlyOnceWith(canvas);
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true });
+    canvas.dispatchEvent(event);
+    expect(first).toHaveBeenCalledExactlyOnceWith(event);
+    canvas.width = 640;
+    canvas.height = 480;
+    flushSync(() =>
+      instance.updateCanvasProps({
+        'aria-label': 'Updated preview',
+        tabindex: 0,
+        class: { active: true },
+        onkeydown: second,
+        [key]: attach,
+        width: 5,
+        height: 7,
+        children: 'ignored'
+      })
+    );
+    expect(canvas.getAttribute('aria-label')).toBe('Updated preview');
+    expect(canvas.tabIndex).toBe(0);
+    expect(canvas.hasAttribute('style')).toBe(false);
+    expect(canvas.classList.contains('viewport')).toBe(false);
+    expect(canvas.classList.contains('active')).toBe(true);
+    expect(canvas.classList.contains('renderer-root-canvas')).toBe(true);
+    expect([...canvas.classList].some((name) => name.startsWith('svelte-'))).toBe(true);
+    expect(canvas.width).toBe(640);
+    expect(canvas.height).toBe(480);
+    expect(canvas.textContent).toBe('');
+    canvas.dispatchEvent(event);
+    expect(first).toHaveBeenCalledOnce();
+    expect(second).toHaveBeenCalledExactlyOnceWith(event);
+    expect(attach).toHaveBeenCalledOnce();
+    expect(canvasCleanup).not.toHaveBeenCalled();
+    expect(sceneNodes(root)[0]).toBe(mesh);
+    expect(sceneSetup).toHaveBeenCalledOnce();
+    expect(sceneCleanup).not.toHaveBeenCalled();
+    expect(createTypeGpuRoot).toHaveBeenCalledOnce();
+    expect(root.dispose).not.toHaveBeenCalled();
+    flushSync(() => instance.updateCanvasProps({}));
+    expect(canvas.hasAttribute('aria-label')).toBe(false);
+    expect(canvas.hasAttribute('tabindex')).toBe(false);
+    expect(canvasCleanup).toHaveBeenCalledOnce();
+    await unmount(instance);
+    instances.pop();
+    expect(sceneCleanup).toHaveBeenCalledOnce();
+    expect(root.dispose).toHaveBeenCalledOnce();
+    expect(canvasCleanup).toHaveBeenCalledOnce();
+  });
+
   it('forwards props, context and callbacks while retaining the scene and GPU root', async () => {
     const events: string[] = [];
     const root = gpuRoot(events);

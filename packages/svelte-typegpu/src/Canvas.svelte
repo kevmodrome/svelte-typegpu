@@ -1,6 +1,6 @@
 <script lang="ts" generics="Props extends Record<string, any>">
   import { getAllContexts, mount, onMount, unmount, type Component } from 'svelte';
-  import type { HTMLAttributes } from 'svelte/elements';
+  import type { HTMLAttributes, HTMLCanvasAttributes } from 'svelte/elements';
   import renderer, {
     createTypeGpuRoot,
     type TypeGpuRoot,
@@ -12,6 +12,7 @@
     scene,
     sceneProps,
     options = {},
+    canvasProps = {},
     root = $bindable(null),
     onready,
     onerror,
@@ -21,11 +22,21 @@
     scene: Component<Props>;
     sceneProps: NoInfer<Props>;
     options?: Omit<TypeGpuRootOptions, 'target' | 'canvas' | 'onFps'>;
+    canvasProps?: Omit<HTMLCanvasAttributes, 'children' | 'width' | 'height'>;
     root?: TypeGpuRoot | null;
     onready?: (root: TypeGpuRoot) => void;
     onerror?: (error: unknown) => void;
     onfps?: (fps: number) => void;
   } = $props();
+
+  // Filter renderer-owned DOM fields even when props come from untyped callers.
+  const {
+    class: canvasClass,
+    width: _width,
+    height: _height,
+    children: _children,
+    ...canvasAttributes
+  } = $derived(canvasProps as HTMLCanvasAttributes);
 
   const context = getAllContexts();
   let host: HTMLDivElement;
@@ -87,7 +98,11 @@
 </script>
 
 <div {...attributes} bind:this={host}>
-  <canvas bind:this={canvas}></canvas>
+  <canvas
+    {...canvasAttributes}
+    class={['renderer-root-canvas', canvasClass]}
+    bind:this={canvas}
+  ></canvas>
   {#if startupError && !onerror}
     <p role="alert">{startupError}</p>
   {/if}

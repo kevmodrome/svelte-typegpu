@@ -24,5 +24,13 @@
   aria-label="Scene"
   data-count={count}
   onclick={(event) => event.currentTarget.focus()}
+  canvasProps={{
+    'aria-label': 'Interactive model', tabindex: 0, class: ['viewport', { active: true }],
+    'data-view': 'scene',
+    onkeydown: (event) => {
+      message = event.key.toUpperCase();
+      event.currentTarget.toDataURL();
+    }
+  }}
 />
 <button onclick={() => root?.gpu.renderFrame()}>{message}</button>

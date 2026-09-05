@@ -44,11 +44,30 @@ it('server-renders the canvas shell without initializing WebGPU or mounting a sc
   );
 
   const output = render(Canvas, {
-    props: { scene, sceneProps: {}, 'aria-label': 'Server canvas' },
+    props: {
+      scene,
+      sceneProps: {},
+      'aria-label': 'Server host',
+      canvasProps: {
+        'aria-label': 'Server canvas',
+        tabindex: 0,
+        class: ['preview', { selected: true }],
+        width: 5,
+        height: 7,
+        children: 'ignored',
+        onkeydown: () => {}
+      }
+    },
     context: new Map([['theme', 'dark']])
   });
-  expect(output.body).toContain('<canvas');
-  expect(output.body).toContain('aria-label="Server canvas"');
+  expect(output.body).toContain('aria-label="Server host"');
+  expect(output.body).toMatch(/<canvas[^>]*aria-label="Server canvas"/);
+  expect(output.body).toContain('tabindex="0"');
+  expect(output.body).toContain('renderer-root-canvas preview selected');
+  expect(output.body).not.toContain('width="5"');
+  expect(output.body).not.toContain('height="7"');
+  expect(output.body).not.toContain('ignored');
+  expect(output.body).not.toContain('onkeydown');
   expect(initialize).not.toHaveBeenCalled();
   expect(scene).not.toHaveBeenCalled();
 });

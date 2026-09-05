@@ -69,7 +69,12 @@ describe('Canvas public Svelte types', () => {
         [15, 2353], // Canvas owns the canvas option.
         [16, 2353], // Canvas owns the target option.
         [17, 2353], // The live onfps callback replaces the onFps option.
-        [18, 2353] // Initialization options are not host attributes.
+        [18, 2353], // Initialization options are not host attributes.
+        [19, 2353], // The renderer owns drawing-buffer width.
+        [20, 2353], // The renderer owns drawing-buffer height.
+        [21, 2353], // Canvas contents are not user-owned DOM children.
+        [22, 2551], // Native keyboard event keys are strings, not any.
+        [23, 2339] // Native canvas currentTarget is not an input element.
       ].map(([line, code]) => ({
         type: 'ERROR',
         filename: 'type-tests/invalid/Consumer.svelte',

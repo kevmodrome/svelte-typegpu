@@ -35,6 +35,48 @@ attributes such as `class`, `style`, and `aria-label` apply to the host div. The
 canvas keeps its own scoped styling and renderer class. Server rendering emits
 the shell only; WebGPU starts after the component mounts in the browser.
 
+## Native canvas props
+
+Use `canvasProps` for attributes and events on the actual HTMLCanvasElement,
+independently of the wrapper div:
+
+```svelte
+<Canvas
+  scene={Scene}
+  sceneProps={{ controls }}
+  style="height: 400px"
+  canvasProps={{
+    'aria-label': 'Interactive model preview',
+    tabindex: 0,
+    class: ['viewport', { shifted: controls.x !== 0 }],
+    onkeydown: (event) => {
+      if (event.key === 'Escape') controls.x = 0;
+    }
+  }}
+/>
+```
+
+Native handlers receive DOM events and a canvas `currentTarget`; scene handlers still receive
+`TypeGpuNodeEvent`. Top-level `onclick`, `class`, and other attributes continue to
+apply to the wrapper. `Canvas`'s `onerror` remains a GPU startup callback, while
+`canvasProps.onerror` is a native DOM event handler.
+
+Canvas attributes, handlers, and Svelte class arrays/objects are reactive. Changing
+them does not replace the canvas, remount the scene, initialize WebGPU, or request
+a render frame. User class changes preserve the renderer class and scoped styles.
+Svelte attachment-symbol props inside `canvasProps` attach to the DOM canvas and
+use ordinary Svelte setup/cleanup; component-level attachments still target the
+wrapper. A DOM attachment should not resize the drawing buffer or dispose the root.
+
+The renderer owns canvas `width` and `height`; they are excluded from the prop
+type and ignored at runtime. Use CSS dimensions instead. `children` is also
+excluded: DOM overlays and controls stay outside the custom scene. ARIA attributes
+are present during SSR, but attachments, handlers, and WebGPU do not run there.
+Adding a label or tabindex does not implement keyboard navigation among 3D objects;
+provide accessible DOM controls for scene interactions.
+
+## Root lifetime
+
 `options` are initialization-only `TypeGpuRootOptions`, without `target`, `canvas`,
 or `onFps`. Use reactive scene attributes for backgrounds/depth settings. To
 change initialization options, recreate the canvas explicitly with `{#key}`.

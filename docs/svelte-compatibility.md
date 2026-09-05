@@ -6,7 +6,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | Feature | Current status |
 | --- | --- |
 | Reactive state, component props, `{#if}`, keyed `{#each}` | Supported and tested |
-| DOM `Canvas` host | Reactive scene props, inherited context, SSR shell, and async startup/unmount cleanup tested |
+| DOM `Canvas` host | Reactive scene/canvas props, native DOM events/attachments, inherited context, SSR shell, and async startup/unmount cleanup tested |
 | Consumer component types | Canvas props/callbacks/bindings checked; scene-element declarations deferred due to language-tools casing and action-target gaps |
 | `{#snippet}` and `{@render}` | Supported, including attachment forwarding |
 | `<svelte:element>` | Dynamic geometry/materials, prop spreads, events, attachment cleanup, and keyed identity tested |

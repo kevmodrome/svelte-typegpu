@@ -16,12 +16,13 @@ import { createMeshPipeline } from './typegpu-pipeline';
 import { flushSync, mount, tick, unmount } from 'svelte';
 import { Spring, Tween } from 'svelte/motion';
 import * as svelteClient from 'svelte/internal/client';
-import sceneRenderer, { createTypeGpuRuntimeForTest } from './svelte-renderer';
+import sceneRenderer, { createTypeGpuRuntimeForTest, type TypeGpuRoot } from './svelte-renderer';
 import { compileTypeGpuSource } from './component-test-utils';
 import type { TypeGpuAttachment } from './attachments';
 import { loadModel } from './model-loader';
 import type { TypeGpuLoadedModel } from './types';
 import SceneHost from './SceneHost.svelte';
+import CanvasMotionHost from './test-fixtures/CanvasMotionHost.svelte';
 
 const captured = vi.hoisted(() => ({ bindings: [] as unknown[][], counts: [] as number[] }));
 
@@ -57,6 +58,178 @@ afterEach(() => {
 });
 
 describe('GPU resource and frame lifecycle', () => {
+  it.each(
+    [60, 120, 144].flatMap((hz) =>
+      ['Tween', 'Spring'].flatMap((kind) => [
+        { hz, kind, frameloop: 'demand' as const, rendererFirst: false },
+        { hz, kind, frameloop: 'demand' as const, rendererFirst: true },
+        { hz, kind, frameloop: 'manual' as const, rendererFirst: false }
+      ])
+    )
+  )(
+    'retains Canvas and GPU state during $kind and native prop updates at $hz Hz ($frameloop, renderer first: $rendererFirst)',
+    async ({ hz, kind, frameloop, rendererFirst }) => {
+      const pending = new Map<number, FrameRequestCallback>();
+      const producers = new WeakSet<FrameRequestCallback>();
+      let id = 0;
+      let now = 0;
+      vi.stubGlobal(
+        'requestAnimationFrame',
+        vi.fn((callback: FrameRequestCallback) => {
+          pending.set(++id, callback);
+          return id;
+        })
+      );
+      vi.stubGlobal(
+        'cancelAnimationFrame',
+        vi.fn((id: number) => pending.delete(id))
+      );
+      const raf = (
+        svelteClient as unknown as {
+          raf: { now(): number; tick(callback: () => void): void };
+        }
+      ).raf;
+      vi.spyOn(raf, 'now').mockImplementation(() => now);
+      vi.spyOn(raf, 'tick').mockImplementation((callback) => {
+        producers.add(callback);
+        requestAnimationFrame(callback);
+      });
+      const motion =
+        kind === 'Tween'
+          ? new Tween(0, { duration: 2000 })
+          : new Spring(0, { stiffness: 0.01, damping: 0.5, precision: 1e-8 });
+      const stop = () =>
+        motion instanceof Tween
+          ? motion.set(motion.current, { duration: 0 })
+          : motion.set(motion.current, { instant: true });
+      const { root: gpu, buffers, submissions } = fakeRoot();
+      vi.mocked(tgpu.init)
+        .mockClear()
+        .mockResolvedValue(gpu as never);
+      vi.stubGlobal('navigator', { gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
+      const Scene = compileTypeGpuSource(`
+        <script>let { motion, setup } = $props();</script>
+        <scene>
+          {#each Array.from({ length: 300 }, (_, i) => i) as i (i)}
+            <mesh position={[i + 10, 0, 0]}><boxGeometry /><standardMaterial /></mesh>
+          {/each}
+          <mesh position={[motion.current, 0, 0]} {@attach setup}>
+            <boxGeometry /><standardMaterial />
+          </mesh>
+        </scene>
+      `);
+      const cleanup = vi.fn();
+      const setup = vi.fn(() => cleanup);
+      const domCleanup = vi.fn();
+      const domSetup = vi.fn(() => domCleanup);
+      let resolve!: (root: TypeGpuRoot) => void;
+      let reject!: (error: unknown) => void;
+      const ready = new Promise<TypeGpuRoot>((yes, no) => {
+        resolve = yes;
+        reject = no;
+      });
+      const onready = vi.fn(resolve);
+      const instance = mount(CanvasMotionHost, {
+        target: document.body,
+        props: {
+          Scene,
+          motion,
+          setup,
+          domSetup,
+          onready,
+          onerror: reject,
+          frameloop
+        }
+      });
+      const order: string[] = [];
+      async function step() {
+        now += 1000 / hz;
+        order.length = 0;
+        for (const [id, callback] of [...pending]) {
+          if (!pending.delete(id)) continue;
+          order.push(producers.has(callback) ? 'motion' : 'render');
+          callback(now);
+          flushSync();
+          await Promise.resolve();
+        }
+      }
+      try {
+        flushSync();
+        const root = await ready;
+        await tick();
+        for (let i = 0; i < 3; i++) await step();
+        expect(pending.size).toBe(0);
+        const canvas = document.querySelector('canvas')!;
+        expect(root.canvas).toBe(canvas);
+        expect(domSetup).toHaveBeenCalledExactlyOnceWith(canvas);
+        const dimensions = [canvas.width, canvas.height];
+        const buffer = buffers.find((buffer) => buffer.label.endsWith('instances'))!;
+        buffer.write.mockClear();
+        gpu.createBuffer.mockClear();
+        gpu.createBindGroup.mockClear();
+        vi.mocked(createMeshPipeline).mockClear();
+        if (frameloop === 'demand' && rendererFirst) {
+          root.gpu.invalidate();
+          root.gpu.invalidate();
+        }
+        void motion.set(10);
+        if (frameloop === 'demand' && !rendererFirst) {
+          root.gpu.invalidate();
+          root.gpu.invalidate();
+        }
+        for (let frame = 0; frame < hz; frame++) {
+          const before = submissions.length;
+          await step();
+          if (frameloop === 'manual') {
+            expect(order).toEqual(['motion']);
+            root.gpu.renderFrame(now);
+          } else {
+            expect(order).toEqual(rendererFirst ? ['render', 'motion'] : ['motion', 'render']);
+          }
+          expect(submissions.length - before).toBe(1);
+          expect(Number(canvas.dataset.motion)).toBe(motion.current);
+          expect(document.querySelector('canvas')).toBe(canvas);
+          expect([canvas.width, canvas.height]).toEqual(dimensions);
+          expect(canvas.classList.contains('renderer-root-canvas')).toBe(true);
+        }
+        expect(buffer.write.mock.calls.length).toBeGreaterThan(hz - 4);
+        for (const [, range] of buffer.write.mock.calls) {
+          expect(range).toEqual({ startOffset: 300 * 96, endOffset: 301 * 96 });
+        }
+        expect(buffer.data[300 * 24]).toBeCloseTo(motion.current);
+        expect(gpu.createBuffer).not.toHaveBeenCalled();
+        expect(gpu.createBindGroup).not.toHaveBeenCalled();
+        expect(createMeshPipeline).not.toHaveBeenCalled();
+        expect(tgpu.init).toHaveBeenCalledOnce();
+        expect(onready).toHaveBeenCalledOnce();
+        expect(setup).toHaveBeenCalledOnce();
+        expect(domSetup).toHaveBeenCalledOnce();
+        expect(cleanup).not.toHaveBeenCalled();
+        expect(domCleanup).not.toHaveBeenCalled();
+        await stop();
+        for (let i = 0; i < 4; i++) await step();
+        expect(pending.size).toBe(0);
+        const count = submissions.length;
+        const frames = vi.mocked(requestAnimationFrame).mock.calls.length;
+        flushSync(() => instance.rename('Idle scene'));
+        await tick();
+        expect(canvas.getAttribute('aria-label')).toBe('Idle scene');
+        expect(submissions).toHaveLength(count);
+        expect(requestAnimationFrame).toHaveBeenCalledTimes(frames);
+        // Leave demand work pending to verify Canvas disposal cancels it.
+        root.gpu.invalidate();
+      } finally {
+        await stop();
+        await unmount(instance);
+        document.body.replaceChildren();
+      }
+      expect(pending.size).toBe(0);
+      expect(cleanup).toHaveBeenCalledOnce();
+      expect(domCleanup).toHaveBeenCalledOnce();
+      expect(gpu.destroy).toHaveBeenCalledOnce();
+    }
+  );
+
   it.each([60, 120, 144].flatMap(hz =>
     (['manual', 'demand'] as const).map(frameloop => ({ hz, frameloop }))
   ))('settles await assets with bounded $frameloop frames at $hz Hz', async ({ hz, frameloop }) => {

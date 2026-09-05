@@ -16,3 +16,8 @@
 <Canvas scene={Scene} sceneProps={{ count: 1 }} options={{ target: undefined }} />
 <Canvas scene={Scene} sceneProps={{ count: 1 }} options={{ onFps: () => {} }} />
 <Canvas scene={Scene} sceneProps={{ count: 1 }} frameloop="demand" />
+<Canvas scene={Scene} sceneProps={{ count: 1 }} canvasProps={{ width: 800 }} />
+<Canvas scene={Scene} sceneProps={{ count: 1 }} canvasProps={{ height: 600 }} />
+<Canvas scene={Scene} sceneProps={{ count: 1 }} canvasProps={{ children: () => {} }} />
+<Canvas scene={Scene} sceneProps={{ count: 1 }} canvasProps={{ onkeydown: (event) => event.key.toFixed() }} />
+<Canvas scene={Scene} sceneProps={{ count: 1 }} canvasProps={{ onclick: (event) => event.currentTarget.value }} />
