@@ -6,7 +6,12 @@ export function startCanvasScene<Props extends Record<string, any>>(
   component: Component<Props>,
   props: Props,
   context: Map<any, any>,
-  callbacks: { ready(root: TypeGpuRoot): void; error(error: unknown): void; cleared(root: TypeGpuRoot | null): void }
+  callbacks: {
+    configure?(root: TypeGpuRoot): void;
+    ready(root: TypeGpuRoot): void;
+    error(error: unknown): void;
+    cleared(root: TypeGpuRoot | null): void;
+  }
 ): () => void {
   let disposed = false;
   let ownedRoot: TypeGpuRoot | null = null;
@@ -29,6 +34,7 @@ export function startCanvasScene<Props extends Record<string, any>>(
   void createTypeGpuRoot({ ...options, onSceneError: fail }).then((root) => {
     if (disposed) { root.dispose(); return; }
     ownedRoot = root;
+    callbacks.configure?.(root);
     instance = mount(component, { renderer, target: root, context, props });
     callbacks.ready(root);
   }).catch(fail);

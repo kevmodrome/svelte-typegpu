@@ -23,7 +23,7 @@ afterEach(async () => {
   vi.mocked(createTypeGpuRoot).mockReset();
 });
 function root(events: string[] = []) {
-  return Object.assign(createFragment(), { dispose: vi.fn(() => events.push('dispose')) }) as unknown as TypeGpuRoot;
+  return Object.assign(createFragment(), { gpu: { setOptions: vi.fn() }, dispose: vi.fn(() => events.push('dispose')) }) as unknown as TypeGpuRoot;
 }
 function nodes(root: TypeGpuNode, name: string) {
   const found: TypeGpuNode[] = [];
@@ -54,6 +54,58 @@ const source = `<script>
 type Exports = { reference(): HTMLCanvasElement | null | undefined; toggle(): void; reorder(): void; rename(): void };
 
 describe('declarative canvas', () => {
+  it.each([false, true])('applies live props before a delayed scene mount (removed: %s)', async removed => {
+    let resolve!: (root: TypeGpuRoot) => void;
+    vi.mocked(createTypeGpuRoot).mockReturnValue(new Promise(yes => { resolve = yes; }));
+    const created = root();
+    const cleanup = vi.fn();
+    const setup = vi.fn(() => {
+      expect(created.gpu.setOptions).toHaveBeenCalled();
+      return cleanup;
+    });
+    const onready = vi.fn(() => expect(created.gpu.setOptions).toHaveBeenLastCalledWith({ frameloop: 'manual', maxDevicePixelRatio: 0.5 }));
+    const warn = vi.spyOn(console, 'warn');
+    const Viewport = compileViewportSource<{ update(mode: string | undefined, ratio: number | undefined): void }>(`
+      <script>
+        let { setup, onready } = $props();
+        let frameloop = $state('demand'), maxDevicePixelRatio = $state(2);
+        export function update(mode, ratio) { frameloop = mode; maxDevicePixelRatio = ratio; }
+      </script><canvas {frameloop} {maxDevicePixelRatio} {onready}><scene><mesh {@attach setup} /></scene></canvas>
+    `);
+    const instance = mount(Viewport, { target: document.body, props: { setup, onready } });
+    mounted.push(instance);
+    await tick();
+    flushSync(() => instance.update('manual', 0.5));
+    expect(created.gpu.setOptions).not.toHaveBeenCalled();
+    if (removed) { await unmount(instance); mounted.pop(); }
+    resolve(created); await tick(); await tick();
+    if (removed) {
+      expect(created.gpu.setOptions).not.toHaveBeenCalled();
+      expect(created.dispose).toHaveBeenCalledOnce();
+      expect(setup).not.toHaveBeenCalled();
+      expect(onready).not.toHaveBeenCalled();
+      return;
+    }
+    expect(onready).toHaveBeenCalledOnce();
+    const canvas = document.querySelector('canvas'), mesh = nodes(created, 'mesh')[0];
+    vi.mocked(created.gpu.setOptions).mockClear();
+    flushSync(() => instance.update('always', 1));
+    expect(created.gpu.setOptions).toHaveBeenCalledExactlyOnceWith({ frameloop: 'always', maxDevicePixelRatio: 1 });
+    flushSync(() => instance.update(undefined, undefined));
+    expect(created.gpu.setOptions).toHaveBeenLastCalledWith({ frameloop: 'demand', maxDevicePixelRatio: undefined });
+    expect(document.querySelector('canvas')).toBe(canvas);
+    expect(nodes(created, 'mesh')[0]).toBe(mesh);
+    expect(setup).toHaveBeenCalledOnce();
+    expect(cleanup).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+    expect(createTypeGpuRoot).toHaveBeenCalledOnce();
+    await unmount(instance); mounted.pop();
+    vi.mocked(created.gpu.setOptions).mockClear();
+    flushSync(() => instance.update('always', 2));
+    expect(created.gpu.setOptions).not.toHaveBeenCalled();
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
   it('owns one native canvas while snippet branches, keys, props and events change', async () => {
     const events: string[] = [];
     const gpu = root(events);

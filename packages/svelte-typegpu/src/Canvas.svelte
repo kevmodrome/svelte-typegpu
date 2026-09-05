@@ -39,6 +39,12 @@
   let host: HTMLDivElement;
   let canvas: HTMLCanvasElement;
   let startupError = $state<string | null>(null);
+  let ownedRoot = $state.raw<TypeGpuRoot | null>(null);
+
+  function updateOptions(nextRoot: TypeGpuRoot) {
+    nextRoot.gpu.setOptions({ frameloop: options.frameloop, maxDevicePixelRatio: options.maxDevicePixelRatio });
+  }
+  $effect(() => { if (ownedRoot) updateOptions(ownedRoot); });
 
   onMount(() => {
     return startCanvasScene(
@@ -47,12 +53,13 @@
         get scene() { return scene; },
         get sceneProps() { return sceneProps; }
       }, context, {
+        configure(nextRoot) { updateOptions(nextRoot); ownedRoot = nextRoot; },
         ready(nextRoot) { root = nextRoot; onready?.(nextRoot); },
         error(error) {
           startupError = error instanceof Error ? error.message : 'Unable to start WebGPU.';
           onerror?.(error);
         },
-        cleared(previous) { if (root === previous) root = null; }
+        cleared(previous) { ownedRoot = null; if (root === previous) root = null; }
       }
     );
   });

@@ -28,16 +28,12 @@
   const { class: canvasClass, width: _width, height: _height, ...nativeAttributes } =
     $derived(attributes as HTMLCanvasAttributes);
   let status = $state<'pending' | 'ready' | 'error'>('pending');
-  let initial: { frameloop: typeof frameloop; maxDevicePixelRatio: number | undefined } | undefined;
-  let warned = false;
-  $effect(() => {
-    if (initial && !warned && (frameloop !== initial.frameloop || maxDevicePixelRatio !== initial.maxDevicePixelRatio)) {
-      warned = true;
-      console.warn('TypeGPU canvas frameloop and maxDevicePixelRatio are creation-only. Remount the viewport to change them.');
-    }
-  });
+  let ownedRoot = $state.raw<TypeGpuRoot | null>(null);
+  function updateOptions(root: TypeGpuRoot) {
+    root.gpu.setOptions({ frameloop, maxDevicePixelRatio });
+  }
+  $effect(() => { if (ownedRoot) updateOptions(ownedRoot); });
   onMount(() => {
-    initial = { frameloop, maxDevicePixelRatio };
     // Compiled, parameterless children have the mount entry calling convention.
     // Mount supplies the renderer and owns every scene effect and retained node.
     const content = (children ?? (() => {})) as unknown as Component;
@@ -45,13 +41,14 @@
       target: canvas!, canvas, frameloop, maxDevicePixelRatio, scenePolicy: 'single',
       onFps: (value) => onfps?.(value)
     }, content, {}, context, {
+      configure(root) { updateOptions(root); ownedRoot = root; },
       ready(root) { status = 'ready'; onready?.(root); },
       error(error) {
         status = 'error';
         if (onrenderererror) onrenderererror(error);
         else console.error('Unable to start TypeGPU canvas.', error);
       },
-      cleared() {}
+      cleared() { ownedRoot = null; }
     });
   });
 </script>

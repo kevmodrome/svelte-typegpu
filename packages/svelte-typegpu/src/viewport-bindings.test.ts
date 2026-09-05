@@ -56,7 +56,7 @@ function dimensions(canvas: HTMLCanvasElement, width: number, height: number) {
 function setup() {
   vi.stubGlobal('ResizeObserver', Observer);
   vi.stubGlobal('requestAnimationFrame', vi.fn());
-  vi.mocked(createTypeGpuRoot).mockResolvedValue(Object.assign(createFragment(), { dispose: vi.fn() }) as unknown as TypeGpuRoot);
+  vi.mocked(createTypeGpuRoot).mockResolvedValue(Object.assign(createFragment(), { gpu: { setOptions: vi.fn() }, dispose: vi.fn() }) as unknown as TypeGpuRoot);
 }
 
 describe('native canvas size bindings', () => {
