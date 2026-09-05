@@ -13,11 +13,64 @@ Svelte releases. We test compiled components against the actual host renderer.
 | `use:` | Supported for renderer-safe actions with update/destroy cleanup |
 | Host-element bindings, including `<mesh bind:this>` | Rejected by the pinned upstream compiler |
 | `transition:`, `in:`, `out:`, `animate:` on host nodes | Rejected by the pinned upstream compiler |
-| `{#await}`, boundaries, and cross-component context | Not yet part of our explicit compatibility test matrix |
+| `{#await}` | Pending/then/catch, replacement, stale results, and unmount cleanup tested |
+| Cross-component context | Reactive context preserved through asynchronously mounted children |
+| `getAbortSignal()` | Cancels component-owned model requests on derived replacement and unmount |
+| `<svelte:boundary>` | Error/reset cleanup tested with an externally declared `failed` snippet passed as a prop; inline `failed` snippets crash the pinned compiler |
+| Async expressions and boundary `pending` snippets | Not enabled or verified; distinct from ordinary `{#await}` |
 
 DOM-oriented libraries are not automatically compatible. Scene nodes are not
 HTMLElements and do not implement layout, CSS, Web Animations, or DOM event APIs.
 Keep DOM controls in an ordinary Svelte component outside the scene.
+
+## Async scenes
+
+Use ordinary promises and `{#await}` for loading, ready, and failure branches.
+The loader produces reusable CPU assets; the model primitive never parses an
+`asset` again. Keep the promise stable between requests:
+
+```svelte
+<script>
+  import { getAbortSignal } from 'svelte';
+  import { loadModel } from 'svelte-typegpu';
+  let { src } = $props();
+  const request = $derived(loadModel(src, { signal: getAbortSignal() }));
+</script>
+
+{#await request}
+  <mesh><boxGeometry /><basicMaterial color={[0.4, 0.4, 0.4, 1]} /></mesh>
+{:then asset}
+  <model {asset} position={[-2, 0, 0]} />
+  <model {asset} position={[2, 0, 0]} />
+{:catch error}
+  <mesh><boxGeometry /><basicMaterial color={[1, 0.1, 0.1, 1]} /></mesh>
+{/await}
+```
+
+`loadModel` accepts a URL string or ArrayBuffer. It does not globally cache;
+retain/share the promise or asset explicitly, and create a new promise to retry.
+Treat assets as immutable. Each root owns its GPU resources and prunes geometry
+when no mounted item uses it. `asset` takes precedence over `data`, then `src`.
+The existing `<model src>` and `<model data>` convenience paths are unchanged.
+
+Svelte ignores obsolete promise results, but does not cancel arbitrary shared
+work. The signal above cancels fetch when the derived reruns or is destroyed.
+OBJ/GLB parsing is synchronous and cannot be interrupted midway. Demand mode
+returns to idle after settlement; manual mode still requires an explicit draw.
+
+Declare a boundary failure snippet outside the boundary and pass `{failed}`:
+the equivalent nested declaration currently crashes the pinned upstream compiler.
+Boundaries catch Svelte rendering/effect errors, not arbitrary event-handler,
+fetch, or GPU validation errors. Use `{#await ... :catch}` for loader failures.
+
+```svelte
+{#snippet failed(error, reset)}
+  <mesh onclick={reset}><boxGeometry /><basicMaterial color={[1, 0, 0, 1]} /></mesh>
+{/snippet}
+<svelte:boundary {failed}>
+  <SceneContent />
+</svelte:boundary>
+```
 
 ## Attach reusable behavior
 

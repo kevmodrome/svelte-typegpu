@@ -12,12 +12,14 @@ import {
 import { createSceneState, createTypeGpuSceneCache } from './scene-compiler';
 import { createMaterialDescriptor } from './material-descriptors';
 import { createMeshPipeline } from './typegpu-pipeline';
-import { flushSync, mount, unmount } from 'svelte';
+import { flushSync, mount, tick, unmount } from 'svelte';
 import { Spring, Tween } from 'svelte/motion';
 import * as svelteClient from 'svelte/internal/client';
 import sceneRenderer, { createTypeGpuRuntimeForTest } from './svelte-renderer';
 import { compileTypeGpuSource } from './component-test-utils';
 import type { TypeGpuAttachment } from './attachments';
+import { loadModel } from './model-loader';
+import type { TypeGpuLoadedModel } from './types';
 
 const captured = vi.hoisted(() => ({ bindings: [] as unknown[][], counts: [] as number[] }));
 
@@ -53,6 +55,97 @@ afterEach(() => {
 });
 
 describe('GPU resource and frame lifecycle', () => {
+  it.each([60, 120, 144].flatMap(hz =>
+    (['manual', 'demand'] as const).map(frameloop => ({ hz, frameloop }))
+  ))('settles await assets with bounded $frameloop frames at $hz Hz', async ({ hz, frameloop }) => {
+    const pending = new Map<number, FrameRequestCallback>();
+    let id = 0;
+    let now = 0;
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
+      pending.set(++id, callback);
+      return id;
+    }));
+    vi.stubGlobal('cancelAnimationFrame', vi.fn((id: number) => pending.delete(id)));
+    const Scene = compileTypeGpuSource<{ tint(): void; hide(): void }>(`
+      <script>
+        let { request } = $props();
+        let shown = $state(true);
+        let color = $state([1, 0, 0, 1]);
+        export function tint() { color = [0, 1, 0, 1]; }
+        export function hide() { shown = false; }
+      </script>
+      <mesh><boxGeometry /><basicMaterial /></mesh>
+      {#if shown}
+        {#await request}<group />{:then asset}
+          <model {asset}><basicMaterial /></model>
+          <model {asset} position={[3, 0, 0]}><basicMaterial {color} /></model>
+        {/await}
+      {/if}
+    `);
+    let resolve!: (asset: TypeGpuLoadedModel) => void;
+    const request = new Promise<TypeGpuLoadedModel>(yes => { resolve = yes; });
+    const { renderer, root: gpuRoot, buffers, submissions } = await setupRenderer(frameloop);
+    const root = createFragment();
+    const runtime = createTypeGpuRuntimeForTest(root, new EventTarget() as HTMLCanvasElement, renderer);
+    root.runtime = runtime;
+    const instance = mount(Scene, { renderer: sceneRenderer, target: root, props: { request } });
+    function step() {
+      now += 1000 / hz;
+      for (const [id, callback] of [...pending]) {
+        pending.delete(id);
+        callback(now);
+      }
+    }
+    try {
+      await tick();
+      step(); step();
+      expect(pending.size).toBe(0);
+      const staticInstances = buffers.find(buffer => buffer.label.endsWith('instances'))!;
+      staticInstances.write.mockClear();
+      submissions.length = 0;
+      const asset = await loadModel(new TextEncoder().encode('v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3').buffer);
+      resolve(asset);
+      await tick();
+      expect(submissions).toHaveLength(0);
+      expect(pending.size).toBe(frameloop === 'demand' ? 1 : 0);
+      if (frameloop === 'manual') renderer.renderFrame(now);
+      else step();
+      expect(submissions).toHaveLength(1);
+      step(); step();
+      expect(pending.size).toBe(0);
+      expect(submissions.length).toBeLessThanOrEqual(2);
+      expect(staticInstances.write).not.toHaveBeenCalled();
+      const vertices = buffers.filter(buffer => buffer.label.includes(asset.key) && buffer.label.endsWith('vertices'));
+      expect(vertices).toHaveLength(1);
+      const instances = buffers.find(buffer => buffer.label.includes(asset.key) && buffer.label.endsWith('instances'))!;
+      expect(instances.data).toHaveLength(2 * 24);
+      gpuRoot.createBuffer.mockClear();
+      gpuRoot.createBindGroup.mockClear();
+      vi.mocked(createMeshPipeline).mockClear();
+      instances.write.mockClear();
+      flushSync(() => instance.tint());
+      await tick();
+      expect(instances.write).toHaveBeenCalledOnce();
+      expect(instances.write.mock.calls[0][1]).toEqual({ startOffset: 96, endOffset: 192 });
+      expect(gpuRoot.createBuffer).not.toHaveBeenCalled();
+      expect(gpuRoot.createBindGroup).not.toHaveBeenCalled();
+      expect(createMeshPipeline).not.toHaveBeenCalled();
+      flushSync(() => instance.hide());
+      await tick();
+      expect(vertices[0].destroy).toHaveBeenCalledOnce();
+      expect(instances.destroy).toHaveBeenCalledOnce();
+      expect(staticInstances.destroy).not.toHaveBeenCalled();
+      step(); step();
+      expect(pending.size).toBe(0);
+      if (frameloop === 'manual') expect(requestAnimationFrame).not.toHaveBeenCalled();
+    } finally {
+      await unmount(instance);
+      runtime.dispose();
+      renderer.dispose();
+    }
+    expect(pending.size).toBe(0);
+  });
+
   it.each(
     [60, 120, 144].flatMap((hz) =>
       [false, true].flatMap((rendererFirst) =>
