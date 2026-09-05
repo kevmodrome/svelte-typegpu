@@ -104,7 +104,9 @@ surface and abort that frame; there is no automatic retry. Unmounting removes a
 task, and disposing a root cancels its scheduled frame work.
 
 Use `frameloop: 'demand'` to sleep when no continuous tasks or scene updates need
-frames. `continuous={false}` runs a task only on otherwise requested frames.
+frames. Updates received while a frame is already queued retain one follow-up
+frame, keeping external Svelte motion in step with the browser without an
+unbounded idle loop. `continuous={false}` runs a task only on otherwise requested frames.
 `frameloop: 'manual'` never schedules RAF; call `root.gpu.renderFrame(timestamp)`
 to step explicitly. Built-in shader time requires `always` mode or an active
 continuous task if it should advance while nothing else changes.

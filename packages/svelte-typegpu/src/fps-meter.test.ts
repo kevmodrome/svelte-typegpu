@@ -2,6 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 import { createFpsMeter } from './fps-meter';
 
 describe('createFpsMeter', () => {
+  it.each([60, 120, 144])('reports %i FPS without a 60 FPS cap', (hz) => {
+    const onSample = vi.fn();
+    const meter = createFpsMeter(onSample);
+    for (let frame = 0; frame <= hz; frame++) meter.record(frame * 1000 / hz);
+    expect(onSample).toHaveBeenCalledWith(hz);
+  });
+
   it('reports rounded frames per second over the sampling window', () => {
     const onSample = vi.fn();
     const meter = createFpsMeter(onSample, 500);

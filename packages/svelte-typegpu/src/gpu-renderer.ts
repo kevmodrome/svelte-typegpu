@@ -194,6 +194,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #lastTimestamp: number | null = null;
   #elapsed = 0;
   #rendering = false;
+  #needsFollowUpFrame = false;
   #continueFrame = false;
   #frameHandler: ((frame: TypeGpuFrameContext) => boolean) | null = null;
   #lightingBindGroup: TgpuBindGroup<typeof lightingBindGroupLayout.entries>;
@@ -428,7 +429,13 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   }
 
   invalidate(): void {
-    if (this.#disposed || this.#rendering || this.#frameloop === 'manual' || this.#frame !== null) return;
+    if (this.#disposed || this.#rendering || this.#frameloop === 'manual') return;
+    if (this.#frame !== null) {
+      // External RAF producers can update immediately before our queued callback.
+      // Keep one follow-up frame so demand rendering does not skip alternate ticks.
+      this.#needsFollowUpFrame = true;
+      return;
+    }
 
     this.#frame = requestAnimationFrame((timestamp) => this.#onAnimationFrame(timestamp));
   }
@@ -553,6 +560,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     if (this.#disposed) return;
 
     this.#disposed = true;
+    this.#needsFollowUpFrame = false;
     this.#frameHandler = null;
     this.#continueFrame = false;
 
@@ -580,10 +588,12 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   }
 
   #onAnimationFrame(timestamp: number): void {
+    const needsFollowUpFrame = this.#needsFollowUpFrame;
+    this.#needsFollowUpFrame = false;
     this.#frame = null;
     this.renderFrame(timestamp);
 
-    if (!this.#disposed && (this.#frameloop === 'always' || this.#continueFrame)) {
+    if (!this.#disposed && (this.#frameloop === 'always' || this.#continueFrame || needsFollowUpFrame)) {
       this.invalidate();
     }
   }

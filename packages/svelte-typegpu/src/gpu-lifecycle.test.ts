@@ -47,6 +47,46 @@ afterEach(() => {
 });
 
 describe('GPU resource and frame lifecycle', () => {
+  it.each([60, 120, 144])('keeps demand rendering in step with external motion at %i Hz', async (hz) => {
+    const pending = new Map<number, FrameRequestCallback>();
+    let id = 0;
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
+      pending.set(++id, callback);
+      return id;
+    }));
+    vi.stubGlobal('cancelAnimationFrame', vi.fn((id: number) => pending.delete(id)));
+    const { renderer, submissions } = await setupRenderer('demand');
+    function step(timestamp: number) {
+      for (const [id, callback] of [...pending]) {
+        if (!pending.delete(id)) continue;
+        callback(timestamp);
+      }
+    }
+    try {
+      // Drain the bounded follow-up from coalesced initialization requests.
+      step(-1000 / hz);
+      step(0);
+      expect(pending.size).toBe(0);
+      submissions.length = 0;
+      let active = true;
+      function motion() {
+        if (!active) return;
+        // Svelte queues its next motion callback before reactive effects invalidate the renderer.
+        requestAnimationFrame(motion);
+        renderer.invalidate();
+      }
+      requestAnimationFrame(motion);
+      for (let frame = 1; frame <= hz; frame++) step(frame * 1000 / hz);
+      // Waking an idle renderer takes one frame; subsequent motion frames must not be skipped.
+      expect(submissions).toHaveLength(hz - 1);
+      active = false;
+      step((hz + 1) * 1000 / hz);
+      expect(pending.size).toBe(0);
+    } finally {
+      renderer.dispose();
+    }
+  });
+
   it('runs one demand clock while tasks request frames, stops when inactive, and cancels on disposal', async () => {
     const pending = new Map<number, FrameRequestCallback>();
     let id = 0;
