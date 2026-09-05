@@ -112,12 +112,20 @@ This pointer-focused example does not implement keyboard object navigation.
 
 ## Root lifetime
 
-`options` are initialization-only `TypeGpuRootOptions`, without `target`, `canvas`,
-or `onFps`. Use reactive scene attributes for backgrounds/depth settings. To
-change initialization options, recreate the canvas explicitly with `{#key}`.
+`options` accepts `TypeGpuRootOptions`, without `target`, `canvas`, or `onFps`.
+`frameloop` and `maxDevicePixelRatio` update reactively without recreating the
+canvas, scene or GPU root. Removing either field restores its default (`always`
+and `1.5`, respectively). Other options remain initialization-only; use reactive
+scene attributes for backgrounds/depth settings, or `{#key}` to recreate the root.
 The root's existing default frame loop is `always`; choose `demand` for idle
 scenes, and `always` when shader time must advance continuously. Active
 continuous `frameTask` nodes also keep a demand root rendering.
+
+Switching to `manual` cancels pending renderer frames. Motion producers remain
+independent: their values can continue changing, but drawing requires an explicit
+`root.gpu.renderFrame()`. Switching back wakes the existing renderer. A pixel
+ratio change takes effect on the next draw; it does not change CSS display size.
+The Motion and Native Events examples expose both live settings.
 
 Callbacks use current prop values: `onready(root)`, `onfps(fps)`, and
 `onerror(error)`. `onready` means the GPU root and scene mount are established,

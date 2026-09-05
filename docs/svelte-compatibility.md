@@ -9,6 +9,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | Deep `$state` value props | Small vectors, colors, matrices, bounds, uniforms and material descriptors update through named props and spreads; bulk resource inputs remain reference-based |
 | DOM `Canvas` host | Reactive scene/canvas props, native DOM events/attachments, inherited context, SSR shell, and async startup/unmount cleanup tested |
 | Dedicated `<canvas>` viewport | Experimental compiler path: native attributes/events/attachments, `bind:this`, read-only size bindings, scoped CSS, SSR/hydration, scene switching and frame cadence tested; other canvas directives are explicitly rejected |
+| Reactive render settings | `frameloop` and `maxDevicePixelRatio` update in both canvas hosts without remounting; startup races, mode changes during real motion, resource reuse and manual/idle cancellation tested |
 | Consumer component types | Canvas props/callbacks/bindings checked; scene-element declarations deferred due to language-tools casing and action-target gaps |
 | Scene authoring diagnostics | Build-time warnings for unknown static primitives and definitely invalid resource/control parenting; components, snippets and dynamic tags retain composition flexibility |
 | `{#snippet}` and `{@render}` | Supported, including attachment forwarding |

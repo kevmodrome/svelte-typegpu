@@ -1,6 +1,6 @@
 <script lang="ts">
   import Canvas from 'svelte-typegpu/canvas';
-  import type { TypeGpuCameraSettings, Vector3Tuple } from 'svelte-typegpu';
+  import type { TypeGpuCameraSettings, TypeGpuRoot, Vector3Tuple } from 'svelte-typegpu';
   import type { ExampleSlug } from '../examples/example-definitions';
   import { sceneComponents } from '../examples/scene-components';
   import {
@@ -13,6 +13,9 @@
   let error = $state<string | null>(null);
   let ready = $state(false);
   let fps = $state<number | null>(null);
+  let root = $state.raw<TypeGpuRoot | null>(null);
+  let frameloop = $state<'always' | 'demand' | 'manual'>('demand');
+  let maxDevicePixelRatio = $state(1.5);
   let modelUrl = $state('/assets/phong/teapot.obj');
   let modelStatus = $state('Loading model...');
   let phongControls = $state({
@@ -49,6 +52,7 @@
     paused: false
   });
   let motionControls = $state({ x: 0, z: 0, lift: 0, visible: true, appearance: 0, count: 2000 });
+  const hasRenderSettings = $derived(slug === 'svelte-motion' || slug === 'native-events');
 
   const hasControls = $derived(
       slug === 'svelte-motion' ||
@@ -90,10 +94,12 @@
   });
 
   $effect(() => {
-    slug;
+    frameloop = slug === 'gravity' || slug === 'svelte-motion' || slug === 'native-events' ? 'demand' : 'always';
+    maxDevicePixelRatio = 1.5;
     error = null;
     ready = false;
     fps = null;
+    root = null;
   });
 
   function setColor(target: 'lightColor' | 'ambientColor', value: string) {
@@ -189,24 +195,51 @@
     return Math.max(0, Math.min(1, value));
   }
 
-  function handleReady() {
+  function handleReady(nextRoot: TypeGpuRoot) {
+    root = nextRoot;
     ready = true;
     error = null;
   }
 
   function handleError(cause: unknown) {
+    root = null;
     error = cause instanceof Error
       ? `Unable to start this preview: ${cause.message}`
       : 'Unable to start this preview.';
   }
 </script>
 
+{#if hasRenderSettings}
+  <div class="render-settings" role="group" aria-label="Renderer settings">
+    <label>
+      <span>Render mode</span>
+      <select bind:value={frameloop}>
+        <option value="demand">On demand</option>
+        <option value="always">Continuous</option>
+        <option value="manual">Manual</option>
+      </select>
+    </label>
+    <label>
+      <span>Pixel ratio cap</span>
+      <select bind:value={maxDevicePixelRatio}>
+        {#each [0.5, 1, 1.5, 2] as ratio (ratio)}
+          <option value={ratio}>{ratio}</option>
+        {/each}
+        <option value={Infinity}>Native</option>
+      </select>
+    </label>
+    <button type="button" disabled={!root || frameloop !== 'manual'} onclick={() => root?.gpu.renderFrame()}>
+      Render frame
+    </button>
+  </div>
+{/if}
+
 <div class:preview-with-controls={hasControls}>
   <section class="preview-panel" aria-label={`${label} live preview`}>
     {#key slug}
       {#if slug === 'native-events'}
         {@const Viewport = sceneComponents[slug]}
-        <Viewport onfps={(value: number) => fps = value} onready={handleReady} onrenderererror={handleError} />
+        <Viewport {frameloop} {maxDevicePixelRatio} onfps={(value: number) => fps = value} onready={handleReady} onrenderererror={handleError} />
       {:else}
       <Canvas
         class="preview-host"
@@ -215,8 +248,8 @@
         scene={sceneComponents[slug]}
         {sceneProps}
         options={{
-          frameloop: slug === 'gravity' || slug === 'svelte-motion' || slug === 'native-events' ? 'demand' : 'always',
-          maxDevicePixelRatio: 1.5,
+          frameloop,
+          maxDevicePixelRatio,
           clearColor: [0.045, 0.05, 0.055, 1],
           depth: true,
           alphaMode: 'premultiplied'
@@ -229,7 +262,7 @@
     {/key}
     <div class="fps-badge" aria-label="Preview frames per second">
       <span>FPS</span>
-      <strong>{!ready || fps === null ? '...' : fps === 0 ? 'Idle' : fps}</strong>
+      <strong>{!ready ? '...' : frameloop === 'manual' ? 'Manual' : fps === null ? '...' : fps === 0 ? 'Idle' : fps}</strong>
     </div>
     {#if error}
       <div class="preview-status" role="status">{error}</div>

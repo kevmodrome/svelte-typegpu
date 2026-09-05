@@ -708,6 +708,41 @@ textarea {
   align-items: start;
 }
 
+.render-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.render-settings label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  letter-spacing: 0;
+}
+
+.render-settings select,
+.render-settings button {
+  min-height: 36px;
+  max-width: 100%;
+  padding: 6px 10px;
+  border: 1px solid rgb(237 248 234 / 24%);
+  border-radius: 4px;
+  background: #101615;
+  color: var(--text);
+  font: inherit;
+  letter-spacing: 0;
+}
+
+.render-settings button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 .preview-with-controls {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);

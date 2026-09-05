@@ -49,7 +49,7 @@ describe('docs app source wiring', () => {
     expect(previewSource).toContain('let fps = $state<number | null>(null)');
     expect(previewSource).toContain('onfps={(value) => fps = value}');
     expect(previewSource).toContain('aria-label="Preview frames per second"');
-    expect(previewSource).toContain("{!ready || fps === null ? '...' : fps === 0 ? 'Idle' : fps}");
+    expect(previewSource).toContain("frameloop === 'manual' ? 'Manual' : fps === null ? '...' : fps === 0 ? 'Idle' : fps");
     expect(styleSource).toContain('.fps-badge');
     expect(styleSource).toContain('position: absolute');
   });
@@ -58,6 +58,21 @@ describe('docs app source wiring', () => {
     const source = read('./components/ExamplePreview.svelte');
     expect(source).toContain("canvasProps={{ 'aria-label': `${label} 3D scene`, role: 'img' }}");
     expect(source).toContain('aria-label={`${label} live preview`}');
+  });
+
+  it('forwards live render settings to both hosts and keeps manual drawing explicit', () => {
+    const preview = read('./components/ExamplePreview.svelte');
+    const viewport = read('./examples/native-events/NativeEvents.typegpu.svelte');
+    expect(preview).toContain('aria-label="Renderer settings"');
+    expect(preview).toContain('select bind:value={frameloop}');
+    expect(preview).toContain('select bind:value={maxDevicePixelRatio}');
+    expect(preview).toContain('<Viewport {frameloop} {maxDevicePixelRatio}');
+    expect(preview).toMatch(/options=\{\{\s*frameloop,\s*maxDevicePixelRatio,/);
+    expect(viewport).toMatch(/<canvas\s*\{frameloop\}\s*\{maxDevicePixelRatio\}/);
+    expect(preview).toContain("disabled={!root || frameloop !== 'manual'}");
+    expect(preview).toContain('onclick={() => root?.gpu.renderFrame()}');
+    expect(preview).not.toContain('requestAnimationFrame');
+    expect(preview.match(/\{#key [^}]+\}/g)).toEqual(['{#key slug}']);
   });
 
   it('renders generated Shiki tokens without raw HTML injection', () => {

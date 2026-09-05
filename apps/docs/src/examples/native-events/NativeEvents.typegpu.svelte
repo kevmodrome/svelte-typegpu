@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Vector3Tuple } from 'svelte-typegpu';
 
-  let { onready, onfps, onrenderererror, frameloop = 'demand' } = $props();
+  let { onready, onfps, onrenderererror, frameloop = 'demand', maxDevicePixelRatio = 1.5 } = $props();
 
   let objects = $state([
     { name: 'Coral', color: [0.94, 0.24, 0.2] as Vector3Tuple, x: -2.8, rotation: [0, 0, 0] as Vector3Tuple, size: 1 },
@@ -22,6 +22,7 @@
 
 <canvas
   {frameloop}
+  {maxDevicePixelRatio}
   {onready}
   {onfps}
   {onrenderererror}

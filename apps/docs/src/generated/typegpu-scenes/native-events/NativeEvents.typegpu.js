@@ -50,7 +50,8 @@ export default function NativeEvents_typegpu($$anchor, $$props) {
 
 	$.push($$props, true);
 
-	let frameloop = $.prop($$props, 'frameloop', 3, 'demand');
+	let frameloop = $.prop($$props, 'frameloop', 3, 'demand'),
+		maxDevicePixelRatio = $.prop($$props, 'maxDevicePixelRatio', 3, 1.5);
 
 	let objects = $.proxy([
 		{
@@ -95,6 +96,10 @@ export default function NativeEvents_typegpu($$anchor, $$props) {
 		TypeGpuViewportCanvas($$anchor, {
 			get frameloop() {
 				return frameloop();
+			},
+
+			get maxDevicePixelRatio() {
+				return maxDevicePixelRatio();
 			},
 
 			get onready() {

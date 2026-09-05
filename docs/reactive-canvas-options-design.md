@@ -103,3 +103,39 @@ The shared lifecycle configure hook must run after taking ownership so thrown
 configuration is cleaned up. Rollback removes the host effects and setter while
 leaving scene formats and stored user data unchanged. Live checks cannot establish
 monitor rate, CPU cost or GPU throughput without separate measurements.
+
+## Verification results
+
+Implemented the three slices. The renderer change is `955900b`; host integration
+and compiled motion coverage are `5d01e43`. Examples and public guides now expose
+the same live contract. No actions or scene CSS directives were added.
+
+- `pnpm test`: 958 passing tests (5 workspace, 872 renderer, 47 docs, 34 example).
+- `pnpm build`: renderer TypeScript, Vite example and Mochi docs builds pass;
+  generated Native Events output and source samples are current.
+- `pnpm --filter svelte-typegpu check:svelte`: zero errors and warnings.
+- Direct GPU coverage includes every mode pair at 60/120/144 Hz, in-frame and
+  post-draw settings changes, observer reuse, DPR normalization, hidden canvas
+  size stability, same-size depth reuse and explicit manual resize deferral.
+- The 24 compiled host/motion cases cross legacy/dedicated hosts, Tween/Spring,
+  all three clocks and both callback orders. Each automatic tick delivers one
+  frame; manual ticks run only the producer until explicitly drawn. Writes stay
+  within the single moving instance's 96-byte slot; buffers, bind groups,
+  pipelines, root, scene nodes and attachments are retained. Settlement and
+  disposal cancel renderer work. Delayed startup uses current props before mount.
+- Live Svelte Motion: manual mode holds the image while the target changes;
+  explicit drawing moves the marker and changes a 930x627 drawing buffer to
+  310x209 while CSS stays 620x418. Resuming continuous mode retains target/lift
+  values; returning to demand settles to Idle. This browser reported 60 delivered
+  FPS in continuous mode; browser callback rate, physical display refresh, CPU
+  cost and GPU throughput were not independently measured.
+- Live Native Events: cap changes preserve CSS size and native size bindings
+  (954x596 CSS, 1431x894 to 477x298 drawing buffer). Narrow viewport checks show
+  nonoverlapping controls and a visible 345x215 canvas. Native keyboard reset,
+  manual drawing and resolution changes work. Both live pages report no browser
+  warnings/errors. The docs server is running at `http://127.0.0.1:3334`.
+
+The official Svelte autofixer found no host errors. Its scene warnings interpret
+GPU primitives as DOM elements; its remaining preview suggestions concern the
+existing static option lists and the slug-driven reset effect. Neither changes
+the custom-renderer contract tested by the actual pinned compiler/runtime.

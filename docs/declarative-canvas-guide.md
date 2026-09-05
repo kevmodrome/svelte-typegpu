@@ -160,9 +160,12 @@ omits GPU markup; it still emits only the canvas shell.
 - Other native bindings, class/style directives, transitions and animations on
   this canvas boundary are not yet supported and produce compile errors.
   Use attachments for reusable behavior; `use:` actions are not a supported API.
-- `frameloop` defaults to `demand`. `frameloop` and `maxDevicePixelRatio` are
-  creation-only; changing them warns without recreating GPU resources. Remount
-  deliberately with a parent `{#key}` when changing these settings.
+- `frameloop` defaults to `demand`. It and `maxDevicePixelRatio` update reactively
+  without replacing the canvas, scene or GPU root. Removing a prop restores its
+  default (`demand` and `1.5`). Equal settings do no scheduling work. Switching to
+  `manual` cancels pending renderer frames; switching back wakes the renderer.
+  Resolution changes apply on the next draw, replacing only size-dependent GPU
+  targets when physical dimensions change. CSS display dimensions stay unchanged.
 - Optional `onready(root)`, `onfps(number)`, and `onrenderererror(error)` callbacks
   report renderer state. `onfps` reports delivered render frames and emits `0`
   after 500 ms without a frame, without requesting another render frame.
@@ -177,6 +180,34 @@ The scene uses a separately owned Svelte mount with inherited context. Parent
 error boundaries and pending counts are not joined across that mount. Existing
 async-expression restrictions still apply. Original-source primitive editor
 typing remains a separate [upstream/tooling limitation](svelte-compatibility.md).
+
+## Live render settings
+
+Forward ordinary Svelte props to change the existing viewport:
+
+```svelte
+<script>
+  let { mode = 'demand', pixelRatio = 1.5, onready } = $props();
+</script>
+
+<canvas frameloop={mode} maxDevicePixelRatio={pixelRatio} {onready}>
+  <scene>
+    <perspectiveCamera active position={[0, 0, 6]} />
+    <mesh><boxGeometry /><basicMaterial color={[0.2, 0.7, 0.4]} /></mesh>
+  </scene>
+</canvas>
+```
+
+In `manual` mode, call `root.gpu.renderFrame()` explicitly using the root received
+by `onready`. This does not pause independent Tween/Spring producers; it stops
+automatic drawing. In `demand` mode, ordinary reactive scene updates and active
+frame tasks wake rendering, which stops when their work settles.
+
+The pixel ratio is a cap on the browser device pixel ratio, not a multiplier.
+Positive fractions support reduced-resolution rendering; `Infinity` uses the
+native device pixel ratio without a cap. Zero, negative values and `NaN` use the
+default cap of `1.5`. Hidden canvases retain their last measured CSS size, rather
+than repeatedly scaling their already-scaled drawing buffer.
 
 ## Responsive scenes
 
