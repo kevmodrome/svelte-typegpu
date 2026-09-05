@@ -54,6 +54,41 @@ const source = `<script>
 type Exports = { reference(): HTMLCanvasElement | null | undefined; toggle(): void; reorder(): void; rename(): void };
 
 describe('declarative canvas', () => {
+  it('resets a keyed scene without replacing its native canvas or GPU root', async () => {
+    const gpu = root();
+    vi.mocked(createTypeGpuRoot).mockResolvedValue(gpu);
+    const cleanup = vi.fn(), setup = vi.fn(() => cleanup);
+    const nativeCleanup = vi.fn(), nativeSetup = vi.fn(() => nativeCleanup);
+    const Viewport = compileViewportSource<{ reset(): void }>(`<script>
+      let { setup, nativeSetup } = $props();
+      let revision = $state(0);
+      export function reset() { revision += 1; }
+    </script><canvas {@attach nativeSetup}>
+      {#key revision}<scene><mesh name={revision} {@attach setup} /></scene>{/key}
+    </canvas>`);
+    const instance = mount(Viewport, { target: document.body, props: { setup, nativeSetup } });
+    mounted.push(instance);
+    await tick(); await tick();
+    const canvas = document.querySelector('canvas');
+    const first = nodes(gpu, 'scene')[0];
+    flushSync(() => instance.reset());
+    expect(nodes(gpu, 'scene')).toHaveLength(1);
+    expect(nodes(gpu, 'scene')[0]).not.toBe(first);
+    expect(first.parent).toBeNull();
+    expect(nodes(gpu, 'mesh')[0].attributes.name).toBe(1);
+    expect(document.querySelector('canvas')).toBe(canvas);
+    expect(setup).toHaveBeenCalledTimes(2);
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(nativeSetup).toHaveBeenCalledOnce();
+    expect(nativeCleanup).not.toHaveBeenCalled();
+    expect(createTypeGpuRoot).toHaveBeenCalledOnce();
+    expect(gpu.dispose).not.toHaveBeenCalled();
+    await unmount(instance); mounted.pop();
+    expect(cleanup).toHaveBeenCalledTimes(2);
+    expect(nativeCleanup).toHaveBeenCalledOnce();
+    expect(gpu.dispose).toHaveBeenCalledOnce();
+  });
+
   it.each([false, true])('applies live props before a delayed scene mount (removed: %s)', async removed => {
     let resolve!: (root: TypeGpuRoot) => void;
     vi.mocked(createTypeGpuRoot).mockReturnValue(new Promise(yes => { resolve = yes; }));

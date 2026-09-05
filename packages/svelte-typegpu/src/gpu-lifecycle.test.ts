@@ -92,6 +92,140 @@ afterEach(() => {
 });
 
 describe('GPU resource and frame lifecycle', () => {
+  it.each([60, 120, 144].flatMap(hz => ['Tween', 'Spring'].flatMap(kind => [
+    { hz, kind, frameloop: 'demand' as const, rendererFirst: false },
+    { hz, kind, frameloop: 'demand' as const, rendererFirst: true },
+    { hz, kind, frameloop: 'manual' as const, rendererFirst: false }
+  ])))('retains motion cadence across keyed resets at $hz Hz ($kind, $frameloop, renderer first: $rendererFirst)',
+    async ({ hz, kind, frameloop, rendererFirst }) => {
+    const pending = new Map<number, FrameRequestCallback>();
+    const producers = new WeakSet<FrameRequestCallback>();
+    let now = 0, id = 0;
+    const request = vi.fn((callback: FrameRequestCallback) => { pending.set(++id, callback); return id; });
+    vi.stubGlobal('requestAnimationFrame', request);
+    vi.stubGlobal('cancelAnimationFrame', (key: number) => pending.delete(key));
+    const raf = (svelteClient as unknown as {
+      raf: { now(): number; tick(callback: FrameRequestCallback): void };
+    }).raf;
+    vi.spyOn(raf, 'now').mockImplementation(() => now);
+    vi.spyOn(raf, 'tick').mockImplementation(callback => {
+      producers.add(callback);
+      requestAnimationFrame(callback);
+    });
+    const motion = kind === 'Tween' ? new Tween(0, { duration: 2000 }) :
+      new Spring(0, { stiffness: 0.01, damping: 0.5, precision: 1e-8 });
+    const stop = () => motion instanceof Tween ? motion.set(motion.current, { duration: 0 }) :
+      motion.set(motion.current, { instant: true });
+    const Scene = compileTypeGpuSource<{ reset(): void }>(`<script>
+      let { motion, setup } = $props();
+      let revision = $state(0);
+      export function reset() { revision += 1; }
+    </script><scene>
+      {#each Array.from({ length: 300 }, (_, i) => i) as i (i)}
+        <mesh position={[i + 10, 0, 0]}><boxGeometry /><standardMaterial /></mesh>
+      {/each}
+      {#key revision}<mesh position={[motion.current, 0, 0]} {@attach setup}>
+        <boxGeometry /><standardMaterial />
+      </mesh>{/key}
+    </scene>`);
+    const { renderer, root: gpu, buffers, submissions } = await setupRenderer(frameloop);
+    const root = createFragment();
+    const runtime = createTypeGpuRuntimeForTest(root, new EventTarget() as HTMLCanvasElement, renderer);
+    root.runtime = runtime;
+    const cleanup = vi.fn();
+    const setup = vi.fn<TypeGpuAttachment>(node => () => cleanup(node));
+    const instance = mount(Scene, { renderer: sceneRenderer, target: root, props: { motion, setup } });
+    const order: string[] = [];
+    async function step() {
+      now += 1000 / hz;
+      order.length = 0;
+      for (const [key, callback] of [...pending]) {
+        if (!pending.delete(key)) continue;
+        order.push(producers.has(callback) ? 'motion' : 'render');
+        callback(now);
+        flushSync();
+        await Promise.resolve();
+      }
+    }
+    let disposed = false;
+    try {
+      flushSync(); await tick();
+      for (let i = 0; i < 3; i++) await step();
+      if (frameloop === 'manual') renderer.renderFrame(now);
+      expect(pending.size).toBe(0);
+      const instances = buffers.find(buffer => buffer.label.endsWith('instances'))!;
+      const scene = root.children.find(node => node.name === 'scene')!;
+      const siblings = scene.children.filter(node => node.name === 'mesh').slice(0, 300);
+      gpu.createBuffer.mockClear();
+      gpu.createBindGroup.mockClear();
+      vi.mocked(createMeshPipeline).mockClear();
+      request.mockClear();
+      // Seed a queued frame and its follow-up to exercise either sustained RAF order.
+      if (frameloop === 'demand' && rendererFirst) {
+        renderer.invalidate();
+        renderer.invalidate();
+      }
+      void motion.set(10);
+      if (frameloop === 'demand' && !rendererFirst) {
+        renderer.invalidate();
+        renderer.invalidate();
+      }
+      let resets = 0;
+      for (let frame = 0; frame < hz; frame++) {
+        if (frame === Math.floor(hz / 3) || frame === Math.floor(2 * hz / 3)) {
+          const old = setup.mock.lastCall![0];
+          flushSync(() => instance.reset());
+          await tick();
+          resets += 1;
+          expect(setup).toHaveBeenCalledTimes(resets + 1);
+          expect(cleanup).toHaveBeenCalledTimes(resets);
+          expect(cleanup).toHaveBeenLastCalledWith(old);
+          expect(old.parent).toBeNull();
+          expect(scene.children.filter(node => node.name === 'mesh').slice(0, 300)).toEqual(siblings);
+        }
+        instances.write.mockClear();
+        const before = submissions.length;
+        const previous = motion.current;
+        await step();
+        if (frameloop === 'manual') renderer.renderFrame(now);
+        expect(submissions.length - before).toBe(1);
+        expect(order).toEqual(frameloop === 'manual' ? ['motion'] :
+          rendererFirst ? ['render', 'motion'] : ['motion', 'render']);
+        if (motion.current !== previous) {
+          expect(instances.write).toHaveBeenCalledOnce();
+          expect(instances.write.mock.lastCall![1]).toEqual({ startOffset: 300 * 96, endOffset: 301 * 96 });
+        }
+        expect(instances.data[300 * 24]).toBeCloseTo(motion.current);
+      }
+      expect(setup).toHaveBeenCalledTimes(3);
+      expect(gpu.createBuffer).not.toHaveBeenCalled();
+      expect(gpu.createBindGroup).not.toHaveBeenCalled();
+      expect(createMeshPipeline).not.toHaveBeenCalled();
+      expect(captured.counts.every(count => count === 301)).toBe(true);
+      expect(buffers.every(buffer => buffer.destroy.mock.calls.length === 0)).toBe(true);
+      if (frameloop === 'manual') {
+        expect(request.mock.calls.every(([callback]) => producers.has(callback))).toBe(true);
+      }
+      await stop();
+      for (let i = 0; i < 4; i++) await step();
+      expect(pending.size).toBe(0);
+      // Disposing a moving subtree must not leave a renderer callback alive.
+      void motion.set(20);
+      await step();
+      await unmount(instance); runtime.dispose(); renderer.dispose(); disposed = true;
+      const before = submissions.length;
+      expect([...pending.values()].every(callback => producers.has(callback))).toBe(true);
+      await stop();
+      for (let i = 0; i < 4; i++) await step();
+      expect(submissions).toHaveLength(before);
+      expect(cleanup).toHaveBeenCalledTimes(3);
+      expect(pending.size).toBe(0);
+    } finally {
+      await stop();
+      if (!disposed) { await unmount(instance); runtime.dispose(); renderer.dispose(); }
+    }
+  });
+
   it.each([60, 120, 144].flatMap(hz => ['demand', 'manual'].flatMap(frameloop =>
     [false, true].map(settleFirst => ({ hz, frameloop: frameloop as 'demand' | 'manual', settleFirst })))))
     ('owns conditional texture loads at $hz Hz ($frameloop, settlement first: $settleFirst)', async ({ hz, frameloop, settleFirst }) => {

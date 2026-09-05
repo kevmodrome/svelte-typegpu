@@ -14,6 +14,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | Consumer component types | Canvas props/callbacks/bindings checked; scene-element declarations deferred due to language-tools casing and action-target gaps |
 | Scene authoring diagnostics | Build-time warnings for unknown static primitives and definitely invalid resource/control parenting; components, snippets and dynamic tags retain composition flexibility |
 | `{#snippet}` and `{@render}` | Supported, including attachment forwarding |
+| `{#key}` | Subtree state resets, snippet/component composition, attachment cleanup, obsolete await results and retained canvas identity tested; real motion cadence and shared GPU resource reuse verified |
 | `<svelte:element>` | Dynamic geometry/materials, prop spreads, events, attachment cleanup, and keyed identity tested |
 | Component `$bindable` props and component `bind:this` | Supported and tested |
 | Scene event attributes and `onclickcapture` | Capture/target/bubble ordering, group boundaries, bubbling pointerover/pointerout, double-click/context-menu/wheel, and propagation controls supported |
@@ -135,6 +136,40 @@ cleanup and bounded demand frames; manual mode never requests RAF.
 
 Dynamic tags do not bypass the host-binding, transition, or editor limitations
 listed above.
+
+## Resetting scene state
+
+Use `{#key}` when a change should recreate a subtree, including the local state of
+its child components. For example, a DOM parent can increment `resetKey` to start
+the scene content over without recreating the canvas or GPU root:
+
+```svelte
+<script>
+  import SceneContent from './SceneContent.typegpu.svelte';
+  let { resetKey = 0 } = $props();
+</script>
+
+<canvas>
+  {#key resetKey}
+    <SceneContent />
+  {/key}
+</canvas>
+```
+
+Changing the key destroys the old block, runs its attachment cleanup, and mounts
+new content. State declared in the viewport's own script is outside the block and
+does not reset. An unchanged key retains child state, nodes and attachments.
+Obsolete `{#await}` results cannot bring the removed branch back.
+
+Keyed `{#each}` serves a different purpose: it preserves individual items when a
+collection is reordered. Use reactive transform/material props for animation;
+changing a `{#key}` expression is intentionally structural work. Shared geometry,
+materials and pipelines can remain cached when their resource keys remain live,
+but a reset is not a promise of allocation-free remounting.
+
+Tests cover real Tween/Spring motion before and after resets at 60/120/144 Hz,
+both RAF orders, targeted writes, shared resource reuse, demand idling, manual
+rendering and disposal. Key blocks do not enable unsupported host transitions.
 
 ## Async scenes
 
