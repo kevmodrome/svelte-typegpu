@@ -7,9 +7,18 @@ import {
   meshVertexMain,
   shadowVertexMain
 } from './typegpu-pipeline';
-import { shaderPassBindGroupLayout } from './typegpu-layouts';
+import { materialBindGroupLayout, shaderPassBindGroupLayout } from './typegpu-layouts';
 
 describe('TypeGPU mesh pipeline shader functions', () => {
+  it('assigns dense bind group indices when a custom material omits lighting and shadows', () => {
+    const fragment = tgpu.fragmentFn({ out: d.vec4f })/* wgsl */ `{
+      return materialBindGroupLayout.$.uniforms.value0;
+    }`.$uses({ materialBindGroupLayout });
+    const code = tgpu.resolve([meshVertexMain, fragment], { names: 'strict' });
+    const groups = [...new Set([...code.matchAll(/@group\((\d+)\)/g)].map(match => Number(match[1])))].sort();
+    expect(groups).toEqual([0, 1]);
+    expect(code).toContain('value0');
+  });
   const pipelineSource = readFileSync(new URL('./typegpu-pipeline.ts', import.meta.url), 'utf8');
 
   it('resolves the vertex shader with vertex colors passed to varyings', () => {
@@ -49,7 +58,7 @@ describe('TypeGPU mesh pipeline shader functions', () => {
     expect(wgsl).toContain('baseColorSampler');
     expect(wgsl).toContain('textureSample');
     expect(wgsl).toContain('textureSampleCompare');
-    expect(wgsl).toContain('@group(3)');
+    expect([...new Set([...wgsl.matchAll(/@group\((\d+)\)/g)].map(match => Number(match[1])))].sort()).toEqual([0, 1, 2]);
     expect(wgsl).toContain('shadowMap');
     expect(wgsl).toContain('shadowSampler');
     expect(wgsl).toContain('receive_shadow');

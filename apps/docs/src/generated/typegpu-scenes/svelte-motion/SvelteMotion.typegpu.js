@@ -44,6 +44,7 @@ export default function SvelteMotion_typegpu($$anchor, $$props) {
 
 	const position = new Tween([-7, 2, -7], { duration: 1600, easing: cubicInOut });
 	const lift = new Spring(0, { stiffness: 0.06, damping: 0.45 });
+	const appearance = new Tween(0, { duration: 900, easing: cubicInOut });
 
 	$.user_effect(() => {
 		position.target = [$$props.controls.x, 2, $$props.controls.z];
@@ -53,9 +54,14 @@ export default function SvelteMotion_typegpu($$anchor, $$props) {
 		lift.target = $$props.controls.lift;
 	});
 
+	$.user_effect(() => {
+		appearance.target = $$props.controls.appearance;
+	});
+
 	onDestroy(() => {
 		void position.set(position.current, { duration: 0 });
 		void lift.set(lift.current, { instant: true });
+		void appearance.set(appearance.current, { duration: 0 });
 	});
 
 	var scene = root_1();
@@ -90,7 +96,7 @@ export default function SvelteMotion_typegpu($$anchor, $$props) {
 
 	var node = $.sibling(directionalLight, 2);
 
-	$.each(node, 17, () => motionField, (cell) => cell.id, ($$anchor, cell) => {
+	$.each(node, 17, () => motionField.slice(0, $$props.controls.count), (cell) => cell.id, ($$anchor, cell) => {
 		var mesh = root();
 		var standardMaterial = $.sibling($.child(mesh));
 
@@ -119,6 +125,10 @@ export default function SvelteMotion_typegpu($$anchor, $$props) {
 
 		get visible() {
 			return $$props.controls.visible;
+		},
+
+		get appearance() {
+			return appearance.current;
 		}
 	});
 

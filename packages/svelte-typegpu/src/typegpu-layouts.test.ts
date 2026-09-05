@@ -109,7 +109,7 @@ describe('TypeGPU layout schemas', () => {
     expect(d.sizeOf(typegpuSceneUniformSchema)).toBe(96);
     expect(typegpuSceneUniformSchema.propTypes.time).toBeDefined();
     expect(typegpuSceneUniformSchema.propTypes.padding3).toBeDefined();
-    expect(sceneBindGroupLayout.index).toBe(0);
+    expect(sceneBindGroupLayout.index).toBeUndefined();
     expect(sceneBindGroupLayout.entries.scene?.uniform).toBe(typegpuSceneUniformSchema);
   });
 
@@ -118,7 +118,7 @@ describe('TypeGPU layout schemas', () => {
     expect(TYPEGPU_LIGHT_RECORD_BYTES).toBe(96);
     expect(d.sizeOf(typegpuLightSchema)).toBe(TYPEGPU_LIGHT_RECORD_BYTES);
     expect(d.sizeOf(typegpuLightingSchema)).toBe(TYPEGPU_LIGHTING_BYTES);
-    expect(lightingBindGroupLayout.index).toBe(1);
+    expect(lightingBindGroupLayout.index).toBeUndefined();
     expect(lightingBindGroupLayout.entries.lighting?.uniform).toBe(typegpuLightingSchema);
   });
 
@@ -156,7 +156,7 @@ describe('TypeGPU layout schemas', () => {
   });
 
   it('describes the standard material texture bind group with current TypeGPU texture APIs', () => {
-    expect(materialBindGroupLayout.index).toBe(2);
+    expect(materialBindGroupLayout.index).toBeUndefined();
     expect(materialBindGroupLayout.entries.baseColorTexture?.texture.type).toBe('texture_2d');
     expect(materialBindGroupLayout.entries.baseColorSampler?.sampler).toBe('filtering');
   });
@@ -166,7 +166,7 @@ describe('TypeGPU layout schemas', () => {
     expect(d.sizeOf(typegpuShadowSchema)).toBe(TYPEGPU_SHADOW_UNIFORM_BYTES);
     expect(typegpuShadowSchema.propTypes.view_projection).toBeDefined();
     expect(typegpuShadowSchema.propTypes.params).toBeDefined();
-    expect(shadowBindGroupLayout.index).toBe(3);
+    expect(shadowBindGroupLayout.index).toBeUndefined();
     expect(shadowBindGroupLayout.entries.shadow?.uniform).toBe(typegpuShadowSchema);
     expect(shadowBindGroupLayout.entries.shadowMap?.texture.type).toBe('texture_depth_2d');
     expect(shadowBindGroupLayout.entries.shadowSampler?.sampler).toBe('comparison');

@@ -9,6 +9,7 @@ import tgpu, {
   type UniformFlag
 } from 'typegpu';
 import { createFpsMeter } from './fps-meter';
+import type { TypeGpuFrameContext } from './frame-tasks';
 import { createViewProjectionMatrix } from './camera-math';
 import { Dirty } from './dirty';
 import { drawBatchKey, drawBatchKeysForItem } from './render-plan';
@@ -139,6 +140,7 @@ export interface TypeGpuRenderer {
   setCamera(camera: TypeGpuCameraSettings): void;
   invalidate(): void;
   renderFrame(timestamp?: number): void;
+  setFrameHandler?(handler: ((frame: TypeGpuFrameContext) => boolean) | null): void;
   getRenderSize(): { width: number; height: number };
   dispose(): void;
 }
@@ -189,7 +191,11 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #frame: number | null = null;
   #geometryResources: GeometryResourceCache;
   #instanceBuffers: InstanceBufferCache;
-  #lastTimestamp = 0;
+  #lastTimestamp: number | null = null;
+  #elapsed = 0;
+  #rendering = false;
+  #continueFrame = false;
+  #frameHandler: ((frame: TypeGpuFrameContext) => boolean) | null = null;
   #lightingBindGroup: TgpuBindGroup<typeof lightingBindGroupLayout.entries>;
   #lightingBuffer: TypeGpuLightingUniformBuffer;
   #lights: TypeGpuLight[] = [];
@@ -319,6 +325,9 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     if (scene.drawBatchesChanged) {
       this.#syncMeshResources(scene);
     } else {
+      for (const material of scene.materialUpdates ?? []) {
+        this.#materialResources.updateUniforms(material);
+      }
       for (const batch of scene.instanceUpdates ?? []) {
         this.#instanceBuffers.upload(batch, batch.dirtyRanges);
       }
@@ -419,16 +428,39 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   }
 
   invalidate(): void {
-    if (this.#disposed || this.#frameloop === 'manual' || this.#frame !== null) return;
+    if (this.#disposed || this.#rendering || this.#frameloop === 'manual' || this.#frame !== null) return;
 
     this.#frame = requestAnimationFrame((timestamp) => this.#onAnimationFrame(timestamp));
   }
 
+  setFrameHandler(handler: ((frame: TypeGpuFrameContext) => boolean) | null): void {
+    if (this.#disposed) return;
+    this.#frameHandler = handler;
+    this.#continueFrame = false;
+    if (handler) this.invalidate();
+  }
+
   renderFrame(timestamp = typeof performance === 'undefined' ? 0 : performance.now()): void {
+    if (this.#disposed || this.#rendering) return;
+    this.#rendering = true;
+    try {
+      this.#drawFrame(timestamp);
+    } finally {
+      this.#rendering = false;
+    }
+  }
+
+  #drawFrame(timestamp: number): void {
+    const now = Number.isFinite(timestamp)
+      ? Math.max(this.#lastTimestamp ?? timestamp, timestamp)
+      : this.#lastTimestamp ?? 0;
+    const delta = this.#lastTimestamp === null ? 0 : Math.min(50, now - this.#lastTimestamp);
+    this.#lastTimestamp = now;
+    this.#elapsed += delta / 1000;
+    this.#continueFrame =
+      this.#frameHandler?.({ timestamp: now, delta: delta / 1000, elapsed: this.#elapsed }) ?? false;
     if (this.#disposed) return;
 
-    const delta = this.#lastTimestamp ? Math.min(48, timestamp - this.#lastTimestamp) : 0;
-    this.#lastTimestamp = timestamp;
     this.#time += (delta / 16.67) * 0.018;
 
     this.#resize();
@@ -510,7 +542,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       }
     });
 
-    this.#fpsMeter.record(timestamp);
+    this.#fpsMeter.record(now);
   }
 
   getRenderSize(): { width: number; height: number } {
@@ -521,6 +553,8 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     if (this.#disposed) return;
 
     this.#disposed = true;
+    this.#frameHandler = null;
+    this.#continueFrame = false;
 
     if (this.#frame !== null) {
       cancelAnimationFrame(this.#frame);
@@ -549,7 +583,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#frame = null;
     this.renderFrame(timestamp);
 
-    if (!this.#disposed && this.#frameloop === 'always') {
+    if (!this.#disposed && (this.#frameloop === 'always' || this.#continueFrame)) {
       this.invalidate();
     }
   }

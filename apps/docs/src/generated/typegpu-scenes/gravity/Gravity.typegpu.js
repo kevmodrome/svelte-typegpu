@@ -4,14 +4,15 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
-import { onMount } from 'svelte';
 import GravityBody from './GravityBody.typegpu.js';
-import { createGravityBodies, stepGravity } from './gravity-simulation.js';
+import GravityFrameTask from './GravityFrameTask.typegpu.js';
+import { createGravityBodies } from './gravity-simulation.js';
 
 var root = $.from_tree([
 	[
 		'scene',
-		null,
+		null,,
+		' ',
 		[
 			'perspectiveCamera',
 			{ id: 'main' },
@@ -43,30 +44,40 @@ export default function Gravity_typegpu($$anchor, $$props) {
 	let gravityControls = $.prop($$props, 'controls', 3, defaultGravityControls);
 	let bodies = $.state($.proxy(createGravityBodies('Solar System')));
 
-	onMount(() => {
-		let frame = 0;
-		let previous = performance.now();
-
+	$.user_effect(() => {
 		$.set(bodies, createGravityBodies(gravityControls().preset), true);
-
-		function tick(now) {
-			const delta = (now - previous) / 1000;
-
-			previous = now;
-			$.set(bodies, stepGravity($.get(bodies), delta, 2 ** gravityControls().speed), true);
-			frame = requestAnimationFrame(tick);
-		}
-
-		frame = requestAnimationFrame(tick);
-
-		return () => cancelAnimationFrame(frame);
 	});
 
 	var scene = root();
 
 	$.set_attribute(scene, 'clearColor', [0.015, 0.018, 0.026, 1]);
 
-	var perspectiveCamera = $.child(scene);
+	var node = $.child(scene);
+
+	{
+		let $0 = $.derived(() => 2 ** gravityControls().speed);
+		let $1 = $.derived(() => !gravityControls().paused);
+
+		GravityFrameTask(node, {
+			get speed() {
+				return $.get($0);
+			},
+
+			get active() {
+				return $.get($1);
+			},
+
+			get bodies() {
+				return $.get(bodies);
+			},
+
+			set bodies($$value) {
+				$.set(bodies, $$value, true);
+			}
+		});
+	}
+
+	var perspectiveCamera = $.sibling(node, 2);
 
 	$.set_attribute(perspectiveCamera, 'active', true);
 	$.set_attribute(perspectiveCamera, 'position', [0, 5.2, 8.5]);
@@ -105,9 +116,9 @@ export default function Gravity_typegpu($$anchor, $$props) {
 	$.set_attribute(directionalLight, 'color', [0.5, 0.58, 0.8]);
 	$.set_attribute(directionalLight, 'intensity', 0.45);
 
-	var node = $.sibling(directionalLight, 2);
+	var node_1 = $.sibling(directionalLight, 2);
 
-	$.each(node, 17, () => $.get(bodies), (body) => body.id, ($$anchor, body) => {
+	$.each(node_1, 17, () => $.get(bodies), (body) => body.id, ($$anchor, body) => {
 		GravityBody($$anchor, {
 			get body() {
 				return $.get(body);

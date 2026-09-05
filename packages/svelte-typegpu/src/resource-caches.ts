@@ -1,4 +1,5 @@
 import { perlin3d } from '@typegpu/noise';
+import { growInstanceCapacity } from './instance-data';
 import {
   d,
   type IndexFlag,
@@ -162,15 +163,18 @@ export class InstanceBufferCache {
     const resource = this.getOrCreate(batch);
     const byteLength = Math.max(meshInstanceLayout.stride, batch.instances.byteLength);
 
-    if (!resource.buffer || resource.byteLength !== byteLength) {
+    if (!resource.buffer || resource.byteLength < byteLength) {
       resource.buffer?.destroy();
+      const capacityBytes =
+        growInstanceCapacity(byteLength / meshInstanceLayout.stride) * meshInstanceLayout.stride;
       resource.buffer = createAndUploadBuffer(
         this.root,
         meshInstanceLayout,
         `TypeGPU ${batch.key} instances`,
-        batch.instances
+        batch.instances,
+        capacityBytes
       );
-      resource.byteLength = byteLength;
+      resource.byteLength = capacityBytes;
       resource.instanceCount = batch.instanceCount;
       return;
     }
@@ -411,9 +415,9 @@ export class MaterialResourceCache {
       existing &&
       existing.textureKey === textureResource.key &&
       existing.samplerKey === samplerKey &&
-      existing.uniformKey === uniformKey &&
       existing.status === textureResource.status
     ) {
+      this.updateUniforms(material);
       return existing;
     }
 
@@ -440,6 +444,14 @@ export class MaterialResourceCache {
     existing?.uniformBuffer.destroy();
     this.#resources.set(key, resource);
     return resource;
+  }
+
+  updateUniforms(material: TypeGpuMaterialDescriptor): void {
+    if (material.kind !== 'shader') return;
+    const existing = this.#resources.get(materialResourceKeyFor(material));
+    if (!existing || existing.uniformKey === material.uniformKey) return;
+    existing.uniformBuffer.write(packMaterialUniforms(material));
+    existing.uniformKey = material.uniformKey;
   }
 
   prune(liveKeys: Set<string>): void {
@@ -506,7 +518,7 @@ export function materialResourceKeyFor(material: TypeGpuMaterialDescriptor): str
   return material.bindGroupKey ?? [
     material.textureKey ?? 'solid:white',
     material.samplerKey ?? DEFAULT_SAMPLER.key,
-    material.kind === 'shader' ? material.uniformKey : 'uniforms:default'
+    material.kind === 'shader' ? material.uniformOwner ?? material.uniformKey : 'uniforms:default'
   ].join('|');
 }
 
@@ -677,16 +689,17 @@ function createAndUploadBuffer(
   root: TgpuRoot,
   layout: TgpuVertexLayout,
   label: string,
-  data: Float32Array
+  data: Float32Array,
+  capacityBytes = Math.max(layout.stride, data.byteLength)
 ): TypeGpuVertexBuffer {
-  const byteLength = Math.max(layout.stride, data.byteLength);
+  const byteLength = capacityBytes;
   const buffer = root
     .createBuffer(d.arrayOf(d.f32, byteLength / Float32Array.BYTES_PER_ELEMENT))
     .$usage('vertex')
     .$name(label);
 
   if (data.length > 0) {
-    buffer.write(arrayBufferFor(data));
+    buffer.write(arrayBufferFor(data), { startOffset: 0, endOffset: data.byteLength });
   }
 
   return buffer;

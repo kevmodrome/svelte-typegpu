@@ -7,6 +7,7 @@ import renderer from './svelte-renderer';
 import { createTypeGpuRuntimeForTest } from './svelte-renderer';
 import { Tween } from 'svelte/motion';
 import type { TypeGpuRenderer } from './gpu-renderer';
+import type { TypeGpuFrameContext } from './frame-tasks';
 import { typeGpuRendererPath } from './test-paths';
 
 const instances: ReturnType<typeof mount>[] = [];
@@ -15,6 +16,51 @@ afterEach(async () => {
 });
 
 describe('TypeGPU target primitive component rendering', () => {
+  it('flushes frame-task state into the same frame, supports pause and keyed removal, and disposes hooks', async () => {
+    const Scene = compileTypeGpuSource<{ pause(): void; resume(): void; removeTask(): void }>(`
+      <script>
+        let x = $state(0);
+        let active = $state(true);
+        let attached = $state(true);
+        function update({ delta }) { x += delta; }
+        export function pause() { active = false; }
+        export function resume() { active = true; }
+        export function removeTask() { attached = false; }
+      </script>
+      <scene>
+        {#if attached}<frameTask {update} {active} />{/if}
+        <mesh position={[x, 0, 0]}><boxGeometry /></mesh>
+      </scene>
+    `);
+    const root = createFragment();
+    let frameHandler: ((frame: TypeGpuFrameContext) => boolean) | null = null;
+    const gpu = { setScene: vi.fn(), setCamera: vi.fn(), invalidate: vi.fn(), renderFrame: vi.fn(),
+      setFrameHandler: vi.fn(handler => { frameHandler = handler; }), getRenderSize: vi.fn(), dispose: vi.fn()
+    } as TypeGpuRenderer;
+    const runtime = createTypeGpuRuntimeForTest(root, new EventTarget() as HTMLCanvasElement, gpu);
+    root.runtime = runtime;
+    const instance = mount(Scene, { renderer, target: root });
+    const step = () => frameHandler!({ timestamp: 20, delta: 0.02, elapsed: 0.02 });
+    try {
+      expect(step()).toBe(true);
+      expect(vi.mocked(gpu.setScene).mock.lastCall![0].drawBatches[0].instances[0]).toBeCloseTo(0.02);
+      instance.pause();
+      expect(step()).toBe(false);
+      expect(vi.mocked(gpu.setScene).mock.lastCall![0].drawBatches[0].instances[0]).toBeCloseTo(0.02);
+      instance.resume();
+      expect(step()).toBe(true);
+      expect(vi.mocked(gpu.setScene).mock.lastCall![0].drawBatches[0].instances[0]).toBeCloseTo(0.04);
+      instance.removeTask();
+      expect(step()).toBe(false);
+      vi.mocked(gpu.setScene).mockClear();
+      await Promise.resolve();
+      expect(gpu.setScene).not.toHaveBeenCalled();
+    } finally {
+      await unmount(instance);
+      runtime.dispose();
+    }
+    expect(frameHandler).toBeNull();
+  });
   it('translates real Svelte Tween frames into targeted group instance updates', async () => {
     const raf = (svelteClient as unknown as { raf: { now(): number; tick(callback: () => void): void } }).raf;
     let now = 0;
@@ -30,7 +76,10 @@ describe('TypeGPU target primitive component rendering', () => {
         {/each}
         <group position={motion.current}>
           <mesh><boxGeometry /></mesh>
-          <mesh position={[1, 0, 0]}><boxGeometry /></mesh>
+          <mesh position={[1, 0, 0]}>
+            <boxGeometry />
+            <standardMaterial color={[motion.current[0] / 4, 0, 0, 1]} />
+          </mesh>
         </group>
       </scene>
     `);
@@ -56,6 +105,7 @@ describe('TypeGPU target primitive component rendering', () => {
         expect(state.instanceUpdates![0].dirtyRanges).toEqual([{ start: 300, count: 2 }]);
         expect(state.drawBatches[0].instances).toBe(instances);
         expect(instances[300 * 24]).toBeCloseTo(Math.min(time / 100, 1) * 4);
+        expect(instances[301 * 24 + 4]).toBeCloseTo(Math.min(time / 100, 1));
       }
       expect(gpu.setScene).toHaveBeenCalledTimes(3);
     } finally {

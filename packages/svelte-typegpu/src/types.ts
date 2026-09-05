@@ -266,6 +266,7 @@ export type TypeGpuMeshFragmentInput = {
 };
 export type TypeGpuMeshFragment = TgpuFragmentFn<TypeGpuMeshFragmentInput, d.Vec4f>;
 export type TypeGpuShaderMaterialDescriptor = TypeGpuMaterialDescriptorBase<'shader'> & {
+  uniformOwner?: string;
   fragment: TypeGpuMeshFragment;
   uniforms: TypeGpuShaderMaterialUniformMap;
   uniformKey: string;
@@ -462,6 +463,7 @@ export interface TypeGpuSceneState {
   drawBatchesChanged: boolean;
   resourceItems?: TypeGpuMeshDrawItem[];
   instanceUpdates?: TypeGpuDrawBatch[];
+  materialUpdates?: TypeGpuMaterialDescriptor[];
   shaderPasses: TypeGpuShaderPass[];
   shaderPassesChanged: boolean;
   shaderPassNodes?: Set<TypeGpuNode>;

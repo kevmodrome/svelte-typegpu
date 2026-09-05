@@ -99,6 +99,9 @@ need to be compiled with the Svelte PR preview build described below.
 
 ## Setup
 
+See [Animation and frame tasks](docs/scene-animation-guide.md) for Svelte motion,
+animated shader uniforms, dynamic collections, and reusable behavior components.
+
 ```bash
 pnpm install
 pnpm test

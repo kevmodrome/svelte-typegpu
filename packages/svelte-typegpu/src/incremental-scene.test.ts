@@ -150,7 +150,7 @@ describe('incremental scene transforms', () => {
     expect(cameraOnly.drawBatches.every((batch) => !batch.instancesChanged)).toBe(true);
   });
 
-  it('falls back for structural changes and mixed material changes, then resumes incremental motion', () => {
+  it('falls back for structure, then resumes combined incremental motion and material values', () => {
     const root = createElement('scene');
     const group = createElement('group');
     const other = createElement('group');
@@ -178,7 +178,7 @@ describe('incremental scene transforms', () => {
         [material, Dirty.MaterialUniform]
       ])
     });
-    expect(mixed.drawBatchesChanged).toBe(true);
+    expect(mixed.drawBatchesChanged).toBe(false);
     expect(packed(mixed)).toEqual(packed(createSceneState(root)));
     remove(mesh);
     expect(createSceneState(root, cache, { dirty: MOTION, dirtyNodes }).drawBatches).toHaveLength(
@@ -254,6 +254,17 @@ describe('incremental scene transforms', () => {
     expect(packed(state)).toEqual(
       packed(createSceneState(root, createTypeGpuSceneCache({ modelCache })))
     );
+    const override = createElement('standardMaterial');
+    insert(model, override, null);
+    createSceneState(root, cache);
+    setAttribute(override, 'roughness', 0.2);
+    const values = createSceneState(root, cache, {
+      dirty: Dirty.MaterialUniform,
+      dirtyNodes: new Map([[override, Dirty.MaterialUniform]])
+    });
+    expect(values.drawBatchesChanged).toBe(false);
+    expect(values.instanceUpdates![0].dirtyRanges).toEqual([{ start: 0, count: 2 }]);
+    expect(packed(values)).toEqual(packed(createSceneState(root, createTypeGpuSceneCache({ modelCache }))));
     setAttribute(model, 'visible', false);
     expect(createSceneState(root, cache).drawBatches).toHaveLength(0);
     setAttribute(model, 'visible', true);

@@ -98,12 +98,7 @@ export class SceneTransformCache {
     dirty: Dirty,
     nodes: ReadonlyMap<TypeGpuNode, Dirty> | undefined
   ): boolean {
-    if (
-      !this.#ready ||
-      root !== this.#root ||
-      root.treeRevision !== this.#treeRevision ||
-      !nodes?.size
-    )
+    if (!this.isReady(root) || !nodes?.size)
       return false;
     if (!hasDirty(dirty, Dirty.Transform) || (dirty & ~TRANSFORM_DIRTY) !== 0) return false;
     for (const [node, mask] of nodes) {
@@ -117,6 +112,10 @@ export class SceneTransformCache {
         return false;
     }
     return true;
+  }
+
+  isReady(root: TypeGpuNode): boolean {
+    return this.#ready && root === this.#root && root.treeRevision === this.#treeRevision;
   }
 
   update(

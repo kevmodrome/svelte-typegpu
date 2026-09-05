@@ -1,4 +1,4 @@
-import { MESH_INSTANCE_FLOATS, packMeshInstance } from './instance-data';
+import { growInstanceCapacity, MESH_INSTANCE_FLOATS, packMeshInstance } from './instance-data';
 import {
   compareDrawBatchKeys,
   drawBatchKey,
@@ -26,6 +26,7 @@ interface DrawBatchState {
 
 export interface TypeGpuDrawBatchCache {
   read(items: TypeGpuMeshDrawItem[]): TypeGpuDrawBatch[];
+  updateMaterials(items: TypeGpuMeshDrawItem[]): void;
   updateInstances(items: TypeGpuMeshDrawItem[]): {
     batches: TypeGpuDrawBatch[];
     updates: TypeGpuDrawBatch[];
@@ -66,6 +67,12 @@ export function createDrawBatchCache(): TypeGpuDrawBatchCache {
       currentBatches = batches;
       dirtyBatches = batches.filter((batch) => batch.instancesChanged);
       return batches;
+    },
+    updateMaterials(items) {
+      for (const item of items) {
+        const slot = slots.get(item.id);
+        if (slot) slot.batch.material = item.material;
+      }
     },
     updateInstances(items) {
       for (const batch of dirtyBatches) {
@@ -120,49 +127,33 @@ function readDrawBatch(
 ): TypeGpuDrawBatch {
   const items = group.items;
   const instanceIds = items.map((item) => item.id);
-  const revisions = items.map((item) => item.revision);
-  const instancesMatch =
-    previous &&
-    sameList(instanceIds, previous.instanceIds) &&
-    sameList(revisions, previous.revisions);
-
-  if (instancesMatch) {
-    return {
-      ...batchBase(group, sortKey),
-      instances: previous.instances,
-      instanceIds: previous.instanceIds,
-      instanceCount: items.length,
-      instancesChanged: false,
-      dirtyRanges: []
-    };
-  }
-
-  if (!previous || !sameList(instanceIds, previous.instanceIds)) {
-    const instances = new Float32Array(items.length * MESH_INSTANCE_FLOATS);
-    items.forEach((item, index) => packMeshInstance(item, instances, index * MESH_INSTANCE_FLOATS));
-
-    return {
-      ...batchBase(group, sortKey),
-      instances,
-      instanceIds,
-      instanceCount: items.length,
-      instancesChanged: true,
-      dirtyRanges: items.length > 0 ? [{ start: 0, count: items.length }] : []
-    };
-  }
-
+  const requiredFloats = items.length * MESH_INSTANCE_FLOATS;
+  const reallocate = !previous || previous.instances.buffer.byteLength < requiredFloats * 4;
+  const instances = reallocate
+    ? new Float32Array(growInstanceCapacity(items.length) * MESH_INSTANCE_FLOATS).subarray(
+        0,
+        requiredFloats
+      )
+    : previous.instances.length === requiredFloats
+      ? previous.instances
+      : new Float32Array(previous.instances.buffer, 0, requiredFloats);
   const dirtyRanges: TypeGpuInstanceDirtyRange[] = [];
 
   items.forEach((item, index) => {
-    if (item.revision === previous.revisions[index]) return;
-    packMeshInstance(item, previous.instances, index * MESH_INSTANCE_FLOATS);
+    if (
+      !reallocate &&
+      previous.instanceIds[index] === item.id &&
+      previous.revisions[index] === item.revision
+    )
+      return;
+    packMeshInstance(item, instances, index * MESH_INSTANCE_FLOATS);
     appendDirtyRange(dirtyRanges, index);
   });
 
   return {
     ...batchBase(group, sortKey),
-    instances: previous.instances,
-    instanceIds: previous.instanceIds,
+    instances,
+    instanceIds,
     instanceCount: items.length,
     instancesChanged: dirtyRanges.length > 0,
     dirtyRanges
@@ -196,11 +187,6 @@ function batchBase(
 
 function groupRevisionList(group: DrawBatchGroup | undefined): number[] {
   return group?.items.map((item) => item.revision) ?? [];
-}
-
-function sameList<T>(next: T[], previous: T[]): boolean {
-  if (next.length !== previous.length) return false;
-  return next.every((value, index) => value === previous[index]);
 }
 
 function appendDirtyRange(ranges: TypeGpuInstanceDirtyRange[], index: number): void {

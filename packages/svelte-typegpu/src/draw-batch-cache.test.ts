@@ -9,6 +9,30 @@ import type {
 } from './types';
 
 describe('TypeGPU draw batch cache', () => {
+  it('reuses backing capacity on append, shrink, and reorder; grows only when full', () => {
+    const cache = createDrawBatchCache();
+    const items = ['a', 'b', 'c', 'd', 'e'].map(id => drawItem({ id }));
+    const first = cache.read(items.slice(0, 3))[0];
+    expect(first.instances.length).toBe(3 * 24);
+    expect(first.instances.buffer.byteLength).toBe(4 * 96);
+    const appended = cache.read(items.slice(0, 4))[0];
+    expect(appended.instances.buffer).toBe(first.instances.buffer);
+    expect(appended.dirtyRanges).toEqual([{ start: 3, count: 1 }]);
+    const shrunk = cache.read(items.slice(0, 2))[0];
+    expect(shrunk.instances.buffer).toBe(first.instances.buffer);
+    expect(shrunk.dirtyRanges).toEqual([]);
+    expect(shrunk.instanceCount).toBe(2);
+    const reordered = cache.read([items[1], items[0]])[0];
+    expect(reordered.instances.buffer).toBe(first.instances.buffer);
+    expect(reordered.instanceIds).toEqual(['b', 'a']);
+    expect(reordered.dirtyRanges).toEqual([{ start: 0, count: 2 }]);
+    const grown = cache.read(items)[0];
+    expect(grown.instances.buffer).not.toBe(first.instances.buffer);
+    expect(grown.instances.buffer.byteLength).toBe(8 * 96);
+    expect(grown.dirtyRanges).toEqual([{ start: 0, count: 5 }]);
+    cache.read([]);
+    expect(cache.read(items)[0].instances.buffer).not.toBe(grown.instances.buffer);
+  });
   it('uses the exact Task 5 batch key shape', () => {
     const [batch] = createDrawBatchCache().read([drawItem({ id: 'a' })]);
 

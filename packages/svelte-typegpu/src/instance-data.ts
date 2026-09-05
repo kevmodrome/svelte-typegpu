@@ -15,6 +15,10 @@ export const MESH_TRANSPARENT_FLAG = 2;
 export const MESH_DEPTH_WRITE_DISABLED_FLAG = 4;
 export const MESH_RECEIVE_SHADOW_FLAG = 8;
 
+export function growInstanceCapacity(count: number): number {
+  return 2 ** Math.ceil(Math.log2(Math.max(1, count)));
+}
+
 export function packMeshInstance(
   item: TypeGpuMeshDrawItem,
   instances: Float32Array,

@@ -5,6 +5,8 @@ export interface MotionControls {
   z: number;
   lift: number;
   visible: boolean;
+  appearance: number;
+  count: number;
 }
 
 const colors: RgbaTuple[] = [

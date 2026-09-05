@@ -1,4 +1,5 @@
 export { default } from './svelte-renderer';
+export type { TypeGpuFrameContext, TypeGpuFrameCallback } from './frame-tasks';
 export {
   createTypeGpuRoot,
   type TypeGpuRoot,

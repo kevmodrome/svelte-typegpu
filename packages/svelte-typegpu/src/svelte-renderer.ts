@@ -1,4 +1,6 @@
 import { createRenderer } from 'svelte/renderer';
+import { flushSync } from 'svelte';
+import { FrameTasks } from './frame-tasks';
 import { createCameraInteractionController } from './camera-interaction';
 import {
   createTypeGpuRenderer,
@@ -162,6 +164,7 @@ function createRuntime(
   let dirty = Dirty.All;
   let dirtyNodes = new Map<TypeGpuNode, Dirty>();
   let fullSync = false;
+  const frameTasks = new FrameTasks();
   const onModelSettled = () => scheduleSync(root);
   const hasInjectedModelLoader = Boolean(options.loadUrl || options.loadData);
   const sceneCache = createTypeGpuSceneCache({
@@ -188,6 +191,16 @@ function createRuntime(
   let currentScene: TypeGpuSceneState | null = null;
   let hoveredTarget: TypeGpuInteractionTarget | null = null;
 
+  gpu.setFrameHandler?.((frame) => {
+    if (disposed) return false;
+    flushSync();
+    flushScene();
+    if (disposed) return false;
+    flushSync(() => frameTasks.run(frame));
+    flushScene();
+    return !disposed && frameTasks.continuous;
+  });
+
   function scheduleSync(
     nextRoot: TypeGpuNode,
     dirtyNode?: TypeGpuNode,
@@ -207,20 +220,25 @@ function createRuntime(
     queued = true;
     queueMicrotask(() => {
       queued = false;
-      if (disposed) return;
-      const sceneDirty = dirty;
-      const sceneNodes = fullSync ? undefined : dirtyNodes;
-      dirty = Dirty.None;
-      dirtyNodes = new Map();
-      fullSync = false;
-      const scene = createSceneState(root, sceneCache, {
-        dirty: sceneDirty,
-        dirtyNodes: sceneNodes
-      });
-      gpu.setScene(scene);
-      cameraInteraction.reconcile(scene);
-      currentScene = scene;
+      flushScene();
     });
+  }
+
+  function flushScene() {
+    if (disposed || dirty === Dirty.None) return;
+    const sceneDirty = dirty;
+    const sceneNodes = fullSync ? undefined : dirtyNodes;
+    dirty = Dirty.None;
+    dirtyNodes = new Map();
+    fullSync = false;
+    if ((sceneDirty & (Dirty.FrameTasks | Dirty.Tree)) !== 0) frameTasks.reconcile(root);
+    const scene = createSceneState(root, sceneCache, {
+      dirty: sceneDirty,
+      dirtyNodes: sceneNodes
+    });
+    gpu.setScene(scene);
+    cameraInteraction.reconcile(scene);
+    currentScene = scene;
   }
 
   function dispatchCanvasClick(event: MouseEvent) {
@@ -513,8 +531,11 @@ function createRuntime(
     dispose() {
       if (disposed) return;
       disposed = true;
+      frameTasks.clear();
+      gpu.setFrameHandler?.(null);
       dirtyNodes.clear();
       sceneCache.transforms.reset(root);
+      sceneCache.values.reset();
       sceneCache.lastState = undefined;
       sceneCache.resourceItems = [];
       sceneCache.cleanDrawBatches = [];

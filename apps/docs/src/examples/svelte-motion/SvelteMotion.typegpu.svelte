@@ -13,6 +13,7 @@
 
   const position = new Tween<Vector3Tuple>([-7, 2, -7], { duration: 1600, easing: cubicInOut });
   const lift = new Spring(0, { stiffness: 0.06, damping: 0.45 });
+  const appearance = new Tween(0, { duration: 900, easing: cubicInOut });
 
   $effect(() => {
     position.target = [controls.x, 2, controls.z];
@@ -20,9 +21,13 @@
   $effect(() => {
     lift.target = controls.lift;
   });
+  $effect(() => {
+    appearance.target = controls.appearance;
+  });
   onDestroy(() => {
     void position.set(position.current, { duration: 0 });
     void lift.set(lift.current, { instant: true });
+    void appearance.set(appearance.current, { duration: 0 });
   });
 </script>
 
@@ -42,7 +47,7 @@
   <ambientLight intensity={0.4} color={[1, 1, 1]} />
   <directionalLight position={[8, 20, 10]} lookAt={[0, 0, 0]} intensity={0.9} />
 
-  {#each motionField as cell (cell.id)}
+  {#each motionField.slice(0, controls.count) as cell (cell.id)}
     <mesh
       position={cell.position}
       scale={cell.scale}
@@ -53,5 +58,5 @@
     </mesh>
   {/each}
 
-  <MotionMarker position={position.current} lift={lift.current} visible={controls.visible} />
+  <MotionMarker position={position.current} lift={lift.current} visible={controls.visible} appearance={appearance.current} />
 </scene>

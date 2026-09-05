@@ -66,7 +66,8 @@ describe('TypeGPU primitive descriptors', () => {
       Dirty.DrawBatches,
       Dirty.Interaction,
       Dirty.Lights,
-      Dirty.ShaderPass
+      Dirty.ShaderPass,
+      Dirty.FrameTasks
     );
     expectExactDirty(
       dirtyForAttribute('group', 'renderOrder', 0, 1),
@@ -111,7 +112,8 @@ describe('TypeGPU primitive descriptors', () => {
     );
     expectExactDirty(dirtyForAttribute('mesh', 'phase', 0, 1), Dirty.None);
     expectExactDirty(dirtyForAttribute('mesh', 'spinSpeed', 0, 1), Dirty.None);
-    expectExactDirty(dirtyForAttribute('mesh', 'color', [1, 1, 1, 1], [1, 0, 0, 1]), Dirty.None);
+    expectExactDirty(dirtyForAttribute('mesh', 'color', [1, 1, 1, 1], [1, 0, 0, 1]), Dirty.MaterialUniform);
+    expectExactDirty(dirtyForAttribute('shaderMaterial', 'uniforms', {}, { value0: 1 }), Dirty.MaterialUniform);
   });
 
   it('marks material replacement as a conservative material rebuild', () => {

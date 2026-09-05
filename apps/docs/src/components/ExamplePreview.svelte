@@ -48,9 +48,10 @@
   });
   let gravityControls = $state({
     preset: 'Solar System' as GravityPreset,
-    speed: 0
+    speed: 0,
+    paused: false
   });
-  let motionControls = $state({ x: 0, z: 0, lift: 0, visible: true });
+  let motionControls = $state({ x: 0, z: 0, lift: 0, visible: true, appearance: 0, count: 2000 });
 
   const hasControls = $derived(
       slug === 'svelte-motion' ||
@@ -106,7 +107,7 @@
 
     createTypeGpuRoot({
       target: host,
-      frameloop: 'always',
+      frameloop: slug === 'gravity' || slug === 'svelte-motion' ? 'demand' : 'always',
       maxDevicePixelRatio: 1.5,
       clearColor: [0.045, 0.05, 0.055, 1],
       depth: true,
@@ -228,12 +229,10 @@
 
   function setGravityPreset(value: string) {
     gravityControls.preset = value as GravityPreset;
-    rerenderScene();
   }
 
   function setGravitySpeed(value: number) {
     gravityControls.speed = value;
-    rerenderScene();
   }
 
   function rgbToHex(color: readonly number[]): string {
@@ -290,6 +289,16 @@
         <label class="control-row">
           <span>Marker visible</span>
           <input type="checkbox" bind:checked={motionControls.visible} />
+        </label>
+        <label class="control-row">
+          <span>Appearance</span>
+          <input type="range" min="0" max="1" step="0.01" bind:value={motionControls.appearance} />
+          <output>{motionControls.appearance.toFixed(2)}</output>
+        </label>
+        <label class="control-row">
+          <span>Cubes</span>
+          <input type="range" min="0" max="2000" step="40" bind:value={motionControls.count} />
+          <output>{motionControls.count}</output>
         </label>
       {:else if slug === 'phong-reflection'}
         <label class="control-row">
@@ -507,6 +516,10 @@
           <button type="button" onclick={() => setSmokyPreset('fire')}>Fire Preset</button>
         </div>
       {:else if slug === 'gravity'}
+        <label class="control-row">
+          <span>Paused</span>
+          <input type="checkbox" bind:checked={gravityControls.paused} />
+        </label>
         <label class="control-row">
           <span>preset</span>
           <select

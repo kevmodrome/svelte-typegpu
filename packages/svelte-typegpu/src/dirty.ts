@@ -16,6 +16,7 @@ export const enum Dirty {
   RenderSettings = 1 << 13,
   Sampler = 1 << 14,
   ShaderPass = 1 << 15,
+  FrameTasks = 1 << 16,
   All = -1
 }
 

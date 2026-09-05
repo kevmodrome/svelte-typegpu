@@ -32,7 +32,8 @@ export const exampleDefinitions = [
     sourceFiles: [
       new URL('./svelte-motion/SvelteMotion.typegpu.svelte', import.meta.url),
       new URL('./svelte-motion/MotionMarker.typegpu.svelte', import.meta.url),
-      new URL('./svelte-motion/motion-field.ts', import.meta.url)
+      new URL('./svelte-motion/motion-field.ts', import.meta.url),
+      new URL('./svelte-motion/marker-fragment.ts', import.meta.url)
     ],
     typeGpuSourceFiles: []
   },
@@ -165,7 +166,8 @@ export const exampleDefinitions = [
     sourceFiles: [
       new URL('./gravity/Gravity.typegpu.svelte', import.meta.url),
       new URL('./gravity/GravityBody.typegpu.svelte', import.meta.url),
-      new URL('./gravity/gravity-simulation.ts', import.meta.url)
+      new URL('./gravity/gravity-simulation.ts', import.meta.url),
+      new URL('./gravity/GravityFrameTask.typegpu.svelte', import.meta.url)
     ],
     typeGpuSourceFiles: [
       { path: 'index.ts', loc: 246 },

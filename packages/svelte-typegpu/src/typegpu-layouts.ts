@@ -43,7 +43,6 @@ export const sceneBindGroupLayout = tgpu
   .bindGroupLayout({
     scene: { uniform: typegpuSceneUniformSchema }
   })
-  .$idx(0)
   .$name('TypeGPU scene bind group layout');
 
 export const TYPEGPU_LIGHT_RECORD_BYTES = 96;
@@ -77,7 +76,6 @@ export const lightingBindGroupLayout = tgpu
   .bindGroupLayout({
     lighting: { uniform: typegpuLightingSchema }
   })
-  .$idx(1)
   .$name('TypeGPU lighting bind group layout');
 
 export const TYPEGPU_SHADOW_UNIFORM_FLOATS = 20;
@@ -111,7 +109,6 @@ export const materialBindGroupLayout = tgpu
       visibility: ['fragment']
     }
   })
-  .$idx(2)
   .$name('TypeGPU standard material bind group layout');
 
 export const shadowBindGroupLayout = tgpu
@@ -120,7 +117,6 @@ export const shadowBindGroupLayout = tgpu
     shadowMap: { texture: d.textureDepth2d(), visibility: ['fragment'] },
     shadowSampler: { sampler: 'comparison', visibility: ['fragment'] }
   })
-  .$idx(3)
   .$name('TypeGPU shadow map bind group layout');
 
 export const shadowPassBindGroupLayout = tgpu

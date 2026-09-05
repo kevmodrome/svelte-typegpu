@@ -28,7 +28,12 @@ export function readInlineMaterial(
   if (!kind) return null;
   if (kind === 'shader' && !isMeshMaterialFragment(node.attributes.fragment)) return null;
 
-  return createMaterialDescriptor(kind, node.attributes);
+  return createMaterialDescriptor(kind, {
+    ...node.attributes,
+    uniformOwner: kind === 'shader' && node.attributes.uniforms !== undefined
+      ? `node:${node.uid}`
+      : undefined
+  });
 }
 
 export interface TypeGpuMaterialDescriptorInput {
@@ -47,6 +52,7 @@ export interface TypeGpuMaterialDescriptorInput {
   blendMode?: unknown;
   fragment?: unknown;
   uniforms?: unknown;
+  uniformOwner?: string;
 }
 
 export function createMaterialDescriptor(
@@ -96,6 +102,7 @@ export function createMaterialDescriptor(
     ...(kind === 'shader'
       ? {
           fragment: input.fragment as TypeGpuMeshFragment,
+          uniformOwner: input.uniformOwner,
           uniforms: normalizeShaderMaterialUniforms(input.uniforms),
           uniformKey: shaderMaterialUniformKey(normalizeShaderMaterialUniforms(input.uniforms))
         }
@@ -275,7 +282,7 @@ function nonNegativeMaterialNumber(value: unknown, fallback: number): number {
   return Number.isFinite(resolved) ? Math.max(0, resolved) : fallback;
 }
 
-function pipelineKeyFor(input: TypeGpuMaterialDescriptor): string {
+export function pipelineKeyFor(input: TypeGpuMaterialDescriptor): string {
   return [
     `material:${input.kind}`,
     input.kind === 'shader' ? shaderMaterialFragmentKey(input.fragment) : 'fragment:default',
@@ -298,10 +305,10 @@ function shaderMaterialFragmentKey(fragment: TypeGpuMeshFragment): string {
   return `fragment:${next}`;
 }
 
-function bindGroupKeyFor(input: TypeGpuMaterialDescriptor): string {
+export function bindGroupKeyFor(input: TypeGpuMaterialDescriptor): string {
   const keyParts = [input.textureKey ?? 'solid:white', input.samplerKey ?? DEFAULT_SAMPLER.key];
 
-  if (input.kind === 'shader') keyParts.push(input.uniformKey);
+  if (input.kind === 'shader') keyParts.push(input.uniformOwner ?? input.uniformKey);
 
   return keyParts.join('|');
 }

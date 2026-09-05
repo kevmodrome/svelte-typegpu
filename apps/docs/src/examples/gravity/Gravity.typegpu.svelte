@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import GravityBody from './GravityBody.typegpu.svelte';
+  import GravityFrameTask from './GravityFrameTask.typegpu.svelte';
   import {
     createGravityBodies,
-    stepGravity,
     type GravityBody as GravityBodyData,
     type GravityPreset
   } from './gravity-simulation';
@@ -11,6 +10,7 @@
   interface GravityControls {
     preset: GravityPreset;
     speed: number;
+    paused?: boolean;
   }
 
   const defaultGravityControls: GravityControls = {
@@ -22,25 +22,13 @@
     $props();
   let bodies = $state<GravityBodyData[]>(createGravityBodies('Solar System'));
 
-  onMount(() => {
-    let frame = 0;
-    let previous = performance.now();
+  $effect(() => {
     bodies = createGravityBodies(gravityControls.preset);
-
-    function tick(now: number) {
-      const delta = (now - previous) / 1000;
-      previous = now;
-      bodies = stepGravity(bodies, delta, 2 ** gravityControls.speed);
-      frame = requestAnimationFrame(tick);
-    }
-
-    frame = requestAnimationFrame(tick);
-
-    return () => cancelAnimationFrame(frame);
   });
 </script>
 
 <scene clearColor={[0.015, 0.018, 0.026, 1]}>
+  <GravityFrameTask bind:bodies speed={2 ** gravityControls.speed} active={!gravityControls.paused} />
   <perspectiveCamera
     id="main"
     active={true}

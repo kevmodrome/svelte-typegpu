@@ -17,7 +17,8 @@ const aliases = new Map<string, string>([
   ['phong-material', 'phongMaterial'],
   ['standard-material', 'standardMaterial'],
   ['shader-material', 'shaderMaterial'],
-  ['shader-pass', 'shaderPass']
+  ['shader-pass', 'shaderPass'],
+  ['frame-task', 'frameTask']
 ]);
 
 export interface PrimitiveDescriptor {
@@ -65,7 +66,8 @@ const materialUniformAttributes = new Set([
   'opacity',
   'roughness',
   'metalness',
-  'specularExponent'
+  'specularExponent',
+  'uniforms'
 ]);
 const materialBindAttributes = new Set(['map', 'sampler']);
 const materialPipelineAttributes = new Set([
@@ -157,7 +159,11 @@ export function dirtyForAttribute(
   if (customDirty !== undefined) return customDirty;
 
   if (attribute === 'visible') {
-    return mergeDirty(Dirty.DrawBatches, Dirty.Interaction, Dirty.Lights, Dirty.ShaderPass);
+    return mergeDirty(Dirty.DrawBatches, Dirty.Interaction, Dirty.Lights, Dirty.ShaderPass, Dirty.FrameTasks);
+  }
+
+  if (name === 'frameTask') {
+    return ['update', 'active', 'priority', 'continuous'].includes(attribute) ? Dirty.FrameTasks : Dirty.None;
   }
 
   if (name === 'scene') {
@@ -245,6 +251,7 @@ export function dirtyForAttribute(
   }
 
   if (meshNames.has(name)) {
+    if (attribute === 'color') return Dirty.MaterialUniform;
     if (name === 'model' && modelGeometryAttributes.has(attribute)) {
       return mergeDirty(Dirty.Geometry, Dirty.DrawBatches, Dirty.Interaction);
     }
@@ -291,6 +298,7 @@ function dirtyForTreeChange(nodeName: string | undefined): Dirty {
   const name = normalizePrimitiveName(nodeName ?? '');
 
   if (name === 'scene') return Dirty.All;
+  if (name === 'frameTask') return mergeDirty(Dirty.Tree, Dirty.FrameTasks);
   if (name === 'perspectiveCamera' || name === 'orthographicCamera' || name === 'orbitControls') {
     return mergeDirty(Dirty.Tree, Dirty.Camera);
   }

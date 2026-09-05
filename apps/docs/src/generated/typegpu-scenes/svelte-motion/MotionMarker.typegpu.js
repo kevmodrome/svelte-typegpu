@@ -4,6 +4,7 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
+import { markerFragment } from './marker-fragment.js';
 
 var root = $.from_tree([
 	[
@@ -13,7 +14,7 @@ var root = $.from_tree([
 		' ',
 		['mesh', null, ['boxGeometry'], ['standardMaterial']],
 		' ',
-		['mesh', null, ['boxGeometry'], ['standardMaterial']]
+		['mesh', null, ['boxGeometry'], ['shaderMaterial']]
 	]
 ]);
 
@@ -26,7 +27,6 @@ export default function MotionMarker_typegpu($$anchor, $$props) {
 
 	var standardMaterial = $.sibling($.child(mesh));
 
-	$.set_attribute(standardMaterial, 'color', [1, 0.24, 0.3, 1]);
 	$.reset(mesh);
 
 	var mesh_1 = $.sibling(mesh, 2);
@@ -44,9 +44,8 @@ export default function MotionMarker_typegpu($$anchor, $$props) {
 	$.set_attribute(mesh_2, 'position', [1.5, 0, 0]);
 	$.set_attribute(mesh_2, 'scale', [0.55, 1.6, 0.55]);
 
-	var standardMaterial_2 = $.sibling($.child(mesh_2));
+	var shaderMaterial = $.sibling($.child(mesh_2));
 
-	$.set_attribute(standardMaterial_2, 'color', [0.88, 0.92, 0.95, 1]);
 	$.reset(mesh_2);
 	$.reset(group);
 
@@ -54,6 +53,17 @@ export default function MotionMarker_typegpu($$anchor, $$props) {
 		$.set_attribute(group, 'position', $$props.position);
 		$.set_attribute(group, 'visible', $$props.visible);
 		$.set_attribute(mesh, 'position', [0, $$props.lift, 0]);
+
+		$.set_attribute(standardMaterial, 'color', [
+			1 - $$props.appearance * 0.85,
+			0.24 + $$props.appearance * 0.6,
+			0.3 + $$props.appearance * 0.6,
+			1
+		]);
+
+		$.set_attribute(standardMaterial, 'roughness', 0.7 - $$props.appearance * 0.6);
+		$.set_attribute(shaderMaterial, 'fragment', markerFragment);
+		$.set_attribute(shaderMaterial, 'uniforms', { value0: $$props.appearance });
 	});
 
 	$.append($$anchor, group);

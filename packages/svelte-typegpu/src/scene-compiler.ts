@@ -9,6 +9,7 @@ import { createInteractionIndex } from './interaction-index';
 import { collectLights } from './lights';
 import { createModelCache, type TypeGpuModelCache } from './model-cache';
 import { SceneRevisionCache } from './scene-revisions';
+import { SceneValueCache } from './scene-value-cache';
 import {
   SceneTransformCache,
   type DrawItemWalkContext,
@@ -19,6 +20,8 @@ import { readInlineGeometry, readInlineMaterial } from './resources';
 import {
   DEFAULT_SAMPLER,
   materialKeyFor,
+  pipelineKeyFor,
+  bindGroupKeyFor,
   samplerKeyFor,
   textureKeyFor
 } from './material-descriptors';
@@ -46,6 +49,7 @@ export interface TypeGpuSceneCache {
   modelCache: TypeGpuModelCache;
   revisions: SceneRevisionCache;
   transforms: SceneTransformCache;
+  values: SceneValueCache;
   lastState?: TypeGpuSceneState;
   cleanDrawBatches: TypeGpuDrawBatch[];
   cleanLights: TypeGpuLight[];
@@ -94,6 +98,7 @@ export function createTypeGpuSceneCache(
     drawBatchCache: createDrawBatchCache(),
     revisions: new SceneRevisionCache(),
     transforms: new SceneTransformCache(),
+    values: new SceneValueCache(),
     modelCache:
       options.modelCache ??
       createModelCache({
@@ -116,25 +121,11 @@ export function createSceneState(
   options: TypeGpuSceneStateOptions = {}
 ): TypeGpuSceneState {
   const dirty = options.dirty ?? Dirty.All;
-  if (
-    cache.lastState &&
-    !options.reuseDrawBatches &&
-    !options.reuseLights &&
-    cache.transforms.canUpdate(root, dirty, options.dirtyNodes)
-  ) {
-    const changed = cache.transforms.update(options.dirtyNodes!, cache.revisions);
-    const { batches, updates } = cache.drawBatchCache.updateInstances(changed.items);
-    return (cache.lastState = {
-      ...cache.lastState,
-      dirty,
-      drawBatches: batches,
-      drawBatchesChanged: false,
-      instanceUpdates: updates,
-      lightsChanged: false,
-      shaderPassesChanged: false,
-      interactionChanged: changed.interactionChanged
-    });
-  }
+  const incremental =
+    !options.reuseDrawBatches && !options.reuseLights
+      ? updateSceneValuesAndTransforms(root, cache, dirty, options.dirtyNodes)
+      : null;
+  if (incremental) return (cache.lastState = incremental);
   const sceneSettings = readRenderSettings(root, cache.renderDefaults);
   const camera = readCameraState(root, sceneSettings.activeCamera);
   const recomputeLights = options.reuseLights === true ? false : hasDirty(dirty, Dirty.Lights);
@@ -163,10 +154,10 @@ export function createSceneState(
     ? cache.drawBatchCache.read(
         (drawItems = collectMeshDrawItems(root, cache)).filter((item) => item.visible !== false)
       )
-    : cache.cleanDrawBatches;
+    : cache.drawBatchCache.updateInstances([]).batches;
 
   if (recomputeDrawBatches) {
-    cache.cleanDrawBatches = cleanDrawBatches(drawBatches);
+    cache.cleanDrawBatches = drawBatches;
     cache.resourceItems = drawItems!;
     cache.cleanResourceKeys = liveResourceKeysFor(drawItems!);
   }
@@ -204,8 +195,57 @@ export function createSceneState(
   });
 }
 
+function updateSceneValuesAndTransforms(
+  root: TypeGpuNode,
+  cache: TypeGpuSceneCache,
+  dirty: Dirty,
+  nodes?: ReadonlyMap<TypeGpuNode, Dirty>
+): TypeGpuSceneState | null {
+  const allowed = Dirty.Transform | Dirty.Lights | Dirty.MaterialUniform;
+  if (
+    !cache.lastState ||
+    !nodes?.size ||
+    (dirty & ~allowed) !== 0 ||
+    !cache.transforms.isReady(root)
+  )
+    return null;
+  const transformNodes = new Map<TypeGpuNode, Dirty>();
+  const valueNodes: TypeGpuNode[] = [];
+  for (const [node, mask] of nodes) {
+    if ((mask & ~allowed) !== 0) return null;
+    if (hasDirty(mask, Dirty.MaterialUniform)) valueNodes.push(node);
+    const transformMask = mask & ~Dirty.MaterialUniform;
+    if (transformMask) transformNodes.set(node, transformMask);
+  }
+  if (
+    transformNodes.size &&
+    !cache.transforms.canUpdate(root, Dirty.Transform | Dirty.Lights, transformNodes)
+  )
+    return null;
+  const prepared = cache.values.prepare(valueNodes);
+  if (!prepared) return null;
+  const changed = cache.transforms.update(transformNodes, cache.revisions);
+  const values = cache.values.apply(prepared, cache.revisions);
+  cache.drawBatchCache.updateMaterials(values.materialItems);
+  const { batches, updates } = cache.drawBatchCache.updateInstances([
+    ...new Set([...changed.items, ...values.instances])
+  ]);
+  return {
+    ...cache.lastState,
+    dirty,
+    drawBatches: batches,
+    drawBatchesChanged: false,
+    instanceUpdates: updates,
+    materialUpdates: values.materials,
+    lightsChanged: false,
+    shaderPassesChanged: false,
+    interactionChanged: changed.interactionChanged
+  };
+}
+
 function collectMeshDrawItems(root: TypeGpuNode, cache: TypeGpuSceneCache): TypeGpuMeshDrawItem[] {
   cache.transforms.reset(root);
+  cache.values.reset();
   const items: TypeGpuMeshDrawItem[] = [];
   collectDrawItemsFromNode(
     root,
@@ -285,7 +325,7 @@ function collectDrawItemsFromNode(
       visible: context.visible
     };
   } else if (node.name === 'mesh') {
-    childContext = readMeshDrawItem(node, context, items, cache.revisions);
+    childContext = readMeshDrawItem(node, context, items, cache);
   } else if (node.name === 'model') {
     childContext = readModelDrawItems(node, context, items, cache);
   }
@@ -300,8 +340,9 @@ function readMeshDrawItem(
   mesh: TypeGpuNode,
   context: DrawItemWalkContext,
   items: TypeGpuMeshDrawItem[],
-  revisions: SceneRevisionCache
+  cache: TypeGpuSceneCache
 ): DrawItemWalkContext {
+  const revisions = cache.revisions;
   const transform = composeTransforms(context.transform, readLocalTransform(mesh));
   const meshRevision = revisions.read(mesh, 'transform', [context.revision, mesh.revision]);
 
@@ -340,6 +381,9 @@ function readMeshDrawItem(
     receiveShadow: mesh.attributes.receiveShadow === true,
     visible: context.visible
   });
+  cache.values.add(items[items.length - 1], material.node, () =>
+    readItemValues(mesh, readMeshMaterial(mesh).value, geometry.value)
+  );
 
   return { transform, revision: meshRevision, visible: context.visible };
 }
@@ -414,6 +458,9 @@ function readModelDrawItems(
       visible: context.visible
     });
     cache.transforms.setPrimitiveTransform(items[items.length - 1], mesh.transform);
+    cache.values.add(items[items.length - 1], material.node, () =>
+      readItemValues(modelNode, readModelMaterial(modelNode, mesh).value, geometry)
+    );
   });
 
   return { transform: modelTransform, revision: modelRevision, visible: context.visible };
@@ -436,6 +483,20 @@ function readModelMaterial(
   }
 
   return { node: null, value: batchMaterialDescriptor(mesh.material) };
+}
+
+function readItemValues(
+  node: TypeGpuNode,
+  source: TypeGpuMaterialDescriptor,
+  geometry: TypeGpuGeometryData
+) {
+  const material = materialForGeometry(source, geometry);
+  const color = rgbaArg(node.attributes.color, material.color);
+  return {
+    material,
+    color,
+    castShadow: castsDeclarativeShadow(node.attributes.castShadow, material, color)
+  };
 }
 
 function modelMaterialTargetMatches(child: TypeGpuNode, mesh: TypeGpuLoadedModelMesh): boolean {
@@ -496,14 +557,6 @@ function createLiveResourceKeys(): TypeGpuLiveResourceKeys {
     samplers: new Set(),
     pipelines: new Set()
   };
-}
-
-function cleanDrawBatches(drawBatches: TypeGpuDrawBatch[]): TypeGpuDrawBatch[] {
-  return drawBatches.map((batch) => ({
-    ...batch,
-    instancesChanged: false,
-    dirtyRanges: []
-  }));
 }
 
 function interactionTargetFor(item: TypeGpuMeshDrawItem): TypeGpuInteractionTarget[] {
@@ -613,6 +666,8 @@ function mergeModelMaterial(
   const merged = ensureMaterialDescriptor(base);
   const attrs = node.attributes;
 
+  if (override.kind === 'shader') return override;
+
   merged.kind = override.kind;
   if (attrs.color !== undefined) merged.color = override.color;
   if (attrs.roughness !== undefined) merged.roughness = override.roughness;
@@ -670,14 +725,8 @@ function recomputeMaterialKeys(material: TypeGpuMaterialDescriptor): TypeGpuMate
 
   return {
     ...keyed,
-    pipelineKey: [
-      `material:${keyed.kind}`,
-      `blend:${blendMode}`,
-      `depthWrite:${depthWrite}`,
-      `depthTest:${depthTest}`,
-      `cull:${cullMode}`
-    ].join('|'),
-    bindGroupKey: [textureKey, samplerKey].join('|'),
+    pipelineKey: pipelineKeyFor(keyed),
+    bindGroupKey: bindGroupKeyFor(keyed),
     key: materialKeyFor(keyed)
   };
 }

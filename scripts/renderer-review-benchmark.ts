@@ -62,6 +62,24 @@ for (let iteration = 0; iteration < 80; iteration++) {
 }
 fullSamples.sort((a, b) => a - b);
 
+const materialSamples: number[] = [];
+const animatedMaterial = movingMesh.lastChild!;
+let materialScene = scene;
+for (let iteration = 0; iteration < 80; iteration++) {
+  setAttribute(animatedMaterial, 'roughness', iteration / 100);
+  const start = performance.now();
+  materialScene = createSceneState(root, cache, {
+    dirty: Dirty.MaterialUniform,
+    dirtyNodes: new Map([[animatedMaterial, Dirty.MaterialUniform]])
+  });
+  if (iteration >= 20) materialSamples.push(performance.now() - start);
+}
+materialSamples.sort((a, b) => a - b);
+const materialUploadBytes = materialScene.instanceUpdates?.reduce(
+  (sum, batch) => sum + batch.dirtyRanges.reduce((total, range) => total + range.count * 96, 0),
+  0
+);
+
 insert(root, createElement('pointLight'), null);
 const afterInsertion = createSceneState(root, cache);
 const touchedInstances = afterInsertion.drawBatches.reduce(
@@ -93,6 +111,10 @@ console.log(
       transformWork,
       instanceArrayAllocations,
       transformUploadBytes,
+      materialSyncMedianMs: Number(
+        materialSamples[Math.floor(materialSamples.length / 2)].toFixed(3)
+      ),
+      materialUploadBytes,
       geometryReused,
       unchangedInstancesRepackedAfterLightInsertion: touchedInstances,
       instanceUploadBytesAfterLightInsertion:

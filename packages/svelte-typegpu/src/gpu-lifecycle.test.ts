@@ -13,7 +13,7 @@ import { createSceneState, createTypeGpuSceneCache } from './scene-compiler';
 import { createMaterialDescriptor } from './material-descriptors';
 import { createMeshPipeline } from './typegpu-pipeline';
 
-const captured = vi.hoisted(() => ({ bindings: [] as unknown[][] }));
+const captured = vi.hoisted(() => ({ bindings: [] as unknown[][], counts: [] as number[] }));
 
 vi.mock('typegpu', async (importOriginal) => {
   const actual = await importOriginal<typeof import('typegpu')>();
@@ -28,8 +28,8 @@ vi.mock('./typegpu-pipeline', () => {
     return {
       with: (...values: unknown[]) => pipeline([...bindings, ...values]),
       withIndexBuffer: (...values: unknown[]) => pipeline([...bindings, ...values]),
-      draw: () => captured.bindings.push(bindings),
-      drawIndexed: () => captured.bindings.push(bindings)
+      draw: (_vertices: number, count = 1) => { captured.bindings.push(bindings); captured.counts.push(count); },
+      drawIndexed: (_indices: number, count = 1) => { captured.bindings.push(bindings); captured.counts.push(count); }
     };
   }
   return {
@@ -43,9 +43,143 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   captured.bindings.length = 0;
+  captured.counts.length = 0;
 });
 
 describe('GPU resource and frame lifecycle', () => {
+  it('runs one demand clock while tasks request frames, stops when inactive, and cancels on disposal', async () => {
+    const pending = new Map<number, FrameRequestCallback>();
+    let id = 0;
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => { pending.set(++id, callback); return id; }));
+    vi.stubGlobal('cancelAnimationFrame', vi.fn((id: number) => pending.delete(id)));
+    const { renderer } = await setupRenderer('demand');
+    let active = true;
+    const frames: { delta: number; elapsed: number }[] = [];
+    renderer.setFrameHandler!(frame => { frames.push(frame); renderer.invalidate(); return active; });
+    function step(timestamp: number) {
+      const [id, callback] = pending.entries().next().value!;
+      pending.delete(id);
+      callback(timestamp);
+    }
+    expect(pending.size).toBe(1);
+    step(0);
+    expect(pending.size).toBe(1);
+    step(20);
+    step(200);
+    active = false;
+    step(100);
+    expect(pending.size).toBe(0);
+    expect(frames.map(frame => frame.delta)).toEqual([0, 0.02, 0.05, 0]);
+    expect(frames.at(-1)?.elapsed).toBeCloseTo(0.07);
+    renderer.invalidate();
+    expect(pending.size).toBe(1);
+    renderer.dispose();
+    expect(pending.size).toBe(0);
+  });
+
+  it('never schedules RAF in manual mode and stops drawing when a task disposes its root', async () => {
+    const raf = vi.fn();
+    vi.stubGlobal('requestAnimationFrame', raf);
+    const { renderer, submissions } = await setupRenderer();
+    renderer.setFrameHandler!(() => { renderer.dispose(); return true; });
+    renderer.renderFrame(10);
+    expect(raf).not.toHaveBeenCalled();
+    expect(submissions).toHaveLength(0);
+  });
+  it('retains instance capacity on shrink and append, draws only active slots, and frees removed batches', async () => {
+    const { renderer, root, buffers } = await setupRenderer();
+    const tree = createElement('scene');
+    const meshes = Array.from({ length: 5 }, (_, i) => {
+      const mesh = createElement('mesh');
+      setAttribute(mesh, 'position', [i, 0, 0]);
+      insert(mesh, createElement('boxGeometry'), null);
+      return mesh;
+    });
+    const cache = createTypeGpuSceneCache();
+    meshes.slice(0, 3).forEach(mesh => insert(tree, mesh, null));
+    renderer.setScene(createSceneState(tree, cache));
+    const buffer = buffers.find(buffer => buffer.label.endsWith('instances'))!;
+    root.createBuffer.mockClear();
+    buffer.write.mockClear();
+    insert(tree, meshes[3], null);
+    renderer.setScene(createSceneState(tree, cache));
+    expect(root.createBuffer).not.toHaveBeenCalled();
+    expect(buffer.write).toHaveBeenCalledOnce();
+    expect(buffer.write.mock.calls[0][1]).toEqual({ startOffset: 3 * 96, endOffset: 4 * 96 });
+    buffer.write.mockClear();
+    remove(meshes[3]);
+    remove(meshes[2]);
+    renderer.setScene(createSceneState(tree, cache));
+    renderer.renderFrame(10);
+    expect(buffer.write).not.toHaveBeenCalled();
+    expect(captured.counts.at(-1)).toBe(2);
+    insert(tree, meshes[1], meshes[0]);
+    renderer.setScene(createSceneState(tree, cache));
+    expect(Array.from(buffer.data.filter((_, index) => index % 24 === 0).slice(0, 2))).toEqual([1, 0]);
+    meshes.slice(2).forEach(mesh => insert(tree, mesh, null));
+    renderer.setScene(createSceneState(tree, cache));
+    expect(root.createBuffer).toHaveBeenCalledOnce();
+    expect(buffer.destroy).toHaveBeenCalledOnce();
+    const grown = buffers.at(-1)!;
+    meshes.forEach(remove);
+    renderer.setScene(createSceneState(tree, cache));
+    expect(grown.destroy).toHaveBeenCalledOnce();
+    renderer.dispose();
+  });
+  it('updates independent shader uniforms in place, including equal initial values and vertex alpha', async () => {
+    const { renderer, buffers, root, submissions } = await setupRenderer();
+    const tree = createElement('scene');
+    const fragment = tgpu.fragmentFn({ in: {
+      color: d.vec4f, normal: d.vec3f, material: d.vec4f, world_position: d.vec3f,
+      uv: d.vec2f, vertex_color: d.vec4f, material_extra: d.vec4f
+    }, out: d.vec4f })(() => d.vec4f(1));
+    const materials = [0, 1].map(() => {
+      const mesh = createElement('mesh');
+      const geometry = createElement('bufferGeometry');
+      setAttribute(geometry, 'vertices', new Float32Array(Array.from({ length: 3 }, () =>
+        [0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0.5]).flat()));
+      setAttribute(geometry, 'bounds', { min: [-1, -1, -1], max: [1, 1, 1] });
+      const material = createElement('shaderMaterial');
+      setAttribute(material, 'fragment', fragment);
+      setAttribute(material, 'uniforms', { value0: [1, 0, 0, 1] });
+      insert(mesh, geometry, null);
+      insert(mesh, material, null);
+      insert(tree, mesh, null);
+      return material;
+    });
+    const cache = createTypeGpuSceneCache();
+    const first = createSceneState(tree, cache);
+    expect(first.drawBatches).toHaveLength(2);
+    expect(first.drawBatches.every(batch => batch.material.kind === 'shader' && batch.material.fragment === fragment)).toBe(true);
+    renderer.setScene(first);
+    const uniformBuffers = buffers.filter(buffer => buffer.label.startsWith('TypeGPU material uniforms'));
+    expect(uniformBuffers).toHaveLength(2);
+    root.createBuffer.mockClear();
+    root.createBindGroup.mockClear();
+    vi.mocked(createMeshPipeline).mockClear();
+    uniformBuffers.forEach(buffer => buffer.write.mockClear());
+    setAttribute(materials[0], 'uniforms', { value0: [0, 1, 0, 1] });
+    const next = createSceneState(tree, cache, {
+      dirty: Dirty.MaterialUniform, dirtyNodes: new Map([[materials[0], Dirty.MaterialUniform]])
+    });
+    expect(next.drawBatchesChanged).toBe(false);
+    expect(next.instanceUpdates).toEqual([]);
+    renderer.setScene(next);
+    renderer.renderFrame(10);
+    expect(submissions.at(-1)?.map(data => Array.from(data.slice(0, 4))).sort()).toEqual(
+      [[0, 1, 0, 1], [1, 0, 0, 1]].sort());
+    expect(uniformBuffers.reduce((count, buffer) => count + buffer.write.mock.calls.length, 0)).toBe(1);
+    expect(root.createBuffer).not.toHaveBeenCalled();
+    expect(root.createBindGroup).not.toHaveBeenCalled();
+    expect(createMeshPipeline).not.toHaveBeenCalled();
+    const cameraOnly = createSceneState(tree, cache, { dirty: Dirty.Camera });
+    renderer.setScene(cameraOnly);
+    renderer.renderFrame(20);
+    expect(submissions.at(-1)?.map(data => Array.from(data.slice(0, 4))).sort()).toEqual(
+      [[0, 1, 0, 1], [1, 0, 0, 1]].sort());
+    renderer.dispose();
+    expect(uniformBuffers.every(buffer => buffer.destroy.mock.calls.length === 1)).toBe(true);
+  });
   it('uploads only changed instance bytes without resource lookups, allocation, or queue sorting', async () => {
     const { renderer, buffers, root } = await setupRenderer();
     const tree = createElement('scene');
@@ -210,14 +344,14 @@ describe('GPU resource and frame lifecycle', () => {
   });
 });
 
-async function setupRenderer() {
+async function setupRenderer(frameloop: 'manual' | 'demand' | 'always' = 'manual') {
   const fake = fakeRoot();
   vi.mocked(tgpu.init).mockResolvedValue(fake.root as never);
   vi.stubGlobal('navigator', { gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
   vi.stubGlobal('window', { devicePixelRatio: 1 });
   const renderer = await createTypeGpuRenderer({
     canvas: { clientWidth: 100, clientHeight: 100, width: 100, height: 100 } as HTMLCanvasElement,
-    frameloop: 'manual'
+    frameloop
   });
   return { ...fake, renderer };
 }
@@ -239,7 +373,14 @@ function fakeBuffer() {
       data: ArrayBuffer,
       options?: { startOffset: number; endOffset: number }
     ) {
-      if (options) this.data.set(new Float32Array(data), options.startOffset / 4);
+      if (options) {
+        if (this.data.byteLength < options.endOffset) {
+          const expanded = new Float32Array(options.endOffset / 4);
+          expanded.set(this.data);
+          this.data = expanded;
+        }
+        this.data.set(new Float32Array(data), options.startOffset / 4);
+      }
       else this.data = new Float32Array(data.slice(0));
     }),
     destroy: vi.fn()
