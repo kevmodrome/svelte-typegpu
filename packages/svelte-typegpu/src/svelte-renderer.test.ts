@@ -66,6 +66,43 @@ function loadedModel(key: string): TypeGpuLoadedModel {
 }
 
 describe('TypeGPU Svelte renderer runtime', () => {
+  it('coalesces changed nodes into one targeted upload and discards pending motion on dispose', async () => {
+    const root = createElement('scene');
+    const group = createElement('group');
+    const mesh = createElement('mesh');
+    insert(mesh, createElement('boxGeometry'), null);
+    insert(group, mesh, null);
+    insert(root, group, null);
+    const gpu = fakeRenderer();
+    const runtime = createTypeGpuRuntimeForTest(root, new FakeCanvas() as unknown as HTMLCanvasElement, gpu);
+    root.runtime = runtime;
+    runtime.scheduleSync(root);
+    await Promise.resolve();
+    vi.mocked(gpu.setScene).mockClear();
+    setAttribute(mesh, 'position', [1, 0, 0]);
+    setAttribute(group, 'position', [2, 0, 0]);
+    setAttribute(mesh, 'position', [3, 0, 0]);
+    await Promise.resolve();
+    expect(gpu.setScene).toHaveBeenCalledOnce();
+    const state = vi.mocked(gpu.setScene).mock.lastCall![0];
+    expect(state.drawBatchesChanged).toBe(false);
+    expect(state.instanceUpdates![0].dirtyRanges).toEqual([{ start: 0, count: 1 }]);
+    expect(state.drawBatches[0].instances[0]).toBe(5);
+    setAttribute(mesh, 'position', [8, 0, 0]);
+    runtime.dispose();
+    await Promise.resolve();
+    expect(gpu.setScene).toHaveBeenCalledOnce();
+  });
+  it('preserves root render defaults across scheduled synchronization', async () => {
+    const root = createElement('scene');
+    const gpu = fakeRenderer();
+    const defaults = { depth: false, alphaMode: 'opaque' as const, clearColor: [1, 0, 0, 1] as [number, number, number, number] };
+    const runtime = createTypeGpuRuntimeForTest(root, new FakeCanvas() as unknown as HTMLCanvasElement, gpu, { renderDefaults: defaults });
+    runtime.scheduleSync(root);
+    await Promise.resolve();
+    expect(vi.mocked(gpu.setScene).mock.lastCall?.[0].renderSettings).toEqual(defaults);
+    runtime.dispose();
+  });
   it('discards queued syncs and ignores new work after idempotent disposal', async () => {
     const root = createFragment();
     const renderer = fakeRenderer();

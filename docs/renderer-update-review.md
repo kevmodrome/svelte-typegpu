@@ -15,7 +15,9 @@ the official preview bot comment on September 4, 2026.
 Changes are on `codex/renderer-update-review`, based on current `origin/main`.
 This is a dependency/API migration, not a Git rebase onto Svelte's unrelated
 repository history. The saved local work was restored with `git stash apply`;
-the original stash remains intact. Changes have not been committed or pushed.
+the original stash remains intact. The review was subsequently checkpointed in
+commit `5ba1bca`; nothing has been pushed. The visibility, root-default, and
+transform-update follow-up is documented in [Incremental Svelte motion](./incremental-motion-design.md).
 
 ### Fixed findings
 

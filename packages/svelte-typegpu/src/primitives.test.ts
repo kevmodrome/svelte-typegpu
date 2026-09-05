@@ -41,18 +41,17 @@ describe('TypeGPU primitive descriptors', () => {
     expect(hasDirty(dirty, Dirty.DrawBatches)).toBe(false);
   });
 
-  it('marks transform attributes as transform, instance, and interaction dirty', () => {
+  it('distinguishes transform changes from independent instance and interaction edits', () => {
     const dirty = dirtyForAttribute('mesh', 'position', [0, 0, 0], [1, 2, 3]);
 
-    expectExactDirty(dirty, Dirty.Transform, Dirty.InstanceData, Dirty.Interaction);
+    expectExactDirty(dirty, Dirty.Transform, Dirty.Lights);
     expect(hasDirty(dirty, Dirty.Transform)).toBe(true);
-    expect(hasDirty(dirty, Dirty.InstanceData)).toBe(true);
-    expect(hasDirty(dirty, Dirty.Interaction)).toBe(true);
+    expect(hasDirty(dirty, Dirty.InstanceData)).toBe(false);
+    expect(hasDirty(dirty, Dirty.Interaction)).toBe(false);
     expectExactDirty(
       dirtyForAttribute('mesh', 'quaternion', [0, 0, 0, 1], [0, 0.707, 0, 0.707]),
       Dirty.Transform,
-      Dirty.InstanceData,
-      Dirty.Interaction
+      Dirty.Lights
     );
   });
 
@@ -60,15 +59,14 @@ describe('TypeGPU primitive descriptors', () => {
     expectExactDirty(
       dirtyForAttribute('group', 'position', [0, 0, 0], [1, 2, 3]),
       Dirty.Transform,
-      Dirty.InstanceData,
-      Dirty.Interaction,
       Dirty.Lights
     );
     expectExactDirty(
       dirtyForAttribute('group', 'visible', true, false),
       Dirty.DrawBatches,
       Dirty.Interaction,
-      Dirty.Lights
+      Dirty.Lights,
+      Dirty.ShaderPass
     );
     expectExactDirty(
       dirtyForAttribute('group', 'renderOrder', 0, 1),

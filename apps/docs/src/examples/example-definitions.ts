@@ -21,6 +21,22 @@ export const exampleDefinitions = [
     typeGpuSourceFiles: [{ path: 'index.ts', loc: 417 }]
   },
   {
+    slug: 'svelte-motion',
+    title: 'Svelte Motion',
+    category: 'animation',
+    tags: ['3d', 'motion', 'instancing', 'interaction'],
+    description: 'A moving three-part marker above a field of 2,000 stationary cubes.',
+    notes: 'An original example using Svelte Tween and Spring values on ordinary mesh and group transforms.',
+    exportName: 'SvelteMotion',
+    sourceUrl: new URL('./svelte-motion/SvelteMotion.typegpu.svelte', import.meta.url),
+    sourceFiles: [
+      new URL('./svelte-motion/SvelteMotion.typegpu.svelte', import.meta.url),
+      new URL('./svelte-motion/MotionMarker.typegpu.svelte', import.meta.url),
+      new URL('./svelte-motion/motion-field.ts', import.meta.url)
+    ],
+    typeGpuSourceFiles: []
+  },
+  {
     slug: 'phong-reflection',
     title: 'Phong Reflection Model',
     category: 'rendering',

@@ -28,14 +28,39 @@ const cache = createTypeGpuSceneCache();
 const initial = createSceneState(root, cache);
 const samples: number[] = [];
 let scene = initial;
+let instanceArrayAllocations = 0;
+let previousInstances = scene.drawBatches[0].instances;
 for (let iteration = 0; iteration < 80; iteration++) {
   setAttribute(movingMesh, 'position', [iteration + 1, 0, 0]);
   const start = performance.now();
-  scene = createSceneState(root, cache, { dirty: Dirty.Transform });
+  scene = createSceneState(root, cache, {
+    dirty: Dirty.Transform,
+    dirtyNodes: new Map([[movingMesh, Dirty.Transform]])
+  });
   if (iteration >= 20) samples.push(performance.now() - start);
+  if (scene.drawBatches[0].instances !== previousInstances) instanceArrayAllocations++;
+  previousInstances = scene.drawBatches[0].instances;
 }
 samples.sort((a, b) => a - b);
 const geometryReused = initial.drawBatches[0].geometry === scene.drawBatches[0].geometry;
+const transformWork = cache.transforms?.stats;
+const transformUploadBytes = scene.drawBatches.reduce(
+  (sum, batch) =>
+    sum +
+    batch.dirtyRanges.reduce(
+      (total, range) => total + range.count * batch.floatsPerInstance * 4,
+      0
+    ),
+  0
+);
+const fullSamples: number[] = [];
+for (let iteration = 0; iteration < 80; iteration++) {
+  setAttribute(movingMesh, 'position', [iteration + 100, 0, 0]);
+  const start = performance.now();
+  createSceneState(root, cache, { dirty: Dirty.Transform });
+  if (iteration >= 20) fullSamples.push(performance.now() - start);
+}
+fullSamples.sort((a, b) => a - b);
 
 insert(root, createElement('pointLight'), null);
 const afterInsertion = createSceneState(root, cache);
@@ -64,6 +89,10 @@ console.log(
     {
       meshCount,
       transformSyncMedianMs: Number(samples[Math.floor(samples.length / 2)].toFixed(3)),
+      fullTransformSyncMedianMs: Number(fullSamples[Math.floor(fullSamples.length / 2)].toFixed(3)),
+      transformWork,
+      instanceArrayAllocations,
+      transformUploadBytes,
       geometryReused,
       unchangedInstancesRepackedAfterLightInsertion: touchedInstances,
       instanceUploadBytesAfterLightInsertion:

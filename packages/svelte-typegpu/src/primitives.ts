@@ -156,6 +156,10 @@ export function dirtyForAttribute(
     ?.dirtyForAttribute?.(attribute, previous, next);
   if (customDirty !== undefined) return customDirty;
 
+  if (attribute === 'visible') {
+    return mergeDirty(Dirty.DrawBatches, Dirty.Interaction, Dirty.Lights, Dirty.ShaderPass);
+  }
+
   if (name === 'scene') {
     if (attribute === 'activeCamera') return Dirty.Camera;
     if (sceneAttributes.has(attribute)) return Dirty.RenderSettings;
@@ -181,7 +185,7 @@ export function dirtyForAttribute(
 
   if (name === 'group') {
     if (transformAttributes.has(attribute)) {
-      return mergeDirty(Dirty.Transform, Dirty.InstanceData, Dirty.Interaction, Dirty.Lights);
+      return mergeDirty(Dirty.Transform, Dirty.Lights);
     }
     if (attribute === 'visible' || attribute === 'renderOrder') {
       return mergeDirty(Dirty.DrawBatches, Dirty.Interaction, Dirty.Lights);
@@ -195,7 +199,8 @@ export function dirtyForAttribute(
   }
 
   if (transformAttributes.has(attribute)) {
-    return mergeDirty(Dirty.Transform, Dirty.InstanceData, Dirty.Interaction);
+    // Transform already implies instance/bounds work. Keep other property changes distinct.
+    return mergeDirty(Dirty.Transform, Dirty.Lights);
   }
 
   if (attribute === 'visible' || attribute === 'renderOrder') {

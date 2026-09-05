@@ -9,6 +9,12 @@ import { createInteractionIndex } from './interaction-index';
 import { collectLights } from './lights';
 import { createModelCache, type TypeGpuModelCache } from './model-cache';
 import { SceneRevisionCache } from './scene-revisions';
+import {
+  SceneTransformCache,
+  type DrawItemWalkContext,
+  type SceneTransformRecord
+} from './scene-transform-cache';
+import { drawBatchKeysForItem } from './render-plan';
 import { readInlineGeometry, readInlineMaterial } from './resources';
 import {
   DEFAULT_SAMPLER,
@@ -39,27 +45,29 @@ export interface TypeGpuSceneCache {
   drawBatchCache: TypeGpuDrawBatchCache;
   modelCache: TypeGpuModelCache;
   revisions: SceneRevisionCache;
+  transforms: SceneTransformCache;
+  lastState?: TypeGpuSceneState;
   cleanDrawBatches: TypeGpuDrawBatch[];
   cleanLights: TypeGpuLight[];
   cleanShaderPasses: TypeGpuShaderPass[];
   cleanInteraction: TypeGpuInteractionIndex;
   cleanResourceKeys: TypeGpuLiveResourceKeys;
+  resourceItems: TypeGpuMeshDrawItem[];
+  shaderPassNodes: Set<TypeGpuNode>;
+  renderDefaults: Partial<TypeGpuRenderSettings>;
 }
 
 export interface CreateTypeGpuSceneCacheOptions {
   modelCache?: TypeGpuModelCache;
   onModelSettled?: () => void;
+  renderDefaults?: Partial<TypeGpuRenderSettings>;
 }
 
 export interface TypeGpuSceneStateOptions {
   dirty?: Dirty;
+  dirtyNodes?: ReadonlyMap<TypeGpuNode, Dirty>;
   reuseDrawBatches?: boolean;
   reuseLights?: boolean;
-}
-
-interface DrawItemWalkContext {
-  transform: TypeGpuTransform;
-  revision: number;
 }
 
 interface MeshResourceResult<T> {
@@ -85,6 +93,7 @@ export function createTypeGpuSceneCache(
   return {
     drawBatchCache: createDrawBatchCache(),
     revisions: new SceneRevisionCache(),
+    transforms: new SceneTransformCache(),
     modelCache:
       options.modelCache ??
       createModelCache({
@@ -94,7 +103,10 @@ export function createTypeGpuSceneCache(
     cleanLights: [],
     cleanShaderPasses: [],
     cleanInteraction: createInteractionIndex([]),
-    cleanResourceKeys: createLiveResourceKeys()
+    cleanResourceKeys: createLiveResourceKeys(),
+    resourceItems: [],
+    shaderPassNodes: new Set(),
+    renderDefaults: options.renderDefaults ?? {}
   };
 }
 
@@ -104,7 +116,26 @@ export function createSceneState(
   options: TypeGpuSceneStateOptions = {}
 ): TypeGpuSceneState {
   const dirty = options.dirty ?? Dirty.All;
-  const sceneSettings = readRenderSettings(root);
+  if (
+    cache.lastState &&
+    !options.reuseDrawBatches &&
+    !options.reuseLights &&
+    cache.transforms.canUpdate(root, dirty, options.dirtyNodes)
+  ) {
+    const changed = cache.transforms.update(options.dirtyNodes!, cache.revisions);
+    const { batches, updates } = cache.drawBatchCache.updateInstances(changed.items);
+    return (cache.lastState = {
+      ...cache.lastState,
+      dirty,
+      drawBatches: batches,
+      drawBatchesChanged: false,
+      instanceUpdates: updates,
+      lightsChanged: false,
+      shaderPassesChanged: false,
+      interactionChanged: changed.interactionChanged
+    });
+  }
+  const sceneSettings = readRenderSettings(root, cache.renderDefaults);
   const camera = readCameraState(root, sceneSettings.activeCamera);
   const recomputeLights = options.reuseLights === true ? false : hasDirty(dirty, Dirty.Lights);
   const recomputeShaderPasses = shouldRecomputeShaderPasses(dirty);
@@ -119,19 +150,25 @@ export function createSceneState(
     cache.cleanLights = lights;
   }
 
-  const shaderPasses = recomputeShaderPasses ? collectShaderPasses(root) : cache.cleanShaderPasses;
+  if (recomputeShaderPasses) cache.shaderPassNodes = new Set();
+  const shaderPasses = recomputeShaderPasses
+    ? collectShaderPasses(root, cache.shaderPassNodes)
+    : cache.cleanShaderPasses;
 
   if (recomputeShaderPasses) {
     cache.cleanShaderPasses = shaderPasses;
   }
 
   const drawBatches = recomputeDrawBatches
-    ? cache.drawBatchCache.read((drawItems = collectMeshDrawItems(root, cache)))
+    ? cache.drawBatchCache.read(
+        (drawItems = collectMeshDrawItems(root, cache)).filter((item) => item.visible !== false)
+      )
     : cache.cleanDrawBatches;
 
   if (recomputeDrawBatches) {
     cache.cleanDrawBatches = cleanDrawBatches(drawBatches);
-    cache.cleanResourceKeys = liveResourceKeysFor(drawBatches);
+    cache.resourceItems = drawItems!;
+    cache.cleanResourceKeys = liveResourceKeysFor(drawItems!);
   }
 
   const interaction = recomputeInteraction
@@ -143,8 +180,10 @@ export function createSceneState(
   if (recomputeInteraction) {
     cache.cleanInteraction = interaction;
   }
+  if (drawItems) cache.transforms.attachInteraction(interaction.targets);
+  if (recomputeDrawBatches) cache.transforms.commit();
 
-  return {
+  return (cache.lastState = {
     dirty,
     camera: camera.settings,
     cameraNode: camera.node,
@@ -155,33 +194,33 @@ export function createSceneState(
     lightsChanged: recomputeLights,
     drawBatches,
     drawBatchesChanged: recomputeDrawBatches,
+    resourceItems: cache.resourceItems,
     shaderPasses,
     shaderPassesChanged: recomputeShaderPasses,
+    shaderPassNodes: cache.shaderPassNodes,
     interaction,
     interactionChanged: recomputeInteraction,
     liveResourceKeys: cache.cleanResourceKeys
-  };
+  });
 }
 
-function collectMeshDrawItems(
-  root: TypeGpuNode,
-  cache: TypeGpuSceneCache
-): TypeGpuMeshDrawItem[] {
+function collectMeshDrawItems(root: TypeGpuNode, cache: TypeGpuSceneCache): TypeGpuMeshDrawItem[] {
+  cache.transforms.reset(root);
   const items: TypeGpuMeshDrawItem[] = [];
   collectDrawItemsFromNode(
     root,
-    { transform: IDENTITY_TRANSFORM, revision: 0 },
+    { transform: IDENTITY_TRANSFORM, revision: 0, visible: true },
     items,
     cache
   );
   return items;
 }
 
-function collectShaderPasses(root: TypeGpuNode): TypeGpuShaderPass[] {
+function collectShaderPasses(root: TypeGpuNode, nodes: Set<TypeGpuNode>): TypeGpuShaderPass[] {
   const passes: TypeGpuShaderPass[] = [];
   let sortKey = 0;
 
-  collectShaderPassesFromNode(root, passes, () => sortKey++);
+  collectShaderPassesFromNode(root, passes, () => sortKey++, nodes, true);
 
   return passes.sort(
     (left, right) =>
@@ -194,15 +233,19 @@ function collectShaderPasses(root: TypeGpuNode): TypeGpuShaderPass[] {
 function collectShaderPassesFromNode(
   node: TypeGpuNode,
   passes: TypeGpuShaderPass[],
-  nextSortKey: () => number
+  nextSortKey: () => number,
+  nodes: Set<TypeGpuNode>,
+  parentVisible: boolean
 ): void {
+  const visible = parentVisible && node.attributes.visible !== false;
   if (node.name === 'shaderPass') {
+    nodes.add(node);
     const pass = readShaderPass(node, nextSortKey());
-    if (pass) passes.push(pass);
+    if (pass && visible) passes.push(pass);
   }
 
   for (let child = node.firstChild; child; child = child.nextSibling) {
-    collectShaderPassesFromNode(child, passes, nextSortKey);
+    collectShaderPassesFromNode(child, passes, nextSortKey, nodes, visible);
   }
 }
 
@@ -228,23 +271,28 @@ function collectDrawItemsFromNode(
   node: TypeGpuNode,
   context: DrawItemWalkContext,
   items: TypeGpuMeshDrawItem[],
-  cache: TypeGpuSceneCache
+  cache: TypeGpuSceneCache,
+  parentRecord: SceneTransformRecord | null = null
 ): void {
+  const itemStart = items.length;
+  context = { ...context, visible: context.visible && node.attributes.visible !== false };
   let childContext = context;
 
   if (node.name === 'group') {
     childContext = {
       transform: composeTransforms(context.transform, readLocalTransform(node)),
-      revision: cache.revisions.read(node, 'transform', [context.revision, node.revision])
+      revision: cache.revisions.read(node, 'transform', [context.revision, node.revision]),
+      visible: context.visible
     };
   } else if (node.name === 'mesh') {
     childContext = readMeshDrawItem(node, context, items, cache.revisions);
   } else if (node.name === 'model') {
     childContext = readModelDrawItems(node, context, items, cache);
   }
+  const record = cache.transforms.add(node, parentRecord, childContext, items.slice(itemStart));
 
   for (let child = node.firstChild; child; child = child.nextSibling) {
-    collectDrawItemsFromNode(child, childContext, items, cache);
+    collectDrawItemsFromNode(child, childContext, items, cache, record);
   }
 }
 
@@ -257,19 +305,19 @@ function readMeshDrawItem(
   const transform = composeTransforms(context.transform, readLocalTransform(mesh));
   const meshRevision = revisions.read(mesh, 'transform', [context.revision, mesh.revision]);
 
-  if (mesh.attributes.visible === false) {
-    return { transform, revision: meshRevision };
-  }
-
   const geometry = readMeshGeometry(mesh);
   if (!geometry) {
-    return { transform, revision: meshRevision };
+    return { transform, revision: meshRevision, visible: context.visible };
   }
 
   const material = readMeshMaterial(mesh);
   const effectiveMaterial = materialForGeometry(material.value, geometry.value);
   const itemRevision = revisions.read(mesh, 'instance', [
-    meshRevision, geometry.node, geometry.node?.revision, material.node, material.node?.revision
+    meshRevision,
+    geometry.node,
+    geometry.node?.revision,
+    material.node,
+    material.node?.revision
   ]);
   const localBounds = geometry.value.bounds ?? defaultBounds();
   const color = rgbaArg(mesh.attributes.color, effectiveMaterial.color);
@@ -289,10 +337,11 @@ function readMeshDrawItem(
     drag: stringAttribute(mesh.attributes.drag),
     dragButton: dragButtonAttribute(mesh.attributes.dragButton),
     castShadow: castsDeclarativeShadow(mesh.attributes.castShadow, effectiveMaterial, color),
-    receiveShadow: mesh.attributes.receiveShadow === true
+    receiveShadow: mesh.attributes.receiveShadow === true,
+    visible: context.visible
   });
 
-  return { transform, revision: meshRevision };
+  return { transform, revision: meshRevision, visible: context.visible };
 }
 
 function readMeshGeometry(mesh: TypeGpuNode): MeshResourceResult<TypeGpuGeometryData> | null {
@@ -320,14 +369,17 @@ function readModelDrawItems(
   cache: TypeGpuSceneCache
 ): DrawItemWalkContext {
   const modelTransform = composeTransforms(context.transform, readLocalTransform(modelNode));
-  const modelRevision = cache.revisions.read(modelNode, 'transform', [context.revision, modelNode.revision]);
+  const modelRevision = cache.revisions.read(modelNode, 'transform', [
+    context.revision,
+    modelNode.revision
+  ]);
   const entry = cache.modelCache.read({
     src: modelNode.attributes.src,
     data: modelNode.attributes.data
   });
 
   if (entry.status !== 'ready') {
-    return { transform: modelTransform, revision: modelRevision };
+    return { transform: modelTransform, revision: modelRevision, visible: context.visible };
   }
 
   entry.model.meshes.forEach((mesh, index) => {
@@ -342,7 +394,10 @@ function readModelDrawItems(
       id: `model:${modelNode.uid}:primitive:${index}`,
       node: modelNode,
       revision: cache.revisions.read(modelNode, index, [
-        modelRevision, entry, material.node, material.node?.revision
+        modelRevision,
+        entry,
+        material.node,
+        material.node?.revision
       ]),
       geometry,
       material: effectiveMaterial,
@@ -355,11 +410,13 @@ function readModelDrawItems(
       drag: stringAttribute(modelNode.attributes.drag),
       dragButton: dragButtonAttribute(modelNode.attributes.dragButton),
       castShadow: castsDeclarativeShadow(modelNode.attributes.castShadow, effectiveMaterial, color),
-      receiveShadow: modelNode.attributes.receiveShadow === true
+      receiveShadow: modelNode.attributes.receiveShadow === true,
+      visible: context.visible
     });
+    cache.transforms.setPrimitiveTransform(items[items.length - 1], mesh.transform);
   });
 
-  return { transform: modelTransform, revision: modelRevision };
+  return { transform: modelTransform, revision: modelRevision, visible: context.visible };
 }
 
 function readModelMaterial(
@@ -388,7 +445,10 @@ function modelMaterialTargetMatches(child: TypeGpuNode, mesh: TypeGpuLoadedModel
   return target === mesh.name || target === mesh.geometry.key;
 }
 
-function readRenderSettings(root: TypeGpuNode): {
+function readRenderSettings(
+  root: TypeGpuNode,
+  defaults: Partial<TypeGpuRenderSettings>
+): {
   renderSettings: TypeGpuRenderSettings;
   activeCamera: string | null;
 } {
@@ -396,23 +456,33 @@ function readRenderSettings(root: TypeGpuNode): {
 
   return {
     renderSettings: {
-      clearColor: rgbaArg(scene?.attributes.clearColor ?? scene?.attributes.background, [0, 0, 0, 1]),
-      depth: scene?.attributes.depth === false ? false : true,
-      alphaMode: scene?.attributes.alphaMode === 'opaque' ? 'opaque' : 'premultiplied'
+      clearColor: rgbaArg(
+        scene?.attributes.clearColor ?? scene?.attributes.background,
+        defaults.clearColor ?? [0, 0, 0, 1]
+      ),
+      depth:
+        typeof scene?.attributes.depth === 'boolean'
+          ? scene.attributes.depth
+          : (defaults.depth ?? true),
+      alphaMode:
+        scene?.attributes.alphaMode === 'opaque' || scene?.attributes.alphaMode === 'premultiplied'
+          ? scene.attributes.alphaMode
+          : (defaults.alphaMode ?? 'premultiplied')
     },
     activeCamera: stringArg(scene?.attributes.activeCamera)
   };
 }
 
-function liveResourceKeysFor(drawBatches: TypeGpuDrawBatch[]): TypeGpuLiveResourceKeys {
+function liveResourceKeysFor(items: TypeGpuMeshDrawItem[]): TypeGpuLiveResourceKeys {
   const live = createLiveResourceKeys();
 
-  for (const batch of drawBatches) {
+  for (const item of items) {
+    const batch = drawBatchKeysForItem(item);
     live.geometries.add(batch.geometryKey);
     live.materials.add(batch.materialKey);
     live.pipelines.add(batch.pipelineKey);
-    live.textures.add(batch.material.textureKey ?? 'solid:white');
-    live.samplers.add(batch.material.samplerKey ?? 'sampler:default');
+    live.textures.add(item.material.textureKey ?? 'solid:white');
+    live.samplers.add(item.material.samplerKey ?? 'sampler:default');
   }
 
   return live;
@@ -437,6 +507,7 @@ function cleanDrawBatches(drawBatches: TypeGpuDrawBatch[]): TypeGpuDrawBatch[] {
 }
 
 function interactionTargetFor(item: TypeGpuMeshDrawItem): TypeGpuInteractionTarget[] {
+  if (item.visible === false) return [];
   const handlers = pointerHandlersFor(item.node);
 
   if (item.pointerEvents === 'none' || item.hitTest === 'none' || handlers.size === 0) {
@@ -641,7 +712,8 @@ function ensureMaterialDescriptor(material: TypeGpuMaterialDescriptor): TypeGpuM
     depthWrite: material.depthWrite ?? !(material.opacity < 1 || material.color[3] < 1),
     depthTest: material.depthTest ?? true,
     cullMode: material.cullMode ?? 'back',
-    blendMode: material.blendMode ?? (material.opacity < 1 || material.color[3] < 1 ? 'alpha' : 'opaque'),
+    blendMode:
+      material.blendMode ?? (material.opacity < 1 || material.color[3] < 1 ? 'alpha' : 'opaque'),
     explicitBlendMode: material.explicitBlendMode ?? false,
     explicitDepthWrite: material.explicitDepthWrite ?? false,
     explicitDepthTest: material.explicitDepthTest ?? false,
@@ -654,7 +726,8 @@ function ensureMaterialDescriptor(material: TypeGpuMaterialDescriptor): TypeGpuM
         `depthTest:${material.depthTest ?? true}`,
         `cull:${material.cullMode ?? 'back'}`
       ].join('|'),
-    bindGroupKey: material.bindGroupKey ?? [textureKey, samplerKeyFor(material.samplerKey)].join('|')
+    bindGroupKey:
+      material.bindGroupKey ?? [textureKey, samplerKeyFor(material.samplerKey)].join('|')
   };
 
   return {

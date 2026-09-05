@@ -20,8 +20,12 @@ import gravity from '../src/examples/gravity/Gravity.typegpu.svelte' with { type
 import gravityBody from '../src/examples/gravity/GravityBody.typegpu.svelte' with { type: 'text' };
 import gravitySimulation from '../src/examples/gravity/gravity-simulation.ts' with { type: 'text' };
 import type { ExampleSlug } from '../src/examples/example-definitions';
+import svelteMotion from '../src/examples/svelte-motion/SvelteMotion.typegpu.svelte' with { type: 'text' };
+import motionMarker from '../src/examples/svelte-motion/MotionMarker.typegpu.svelte' with { type: 'text' };
+import motionField from '../src/examples/svelte-motion/motion-field.ts' with { type: 'text' };
 
 export const exampleSourceTexts = {
+  'svelte-motion': [svelteMotion, motionMarker, motionField],
   'two-boxes': [twoBoxes, floor, sceneBox, boxGeometry, boxInteraction],
   'phong-reflection': [phongReflection, phongLights],
   'simple-shadow': [simpleShadow, shadowLights, shadowSubject],

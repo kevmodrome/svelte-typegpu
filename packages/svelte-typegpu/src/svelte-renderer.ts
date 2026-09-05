@@ -36,6 +36,7 @@ import type {
   TypeGpuInteractionTarget,
   TypeGpuPointerDragButton,
   TypeGpuSceneState,
+  TypeGpuRenderSettings,
   Vector3Tuple
 } from './types';
 
@@ -63,6 +64,7 @@ type ListenerTarget = Pick<Window, 'addEventListener' | 'removeEventListener'>;
 type ListenerRegistration = [string, EventListener];
 
 interface RuntimeOptions {
+  renderDefaults?: Partial<TypeGpuRenderSettings>;
   windowTarget?: ListenerTarget;
   loadUrl?: TypeGpuModelCacheOptions['loadUrl'];
   loadData?: TypeGpuModelCacheOptions['loadData'];
@@ -136,7 +138,9 @@ export async function createTypeGpuRoot({
     alphaMode
   });
   const root = createFragment() as TypeGpuRoot;
-  const runtime = createRuntime(root, canvas, gpu);
+  const runtime = createRuntime(root, canvas, gpu, {
+    renderDefaults: { clearColor, depth, alphaMode }
+  });
 
   root.runtime = runtime;
   root.canvas = canvas;
@@ -156,9 +160,12 @@ function createRuntime(
   let disposed = false;
   let queued = false;
   let dirty = Dirty.All;
+  let dirtyNodes = new Map<TypeGpuNode, Dirty>();
+  let fullSync = false;
   const onModelSettled = () => scheduleSync(root);
   const hasInjectedModelLoader = Boolean(options.loadUrl || options.loadData);
   const sceneCache = createTypeGpuSceneCache({
+    renderDefaults: options.renderDefaults,
     onModelSettled,
     modelCache: hasInjectedModelLoader
       ? createModelCache({
@@ -183,12 +190,17 @@ function createRuntime(
 
   function scheduleSync(
     nextRoot: TypeGpuNode,
-    _dirtyNode?: TypeGpuNode,
+    dirtyNode?: TypeGpuNode,
     dirtyMask: Dirty = Dirty.All
   ) {
     if (disposed) return;
     root = nextRoot;
     dirty = (dirty | dirtyMask) as Dirty;
+    if (dirtyNode) {
+      dirtyNodes.set(dirtyNode, (dirtyNodes.get(dirtyNode) ?? Dirty.None) | dirtyMask);
+    } else {
+      fullSync = true;
+    }
 
     if (queued) return;
 
@@ -197,9 +209,13 @@ function createRuntime(
       queued = false;
       if (disposed) return;
       const sceneDirty = dirty;
+      const sceneNodes = fullSync ? undefined : dirtyNodes;
       dirty = Dirty.None;
+      dirtyNodes = new Map();
+      fullSync = false;
       const scene = createSceneState(root, sceneCache, {
-        dirty: sceneDirty
+        dirty: sceneDirty,
+        dirtyNodes: sceneNodes
       });
       gpu.setScene(scene);
       cameraInteraction.reconcile(scene);
@@ -497,6 +513,12 @@ function createRuntime(
     dispose() {
       if (disposed) return;
       disposed = true;
+      dirtyNodes.clear();
+      sceneCache.transforms.reset(root);
+      sceneCache.lastState = undefined;
+      sceneCache.resourceItems = [];
+      sceneCache.cleanDrawBatches = [];
+      sceneCache.cleanInteraction = { targets: [], pick: () => null };
       currentScene = null;
       hoveredTarget = null;
       cameraInteraction.dispose();

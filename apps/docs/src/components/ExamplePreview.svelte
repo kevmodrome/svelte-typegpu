@@ -50,8 +50,10 @@
     preset: 'Solar System' as GravityPreset,
     speed: 0
   });
+  let motionControls = $state({ x: 0, z: 0, lift: 0, visible: true });
 
   const hasControls = $derived(
+      slug === 'svelte-motion' ||
       slug === 'phong-reflection' ||
       slug === 'simple-shadow' ||
       slug === 'disco-shader-pass' ||
@@ -65,6 +67,10 @@
     let instance: ReturnType<typeof mount> | null = null;
 
     function sceneProps() {
+      if (slug === 'svelte-motion') return {
+        controls: motionControls,
+        onTargetChange: (x: number, z: number) => { motionControls.x = x; motionControls.z = z; }
+      };
       if (slug === 'phong-reflection') return { controls: phongControls };
       if (slug === 'simple-shadow') {
         return {
@@ -265,7 +271,27 @@
   {#if hasControls}
     <section class="example-controls" aria-label="Example controls">
       <h2>Example controls</h2>
-      {#if slug === 'phong-reflection'}
+      {#if slug === 'svelte-motion'}
+        <label class="control-row">
+          <span>Target X</span>
+          <input type="range" min="-10" max="10" step="0.1" bind:value={motionControls.x} />
+          <output>{motionControls.x.toFixed(1)}</output>
+        </label>
+        <label class="control-row">
+          <span>Target Z</span>
+          <input type="range" min="-13" max="13" step="0.1" bind:value={motionControls.z} />
+          <output>{motionControls.z.toFixed(1)}</output>
+        </label>
+        <label class="control-row">
+          <span>Lift</span>
+          <input type="range" min="0" max="4" step="0.1" bind:value={motionControls.lift} />
+          <output>{motionControls.lift.toFixed(1)}</output>
+        </label>
+        <label class="control-row">
+          <span>Marker visible</span>
+          <input type="checkbox" bind:checked={motionControls.visible} />
+        </label>
+      {:else if slug === 'phong-reflection'}
         <label class="control-row">
           <span>light color</span>
           <input

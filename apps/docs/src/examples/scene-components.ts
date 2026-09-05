@@ -7,12 +7,14 @@ import {
   PhongReflection,
   SimpleShadow,
   SmokyTriangle,
+  SvelteMotion,
   TwoBoxes
 } from '../generated/typegpu-scenes';
 
 type TypeGpuSceneComponent = Component<any>;
 
 export const sceneComponents = {
+  'svelte-motion': SvelteMotion,
   'two-boxes': TwoBoxes,
   'phong-reflection': PhongReflection,
   'simple-shadow': SimpleShadow,

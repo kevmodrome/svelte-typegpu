@@ -1233,7 +1233,7 @@ describe('TypeGPU renderer core', () => {
 
     expect(dirtyNode).toBe(mesh);
     expect(hasDirty(dirtyMask, Dirty.Transform)).toBe(true);
-    expect(hasDirty(dirtyMask, Dirty.InstanceData)).toBe(true);
+    expect(hasDirty(dirtyMask, Dirty.InstanceData)).toBe(false);
   });
 
   it('schedules material attribute removal from the previous value', () => {

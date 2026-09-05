@@ -1,0 +1,26 @@
+import type { RgbaTuple, Vector3Tuple } from 'svelte-typegpu';
+
+export interface MotionControls {
+  x: number;
+  z: number;
+  lift: number;
+  visible: boolean;
+}
+
+const colors: RgbaTuple[] = [
+  [0.48, 0.68, 0.61, 1],
+  [0.72, 0.77, 0.76, 1],
+  [0.39, 0.52, 0.61, 1]
+];
+
+export const motionField = Array.from({ length: 2000 }, (_, id) => {
+  const column = id % 40;
+  const row = Math.floor(id / 40);
+  const height = 0.18 + (1 + Math.sin(column * 0.22) * Math.cos(row * 0.18)) * 0.22;
+  return {
+    id,
+    position: [(column - 19.5) * 0.55, height / 2, (row - 24.5) * 0.55] as Vector3Tuple,
+    scale: [0.42, height, 0.42] as Vector3Tuple,
+    color: colors[(column + row) % colors.length]
+  };
+});

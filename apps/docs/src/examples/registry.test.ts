@@ -24,6 +24,7 @@ describe('docs example registry', () => {
   it('contains the curated TypeGPU adaptations in display order', () => {
     expect(examples.map((example) => example.slug)).toEqual([
       'two-boxes',
+      'svelte-motion',
       'phong-reflection',
       'simple-shadow',
       'disco-shader-pass',

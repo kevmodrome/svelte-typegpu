@@ -1,6 +1,6 @@
 import tgpu, { d } from 'typegpu';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createElement, createFragment, insert, setAttribute } from './core';
+import { createElement, createFragment, insert, remove, setAttribute } from './core';
 import { Dirty } from './dirty';
 import { createTypeGpuRenderer } from './gpu-renderer';
 import {
@@ -46,6 +46,71 @@ afterEach(() => {
 });
 
 describe('GPU resource and frame lifecycle', () => {
+  it('uploads only changed instance bytes without resource lookups, allocation, or queue sorting', async () => {
+    const { renderer, buffers, root } = await setupRenderer();
+    const tree = createElement('scene');
+    const meshes = Array.from({ length: 100 }, () => {
+      const mesh = createElement('mesh');
+      insert(mesh, createElement('boxGeometry'), null);
+      insert(tree, mesh, null);
+      return mesh;
+    });
+    const cache = createTypeGpuSceneCache();
+    renderer.setScene(createSceneState(tree, cache));
+    const instanceBuffer = buffers.find((buffer) => buffer.label.endsWith('instances'))!;
+    instanceBuffer.write.mockClear();
+    root.createBuffer.mockClear();
+    const geometry = vi.spyOn(GeometryResourceCache.prototype, 'getOrCreate');
+    const material = vi.spyOn(MaterialResourceCache.prototype, 'getOrCreate');
+    const prune = vi.spyOn(GeometryResourceCache.prototype, 'prune');
+    vi.mocked(createMeshPipeline).mockClear();
+    setAttribute(meshes[20], 'position', [4, 0, 0]);
+    const state = createSceneState(tree, cache, {
+      dirty: Dirty.Transform,
+      dirtyNodes: new Map([[meshes[20], Dirty.Transform]])
+    });
+    const sort = vi.spyOn(Array.prototype, 'sort');
+    renderer.setScene(state);
+    expect(instanceBuffer.write).toHaveBeenCalledOnce();
+    expect(instanceBuffer.write.mock.calls[0][0].byteLength).toBe(96);
+    expect(instanceBuffer.write.mock.calls[0][1]).toEqual({
+      startOffset: 20 * 96,
+      endOffset: 21 * 96
+    });
+    expect(root.createBuffer).not.toHaveBeenCalled();
+    expect(geometry).not.toHaveBeenCalled();
+    expect(material).not.toHaveBeenCalled();
+    expect(prune).not.toHaveBeenCalled();
+    expect(createMeshPipeline).not.toHaveBeenCalled();
+    expect(sort).not.toHaveBeenCalled();
+    renderer.dispose();
+  });
+  it('retains hidden geometry/material/instance buffers and frees them on removal', async () => {
+    const { renderer, buffers } = await setupRenderer();
+    const tree = createFragment();
+    const group = createElement('group');
+    const mesh = createElement('mesh');
+    insert(mesh, createElement('boxGeometry'), null);
+    insert(group, mesh, null);
+    insert(tree, group, null);
+    const cache = createTypeGpuSceneCache();
+    renderer.setScene(createSceneState(tree, cache));
+    const owned = buffers.filter((buffer) =>
+      /vertices|indices|instances|material/.test(buffer.label)
+    );
+    expect(owned.length).toBeGreaterThanOrEqual(3);
+    const count = buffers.length;
+    setAttribute(group, 'visible', false);
+    renderer.setScene(createSceneState(tree, cache));
+    expect(owned.every((buffer) => buffer.destroy.mock.calls.length === 0)).toBe(true);
+    setAttribute(group, 'visible', true);
+    renderer.setScene(createSceneState(tree, cache));
+    expect(buffers.length).toBe(count);
+    remove(group);
+    renderer.setScene(createSceneState(tree, cache));
+    expect(owned.every((buffer) => buffer.destroy.mock.calls.length === 1)).toBe(true);
+    renderer.dispose();
+  });
   it('does not scan geometry resources on a camera-only scene update', async () => {
     const { renderer } = await setupRenderer();
     const tree = createFragment();
@@ -169,8 +234,13 @@ function fakeBuffer() {
       this.label = label;
       return this;
     },
-    write: vi.fn(function (this: { data: Float32Array }, data: ArrayBuffer) {
-      this.data = new Float32Array(data.slice(0));
+    write: vi.fn(function (
+      this: { data: Float32Array },
+      data: ArrayBuffer,
+      options?: { startOffset: number; endOffset: number }
+    ) {
+      if (options) this.data.set(new Float32Array(data), options.startOffset / 4);
+      else this.data = new Float32Array(data.slice(0));
     }),
     destroy: vi.fn()
   };

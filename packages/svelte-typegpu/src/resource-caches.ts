@@ -494,7 +494,7 @@ export class PipelineResourceCache {
   }
 }
 
-export function pipelineResourceKeyFor(batch: TypeGpuDrawBatch, depth: boolean): string {
+export function pipelineResourceKeyFor(batch: Pick<TypeGpuDrawBatch, 'pipelineKey' | 'material'>, depth: boolean): string {
   return [
     batch.pipelineKey,
     meshMaterialPipelineKeyFor(batch.material),

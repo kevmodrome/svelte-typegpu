@@ -4,6 +4,9 @@ import * as svelteClient from 'svelte/internal/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createFragment, type TypeGpuNode } from './core';
 import renderer from './svelte-renderer';
+import { createTypeGpuRuntimeForTest } from './svelte-renderer';
+import { Tween } from 'svelte/motion';
+import type { TypeGpuRenderer } from './gpu-renderer';
 import { typeGpuRendererPath } from './test-paths';
 
 const instances: ReturnType<typeof mount>[] = [];
@@ -12,6 +15,57 @@ afterEach(async () => {
 });
 
 describe('TypeGPU target primitive component rendering', () => {
+  it('translates real Svelte Tween frames into targeted group instance updates', async () => {
+    const raf = (svelteClient as unknown as { raf: { now(): number; tick(callback: () => void): void } }).raf;
+    let now = 0;
+    const frames: (() => void)[] = [];
+    const nowSpy = vi.spyOn(raf, 'now').mockImplementation(() => now);
+    const tickSpy = vi.spyOn(raf, 'tick').mockImplementation((callback) => { frames.push(callback); });
+    const motion = new Tween([0, 0, 0], { duration: 100 });
+    const Scene = compileTypeGpuSource(`
+      <script>let { motion } = $props();</script>
+      <scene>
+        {#each Array.from({length: 300}, (_, i) => i) as i (i)}
+          <mesh position={[i, 0, -5]}><boxGeometry /></mesh>
+        {/each}
+        <group position={motion.current}>
+          <mesh><boxGeometry /></mesh>
+          <mesh position={[1, 0, 0]}><boxGeometry /></mesh>
+        </group>
+      </scene>
+    `);
+    const root = createFragment();
+    const gpu = { setScene: vi.fn(), setCamera: vi.fn(), invalidate: vi.fn(), renderFrame: vi.fn(), getRenderSize: vi.fn(), dispose: vi.fn() } as TypeGpuRenderer;
+    const runtime = createTypeGpuRuntimeForTest(root, new EventTarget() as HTMLCanvasElement, gpu);
+    root.runtime = runtime;
+    const instance = mount(Scene, { renderer, target: root, props: { motion } });
+    try {
+      flushSync();
+      await Promise.resolve();
+      const initial = vi.mocked(gpu.setScene).mock.lastCall![0];
+      const instances = initial.drawBatches[0].instances;
+      vi.mocked(gpu.setScene).mockClear();
+      void motion.set([4, 0, 0]);
+      for (const time of [25, 50, 101]) {
+        now = time;
+        frames.splice(0).forEach((callback) => callback());
+        flushSync();
+        await Promise.resolve();
+        const state = vi.mocked(gpu.setScene).mock.lastCall![0];
+        expect(state.drawBatchesChanged).toBe(false);
+        expect(state.instanceUpdates![0].dirtyRanges).toEqual([{ start: 300, count: 2 }]);
+        expect(state.drawBatches[0].instances).toBe(instances);
+        expect(instances[300 * 24]).toBeCloseTo(Math.min(time / 100, 1) * 4);
+      }
+      expect(gpu.setScene).toHaveBeenCalledTimes(3);
+    } finally {
+      await motion.set(motion.current, { duration: 0 });
+      await unmount(instance);
+      runtime.dispose();
+      nowSpy.mockRestore();
+      tickSpy.mockRestore();
+    }
+  });
   it('preserves keyed snippet nodes across reactive updates and removes them on unmount', async () => {
     const Scene = compileTypeGpuSource<{ update(): void }>(`
       <script>

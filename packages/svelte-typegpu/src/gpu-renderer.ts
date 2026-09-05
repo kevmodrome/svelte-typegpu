@@ -11,6 +11,7 @@ import tgpu, {
 import { createFpsMeter } from './fps-meter';
 import { createViewProjectionMatrix } from './camera-math';
 import { Dirty } from './dirty';
+import { drawBatchKey, drawBatchKeysForItem } from './render-plan';
 import { packLightingState } from './lighting-data';
 import {
   add3,
@@ -315,14 +316,21 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       this.#lightingBuffer.write(packLightingState(scene.lights));
     }
 
-    if (scene.drawBatchesChanged) this.#syncMeshResources(scene);
+    if (scene.drawBatchesChanged) {
+      this.#syncMeshResources(scene);
+    } else {
+      for (const batch of scene.instanceUpdates ?? []) {
+        this.#instanceBuffers.upload(batch, batch.dirtyRanges);
+      }
+    }
     if (scene.drawBatchesChanged || depthChanged) this.#syncPipelines(scene);
 
     if (scene.shaderPassesChanged || depthChanged) {
       pruneShaderPassPipelineCache(this.#shaderPassPipelines, scene.shaderPasses, scene.renderSettings.depth);
     }
     if (scene.shaderPassesChanged) {
-      const liveNodes = new Set(scene.shaderPasses.map((shaderPass) => shaderPass.node));
+      const liveNodes = scene.shaderPassNodes ??
+        new Set(scene.shaderPasses.map((shaderPass) => shaderPass.node));
       for (const [node, resource] of this.#shaderPassResources) {
         if (liveNodes.has(node)) continue;
         resource.buffer.destroy();
@@ -368,14 +376,20 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#geometryResources.prune(scene.liveResourceKeys.geometries);
     this.#materialResources.prune(
       new Set(
-        scene.drawBatches
-          .filter((batch) => scene.liveResourceKeys.materials.has(batch.materialKey))
-          .map((batch) => materialResourceKeyFor(batch.material))
+        scene.resourceItems
+          ? scene.resourceItems.map((item) => materialResourceKeyFor(item.material))
+          : scene.drawBatches
+              .filter((batch) => scene.liveResourceKeys.materials.has(batch.materialKey))
+              .map((batch) => materialResourceKeyFor(batch.material))
       )
     );
     this.#textureResources.prune(scene.liveResourceKeys.textures);
     this.#samplerResources.prune(scene.liveResourceKeys.samplers);
-    this.#instanceBuffers.prune(new Set(scene.drawBatches.map((batch) => batch.key)));
+    this.#instanceBuffers.prune(new Set(
+      scene.resourceItems
+        ? scene.resourceItems.map((item) => drawBatchKey(drawBatchKeysForItem(item)))
+        : scene.drawBatches.map((batch) => batch.key)
+    ));
   }
 
   #syncPipelines(scene: TypeGpuSceneState): void {
@@ -384,9 +398,14 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     }
     this.#pipelines.prune(
       new Set(
-        scene.drawBatches
-          .filter((batch) => scene.liveResourceKeys.pipelines.has(batch.pipelineKey))
-          .map((batch) => pipelineResourceKeyFor(batch, scene.renderSettings.depth))
+        scene.resourceItems
+          ? scene.resourceItems.map((item) => pipelineResourceKeyFor(
+              { ...drawBatchKeysForItem(item), material: item.material },
+              scene.renderSettings.depth
+            ))
+          : scene.drawBatches
+              .filter((batch) => scene.liveResourceKeys.pipelines.has(batch.pipelineKey))
+              .map((batch) => pipelineResourceKeyFor(batch, scene.renderSettings.depth))
       )
     );
   }

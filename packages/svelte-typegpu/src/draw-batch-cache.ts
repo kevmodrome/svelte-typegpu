@@ -26,13 +26,24 @@ interface DrawBatchState {
 
 export interface TypeGpuDrawBatchCache {
   read(items: TypeGpuMeshDrawItem[]): TypeGpuDrawBatch[];
+  updateInstances(items: TypeGpuMeshDrawItem[]): {
+    batches: TypeGpuDrawBatch[];
+    updates: TypeGpuDrawBatch[];
+  };
 }
 
 export function createDrawBatchCache(): TypeGpuDrawBatchCache {
   const previousBatches = new Map<string, DrawBatchState>();
+  const slots = new Map<
+    TypeGpuInstanceId,
+    { batch: TypeGpuDrawBatch; index: number; state: DrawBatchState }
+  >();
+  let currentBatches: TypeGpuDrawBatch[] = [];
+  let dirtyBatches: TypeGpuDrawBatch[] = [];
 
   return {
     read(items) {
+      slots.clear();
       const groups = groupDrawItems(items);
       const activeKeys = new Set(groups.map((group) => group.key));
       const batches = groups.map((group, index) =>
@@ -44,14 +55,42 @@ export function createDrawBatchCache(): TypeGpuDrawBatchCache {
       }
 
       for (const batch of batches) {
-        previousBatches.set(batch.key, {
+        const state = {
           instanceIds: batch.instanceIds,
           revisions: groupRevisionList(groups[batch.sortKey]),
           instances: batch.instances
-        });
+        };
+        previousBatches.set(batch.key, state);
+        batch.instanceIds.forEach((id, index) => slots.set(id, { batch, index, state }));
       }
-
+      currentBatches = batches;
+      dirtyBatches = batches.filter((batch) => batch.instancesChanged);
       return batches;
+    },
+    updateInstances(items) {
+      for (const batch of dirtyBatches) {
+        batch.instancesChanged = false;
+        batch.dirtyRanges = [];
+      }
+      const changed = new Map<TypeGpuDrawBatch, number[]>();
+      for (const item of items) {
+        const slot = slots.get(item.id);
+        if (!slot) throw new Error(`Missing instance slot for ${item.id}`);
+        const { batch, index, state } = slot;
+        if (state.revisions[index] === item.revision) continue;
+        packMeshInstance(item, batch.instances, index * MESH_INSTANCE_FLOATS);
+        state.revisions[index] = item.revision;
+        let indices = changed.get(batch);
+        if (!indices) changed.set(batch, (indices = []));
+        indices.push(index);
+      }
+      dirtyBatches = [...changed.keys()];
+      for (const [batch, indices] of changed) {
+        batch.instancesChanged = true;
+        indices.sort((a, b) => a - b);
+        for (const index of indices) appendDirtyRange(batch.dirtyRanges, index);
+      }
+      return { batches: currentBatches, updates: dirtyBatches };
     }
   };
 }
@@ -83,7 +122,9 @@ function readDrawBatch(
   const instanceIds = items.map((item) => item.id);
   const revisions = items.map((item) => item.revision);
   const instancesMatch =
-    previous && sameList(instanceIds, previous.instanceIds) && sameList(revisions, previous.revisions);
+    previous &&
+    sameList(instanceIds, previous.instanceIds) &&
+    sameList(revisions, previous.revisions);
 
   if (instancesMatch) {
     return {

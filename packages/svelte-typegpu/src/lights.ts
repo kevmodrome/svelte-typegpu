@@ -72,11 +72,11 @@ function collectFromNode(
   context: LightWalkContext,
   lights: TypeGpuLight[]
 ): void {
-  if (lights.length >= MAX_TYPEGPU_LIGHTS) return;
+  if (lights.length >= MAX_TYPEGPU_LIGHTS || node.attributes.visible === false) return;
 
   let childContext = context;
 
-  if (node.name === 'group') {
+  if (node.name === 'group' || node.name === 'mesh' || node.name === 'model') {
     childContext = {
       transform: composeTransforms(context.transform, readLocalTransform(node)),
       revision: combineNodeRevision(context.revision, node)

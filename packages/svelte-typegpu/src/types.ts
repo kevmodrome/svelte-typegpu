@@ -306,6 +306,7 @@ export interface TypeGpuMeshDrawItem {
   dragButton?: TypeGpuPointerDragButton;
   castShadow: boolean;
   receiveShadow: boolean;
+  visible?: boolean;
 }
 
 export interface TypeGpuLight {
@@ -459,8 +460,11 @@ export interface TypeGpuSceneState {
   lightsChanged: boolean;
   drawBatches: TypeGpuDrawBatch[];
   drawBatchesChanged: boolean;
+  resourceItems?: TypeGpuMeshDrawItem[];
+  instanceUpdates?: TypeGpuDrawBatch[];
   shaderPasses: TypeGpuShaderPass[];
   shaderPassesChanged: boolean;
+  shaderPassNodes?: Set<TypeGpuNode>;
   interaction: TypeGpuInteractionIndex;
   interactionChanged: boolean;
   liveResourceKeys: TypeGpuLiveResourceKeys;
