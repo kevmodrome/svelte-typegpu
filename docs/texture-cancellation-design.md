@@ -76,3 +76,21 @@ root-local resource key contract. Abort is advisory for bitmap decoding, and
 synchronous rasterization cannot be interrupted once started. No public format or
 data migration is needed; rollback removes cancellation while retaining the
 existing generation guard. Live checks cannot prove physical refresh rate.
+
+## Verification results
+
+- `27b739d` adds cancellation ownership and 13 unit cases covering fetch/decode
+  cancellation, same-key races, successful controller release and decoder cleanup.
+- `a67616f` preserves material uniform buffers across texture settlement. Twelve
+  compiled conditional-scene cases cover 60/120/144 Hz, demand/manual modes and
+  both settlement orders. Four material cases cover standard/shader uniforms and
+  successful/failed loads, including updates made while loading.
+- Hidden and shared owners retain one request. Last-owner removal and disposal
+  abort it, and obsolete completion produces no upload or frame. Live settlement
+  performs no instance writes or buffer/pipeline creation; only the texture and
+  required bind group change. Manual mode schedules no RAF; demand work settles.
+- Full workspace verification passes 991 tests, including the existing compiled
+  real Tween/Spring cadence matrix, plus production builds and Svelte checks.
+  Live checker-texture rendering exposed a separate Vite compiler-boundary bug;
+  its fix and browser evidence are recorded in
+  [Vite runtime boundary](vite-runtime-boundary-design.md).

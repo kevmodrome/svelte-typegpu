@@ -26,6 +26,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | `{#await}` | Pending/then/catch, replacement, stale results, and unmount cleanup tested |
 | Cross-component context | Reactive context preserved through asynchronously mounted children |
 | `getAbortSignal()` | Cancels component-owned model requests on derived replacement and unmount |
+| Conditional texture ownership | Removing the last textured node cancels pending root-owned loading; hidden nodes and other owners retain shared textures |
 | `<svelte:boundary>` | Error/reset cleanup tested with an externally declared `failed` snippet passed as a prop; inline `failed` snippets crash the pinned compiler |
 | Async expressions and boundary `pending` snippets | Gated: ready/update paths work, but the pinned preview throws after unmounting a pending boundary; tracked by an isolated reproducer |
 
@@ -178,6 +179,39 @@ fetch, or GPU validation errors. Use `{#await ... :catch}` for loader failures.
   <SceneContent />
 </svelte:boundary>
 ```
+
+## Conditional textures
+
+Ordinary control flow owns texture resources as well as geometry:
+
+```svelte
+{#if show}
+  <mesh>
+    <boxGeometry />
+    <standardMaterial map={imageUrl} />
+  </mesh>
+{/if}
+```
+
+When scene synchronization removes the last owner of a texture key, the renderer
+aborts its pending fetch. Changing `imageUrl` releases the previous key when no
+other node uses it. Hidden attached nodes still own their resources; `visible`
+is not an unmount. Shared keys issue one request per GPU root, and re-adding a
+removed key starts a fresh load. Explicit resource keys still identify immutable
+contents, so replacing keyed contents requires a new key.
+
+Cancellation skips obsolete decoding stages and prevents late uploads or frame
+requests. A bitmap decode already in progress cannot be interrupted, but its late
+result is closed rather than uploaded. HTML fallback releases its object URL and
+image source without waiting for decoding to settle. Root disposal also cancels
+pending loads. No attachment, AbortController or extra animation loop is needed
+in the component.
+
+Live loads keep the existing white fallback until ready (or on failure). A ready
+texture refreshes its material binding, reusing the existing uniform buffer and
+its current shader values. Demand rendering wakes for settlement and then idles;
+manual rendering still requires an explicit draw. This implicit resource path is
+separate from promise-driven `{#await}` model loading above.
 
 ## Ordinary event attributes
 
