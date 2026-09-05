@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 // Isolated compatibility probes, not the proposed viewport implementation.
 import { compile } from 'svelte/compiler';
-import { flushSync, getAllContexts, mount, onMount, tick, unmount } from 'svelte';
+import { flushSync, getAllContexts, hydrate, mount, onMount, tick, unmount } from 'svelte';
 import { render } from 'svelte/server';
 import * as client from 'svelte/internal/client';
+import * as server from 'svelte/internal/server';
 import 'svelte/internal/init-operations';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import renderer from '../src/svelte-renderer';
@@ -16,7 +17,7 @@ afterEach(async () => {
   document.body.replaceChildren();
 });
 
-function compileProbe(source: string, custom: boolean, dependencies: Record<string, unknown> = {}) {
+function compileProbe(source: string, custom: boolean, dependencies: Record<string, unknown> = {}, domBoundary = false) {
   const result = compile(source, {
     filename: 'BoundaryProbe.svelte',
     generate: 'client',
@@ -25,7 +26,9 @@ function compileProbe(source: string, custom: boolean, dependencies: Record<stri
   });
   const executable = result.js.code
     .replace(/^import .*;\n/gm, '')
-    .replace('export default function BoundaryProbe', 'function BoundaryProbe');
+    .replace('export default function BoundaryProbe', 'function BoundaryProbe')
+    // Isolated feasibility probe; production adaptation must validate an AST.
+    .replace('$.push_renderer($renderer)', domBoundary ? '$.push_renderer(null)' : '$.push_renderer($renderer)');
   return new Function(
     '$',
     '$renderer',
@@ -283,5 +286,51 @@ describe('declarative canvas boundary investigation (pinned PR, no WebGPU)', () 
       `${result.js.code.replace('export default function', 'function')}\nreturn BoundaryProbe;`
     )();
     expect(render(Component).body).not.toContain('<canvas');
+  });
+});
+
+describe('DOM-owned viewport entry investigation', () => {
+  it('hydrates the existing canvas while retaining custom snippet identity and scene state', async () => {
+    const root = createFragment();
+    const ready = vi.fn();
+    const disposed = vi.fn();
+    const source = `
+      <script>
+        import Host from './ProbeHost.svelte';
+        let { target, ready, disposed } = $props();
+        let editing = $state(true);
+        export function toggle() { editing = !editing; }
+      </script>
+      <Host {target} {ready} {disposed}>
+        {#if editing}<scene name="editor" />{:else}<scene name="preview" />{/if}
+      </Host>
+    `;
+    function ssr(source: string, dependencies: Record<string, unknown> = {}) {
+      const compiled = compile(source, { filename: 'BoundaryProbe.svelte', generate: 'server', runes: true });
+      return new Function('$', ...Object.keys(dependencies), compiled.js.code
+        .replace(/^import .*;\n/gm, '')
+        .replace('export default function BoundaryProbe', 'function BoundaryProbe') + '\nreturn BoundaryProbe;'
+      )(server, ...Object.values(dependencies));
+    }
+    const ServerViewport = ssr(source, { Host: ssr('<canvas />') });
+    document.body.innerHTML = render(ServerViewport, { props: { target: root, ready, disposed } }).body;
+    const canvas = document.querySelector('canvas');
+    expect(canvas).not.toBeNull();
+    const Viewport = compileProbe(source, true, { Host: domHost() }, true);
+    const viewport = hydrate(Viewport, { target: document.body, props: { target: root, ready, disposed }, recover: false });
+    mounted.push(viewport);
+    await tick();
+    expect(document.querySelectorAll('canvas')).toHaveLength(1);
+    expect(document.querySelector('canvas')).toBe(canvas);
+    expect(ready).toHaveBeenCalledExactlyOnceWith(canvas);
+    expect(elements(root, 'scene')[0].attributes.name).toBe('editor');
+    flushSync(() => viewport.toggle());
+    expect(elements(root, 'scene')[0].attributes.name).toBe('preview');
+    expect(document.querySelector('canvas')).toBe(canvas);
+    await unmount(viewport);
+    mounted.pop();
+    expect(document.querySelector('canvas')).toBeNull();
+    expect(elements(root, 'scene')).toEqual([]);
+    expect(disposed).toHaveBeenCalledOnce();
   });
 });

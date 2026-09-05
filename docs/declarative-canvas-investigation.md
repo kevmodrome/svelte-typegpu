@@ -1,8 +1,32 @@
 # Declarative canvas boundary
 
-Status: design investigation. Dedicated `.typegpu.svelte` viewports are the
-agreed initial scope. No production renderer, host, compiler configuration, or
-example changes have been made. The integration below still needs a proof.
+Status: implementation in progress, gated by the compile/hydration proof below.
+Dedicated `.typegpu.svelte` viewports are the agreed initial scope. The existing
+Canvas API remains supported during this work.
+
+### Implementation checkpoint
+
+The first slice tests a narrowly validated compiler adapter. After lowering the
+single canvas to a static DOM host, compile its scene snippets with the custom
+renderer. An AST-based output adapter changes only the outer component's renderer
+scope to DOM (`push_renderer(null)`); the scene snippets retain their actual
+renderer identity. This avoids duplicating or extracting the consumer's script
+and avoids importing hydration internals into the runtime. It is deliberately
+pinned-compiler integration, not general renderer interleaving. Reject changed
+compiler output rather than guessing when its structural assumptions fail.
+
+Client and server compilation must produce matching DOM shells. Server output
+omits scene content and does not initialize WebGPU. Prove identity-preserving
+hydration, parent conditional ownership, context, events, CSS and native handles
+before adding GPU startup. If these fail, revise the approach before migration.
+Canvas bindings/directives must either retain their native meaning or produce
+an explicit diagnostic; they must not silently target an internal component.
+
+Proof result: the tenth isolated test passes with `hydrate(..., recover: false)`.
+It retains the exact server-rendered canvas, mounts custom-authored conditional
+scenes, updates local state and disposes both surfaces. This establishes the
+outer DOM renderer scope approach for the static host; it does not yet establish
+the source transform, native attribute contract, CSS or GPU behavior.
 
 ## 1. Scope and risk
 
