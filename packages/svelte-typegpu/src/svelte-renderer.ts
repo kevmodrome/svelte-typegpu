@@ -312,17 +312,22 @@ function createRuntime(
       });
     }
 
-    if (activeDrag) return;
+    if (disposed || activeDrag) return;
 
     const hit = pickCanvasTarget(event);
     if (!hit || !hasDragHandler(hit.target)) return;
     if (!objectDragButtonMatches(hit.target.dragButton, event)) return;
 
     event.preventDefault();
-    activeDrag = createActiveDrag(hit, event);
-    capturePointer(canvas, activeDrag.pointerId);
-    attachObjectDragWindowListeners();
-    dispatchDragEvent('dragstart', event);
+    const drag = activeDrag = createActiveDrag(hit, event);
+    try {
+      capturePointer(canvas, drag.pointerId);
+      attachObjectDragWindowListeners();
+      dispatchDragEvent('dragstart', event);
+    } catch (error) {
+      releaseActiveDrag(drag);
+      throw error;
+    }
   }
 
   function dispatchCanvasPointerMove(event: PointerEvent) {
@@ -467,20 +472,30 @@ function createRuntime(
   }
 
   function dispatchActiveDragMove(event: PointerEvent): boolean {
-    if (!activeDrag || !samePointer(event, activeDrag)) return false;
+    const drag = activeDrag;
+    if (!drag || !samePointer(event, drag)) return false;
 
     event.preventDefault();
     const nextCanvas = canvasPointFromEvent(canvas, event);
     if (
-      nextCanvas.x !== activeDrag.previousCanvas.x ||
-      nextCanvas.y !== activeDrag.previousCanvas.y
+      nextCanvas.x !== drag.previousCanvas.x ||
+      nextCanvas.y !== drag.previousCanvas.y
     ) {
-      activeDrag.moved = true;
+      drag.moved = true;
     }
     dispatchDragEvent('dragmove', event);
-    activeDrag.previousCanvas = nextCanvas;
-    activeDrag.previousClient = clientPointFromEvent(event);
+    if (activeDrag === drag) {
+      drag.previousCanvas = nextCanvas;
+      drag.previousClient = clientPointFromEvent(event);
+    }
     return true;
+  }
+
+  function releaseActiveDrag(drag: ActiveObjectDrag, releaseCapture = true) {
+    if (activeDrag !== drag) return;
+    activeDrag = null;
+    detachObjectDragWindowListeners();
+    if (releaseCapture) releasePointer(canvas, drag.pointerId);
   }
 
   function finishActiveDrag(
@@ -499,18 +514,10 @@ function createRuntime(
       endCanvas.y !== drag.startCanvas.y;
     suppressNextDragClick = suppressNextDragClick || moved;
 
-    try {
-      if (!cancelled) {
-        dispatchCapturedPointerUp(drag, event);
-      }
-      dispatchDragEventFor(drag, 'dragend', event, cancelled);
-    } finally {
-      detachObjectDragWindowListeners();
-      activeDrag = null;
-      if (options.releasePointerCapture !== false) {
-        releasePointer(canvas, drag.pointerId);
-      }
-    }
+    // Terminal callbacks may dispose the runtime or start a replacement gesture.
+    releaseActiveDrag(drag, options.releasePointerCapture !== false);
+    if (!cancelled) dispatchCapturedPointerUp(drag, event);
+    if (!disposed) dispatchDragEventFor(drag, 'dragend', event, cancelled);
 
     return true;
   }
@@ -632,7 +639,7 @@ function createRuntime(
       canvas.removeEventListener('pointerleave', dispatchCanvasPointerExit);
       canvas.removeEventListener('pointerout', dispatchCanvasPointerExit);
       detachObjectDragWindowListeners();
-      activeDrag = null;
+      if (activeDrag) releaseActiveDrag(activeDrag);
       gpu.dispose();
     }
   };

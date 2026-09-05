@@ -95,6 +95,77 @@ function hoverFixture() {
 }
 
 describe('composable canvas events', () => {
+  it.each(['pointerdown', 'dragstart', 'dragmove', 'pointerup', 'dragend'])(
+    'releases drag ownership when a %s handler disposes the runtime', async type => {
+      const { left, canvas, runtime } = hoverFixture();
+      const ended = vi.fn();
+      addEventListener(left, 'dragend', ended);
+      addEventListener(left, type, () => runtime.dispose());
+      await Promise.resolve();
+      const pointer = { pointerId: 1, offsetX: 30, offsetY: 50, button: 0 };
+      expect(() => canvas.dispatch<PointerEvent>('pointerdown', pointer)).not.toThrow();
+      if (type === 'dragmove') {
+        expect(() => canvas.dispatch<PointerEvent>('pointermove', { ...pointer, offsetX: 40 })).not.toThrow();
+      }
+      if (type === 'pointerup' || type === 'dragend') canvas.dispatch<PointerEvent>('pointerup', pointer);
+      expect(canvas.setPointerCapture).toHaveBeenCalledTimes(type === 'pointerdown' ? 0 : 1);
+      expect(canvas.releasePointerCapture).toHaveBeenCalledTimes(type === 'pointerdown' ? 0 : 1);
+      expect(ended).toHaveBeenCalledTimes(type === 'dragend' ? 1 : 0);
+      runtime.dispose();
+    }
+  );
+
+  it('allows a dragend callback to start a replacement without releasing its capture', async () => {
+    const { left, right, canvas, runtime } = hoverFixture();
+    const started = vi.fn();
+    const moved = vi.fn();
+    addEventListener(left, 'dragend', () => canvas.dispatch<PointerEvent>('pointerdown', {
+      pointerId: 2, offsetX: 70, offsetY: 50, button: 0
+    }));
+    addEventListener(right, 'dragstart', started);
+    addEventListener(right, 'dragmove', moved);
+    await Promise.resolve();
+    canvas.dispatch<PointerEvent>('pointerdown', { pointerId: 1, offsetX: 30, offsetY: 50, button: 0 });
+    canvas.dispatch<PointerEvent>('pointerup', { pointerId: 1, offsetX: 30, offsetY: 50 });
+    expect(started).toHaveBeenCalledOnce();
+    expect(canvas.releasePointerCapture.mock.calls).toEqual([[1]]);
+    canvas.dispatch<PointerEvent>('pointermove', { pointerId: 2, offsetX: 80, offsetY: 50 });
+    expect(moved).toHaveBeenCalledOnce();
+    runtime.dispose();
+    expect(canvas.releasePointerCapture.mock.calls).toEqual([[1], [2]]);
+  });
+
+  it('releases capture after a failing dragstart without blocking the next gesture', async () => {
+    const { left, right, canvas, runtime } = hoverFixture();
+    const started = vi.fn();
+    addEventListener(left, 'dragstart', () => { throw new Error('start failed'); });
+    addEventListener(right, 'dragstart', started);
+    await Promise.resolve();
+    expect(() => canvas.dispatch<PointerEvent>('pointerdown', {
+      pointerId: 1, offsetX: 30, offsetY: 50, button: 0
+    })).toThrow('start failed');
+    expect(canvas.releasePointerCapture.mock.calls).toEqual([[1]]);
+    canvas.dispatch<PointerEvent>('pointerdown', { pointerId: 2, offsetX: 70, offsetY: 50, button: 0 });
+    expect(started).toHaveBeenCalledOnce();
+    runtime.dispose();
+  });
+
+  it('does not overwrite a replacement drag after a reentrant dragmove callback', async () => {
+    const { left, right, canvas, runtime } = hoverFixture();
+    const moved = vi.fn();
+    addEventListener(left, 'dragmove', () => {
+      canvas.dispatch<PointerEvent>('pointerup', { pointerId: 1, offsetX: 40, offsetY: 50 });
+      canvas.dispatch<PointerEvent>('pointerdown', { pointerId: 2, offsetX: 70, offsetY: 50, button: 0 });
+    });
+    addEventListener(right, 'dragmove', moved);
+    await Promise.resolve();
+    canvas.dispatch<PointerEvent>('pointerdown', { pointerId: 1, offsetX: 30, offsetY: 50, button: 0 });
+    canvas.dispatch<PointerEvent>('pointermove', { pointerId: 1, offsetX: 40, offsetY: 50 });
+    canvas.dispatch<PointerEvent>('pointermove', { pointerId: 2, offsetX: 80, offsetY: 50 });
+    expect(moved.mock.calls[0][0]).toMatchObject({ detail: { previousX: 70, deltaX: 10 } });
+    runtime.dispose();
+  });
+
   it('bubbles hover transitions between siblings while preserving group boundaries', async () => {
     const { scene, group, left, right, canvas, runtime, move } = hoverFixture();
     const calls: string[] = [];
