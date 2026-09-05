@@ -19,7 +19,7 @@
     ...attributes
   }: Omit<HTMLAttributes<HTMLDivElement>, 'children' | 'onerror'> & {
     scene: Component<Props>;
-    sceneProps: Props;
+    sceneProps: NoInfer<Props>;
     options?: Omit<TypeGpuRootOptions, 'target' | 'canvas' | 'onFps'>;
     root?: TypeGpuRoot | null;
     onready?: (root: TypeGpuRoot) => void;
@@ -56,7 +56,7 @@
           return;
         }
         ownedRoot = nextRoot;
-        instance = mount(SceneHost, {
+        instance = mount(SceneHost<Props>, {
           renderer,
           target: nextRoot,
           context,

@@ -1,0 +1,4 @@
+{
+  "extends": "../tsconfig.json",
+  "include": ["../src/Canvas.svelte", "../src/SceneHost.svelte", "Scene.svelte", "Empty.svelte", "valid/*.svelte"]
+}

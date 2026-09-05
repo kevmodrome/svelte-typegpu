@@ -45,6 +45,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit",
+    "check:svelte": "svelte-check --tsconfig type-tests/tsconfig.json --fail-on-warnings",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -64,6 +65,7 @@
     "@webgpu/types": "^0.1.70",
     "happy-dom": "^20.14.0",
     "svelte": "https://pkg.svelte.dev/svelte/c/17e37a51bc539cdb6a923b424e5746fc6505ba89",
+    "svelte-check": "^4.7.6",
     "typescript": "^5.9.3",
     "vitest": "^4.0.14"
   }

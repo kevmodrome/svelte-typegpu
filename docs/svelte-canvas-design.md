@@ -107,6 +107,6 @@ recovery is not introduced by this component.
   this does not measure the user's physical 120 Hz monitor. Normal interaction
   checks produced no browser warnings/errors. The intentional missing model
   request produced the expected 404.
-- Component runtime compilation is covered, but a dedicated Svelte public API
-  typecheck has not yet been added; plain TypeScript checking does not establish
-  generic prop inference in consumer `.svelte` files.
+- Consumer component inference is now covered by the follow-up
+  [Svelte typecheck gate](svelte-types-design.md), including valid usage and
+  expected diagnostics for invalid props, callbacks, and root bindings.

@@ -24,6 +24,12 @@ simulation, or GPU root. Changing the `scene` component intentionally unmounts
 the old scene and mounts the new one on the same root. Parent Svelte context is
 available to scene components, including reactive values and async children.
 
+TypeScript users get scene prop and callback inference from `scene`, including
+required props and tuple values. Unknown inline `sceneProps` fields are rejected
+instead of widening the scene's type. This requires TypeScript 5.4 or newer.
+The package tests run Svelte's checker against valid and invalid consumer files;
+`pnpm --filter svelte-typegpu check:svelte` checks the supported usage directly.
+
 The component fills its parent; provide a definite height, as above. DOM
 attributes such as `class`, `style`, and `aria-label` apply to the host div. The
 canvas keeps its own scoped styling and renderer class. Server rendering emits
