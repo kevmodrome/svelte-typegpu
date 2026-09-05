@@ -27,7 +27,7 @@ to the event path. The Svelte Motion example uses one group click handler for
 
 ## Events and propagation
 
-`click`, `pointerdown`, `pointerup`, `pointermove`, `dragstart`, `dragmove`, and
+`click`, `dblclick`, `contextmenu`, `pointerdown`, `pointerup`, `pointermove`, `dragstart`, `dragmove`, and
 `dragend` bubble from the picked mesh/model through scene-node ancestors. A parent
 handler makes eligible descendant geometry pickable, even without mesh listeners.
 Picking still chooses the nearest eligible geometry for the event, not every hit
@@ -35,6 +35,13 @@ along the ray. Mesh `pointerEvents="none"`, `hitTest="none"`, and hierarchy
 visibility continue to filter hits. Pointer opt-outs are local to meshes/models,
 not inherited from groups. Group drag listeners do not inherit the group's drag
 configuration: `drag` and `dragButton` still belong to the picked mesh/model.
+
+Use `ondblclick` for a native double-click and `oncontextmenu` for a context-menu
+request at the pointer. A double-click still produces the browser's ordinary
+click events; the renderer does not delay clicks or synthesize a timer. Call
+`event.preventDefault()` in a context-menu handler to suppress the native menu
+when the input is cancelable. The original button/modifier values remain on
+`originalEvent`. Keyboard-triggered context menus do not have scene focus routing.
 
 `pointerenter` and `pointerleave` do not bubble. They describe each node's hover
 boundary: enter ancestors before children, leave children before ancestors.

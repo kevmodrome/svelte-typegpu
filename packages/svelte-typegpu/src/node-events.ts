@@ -2,6 +2,8 @@ import type { TypeGpuNode } from './core';
 
 export const BUBBLING_NODE_EVENTS = new Set([
   'click',
+  'dblclick',
+  'contextmenu',
   'pointerdown',
   'pointerup',
   'pointermove',

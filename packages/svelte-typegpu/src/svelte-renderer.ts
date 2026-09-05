@@ -250,10 +250,14 @@ function createRuntime(
 
     if (cameraInteraction.consumeSuppressedClick()) return;
 
-    const hit = pickCanvasTarget(event, 'click');
+    dispatchCanvasPickedEvent(event);
+  }
+
+  function dispatchCanvasPickedEvent(event: MouseEvent) {
+    const hit = pickCanvasTarget(event, event.type);
     if (!hit) return;
 
-    dispatchNodeEvent(hit.node, 'click', {
+    dispatchNodeEvent(hit.node, event.type, {
       originalEvent: event,
       detail: {
         instanceId: hit.instanceId,
@@ -506,6 +510,8 @@ function createRuntime(
   }
 
   canvas.addEventListener('click', dispatchCanvasClick);
+  canvas.addEventListener('dblclick', dispatchCanvasPickedEvent);
+  canvas.addEventListener('contextmenu', dispatchCanvasPickedEvent);
   canvas.addEventListener('pointerdown', dispatchCanvasPointerDown);
   canvas.addEventListener('pointermove', dispatchCanvasPointerMove);
   canvas.addEventListener('pointerup', dispatchCanvasPointerUp);
@@ -558,6 +564,8 @@ function createRuntime(
       hoveredPath = [];
       cameraInteraction.dispose();
       canvas.removeEventListener('click', dispatchCanvasClick);
+      canvas.removeEventListener('dblclick', dispatchCanvasPickedEvent);
+      canvas.removeEventListener('contextmenu', dispatchCanvasPickedEvent);
       canvas.removeEventListener('pointerdown', dispatchCanvasPointerDown);
       canvas.removeEventListener('pointermove', dispatchCanvasPointerMove);
       canvas.removeEventListener('pointerup', dispatchCanvasPointerUp);

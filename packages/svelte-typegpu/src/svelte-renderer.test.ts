@@ -93,7 +93,7 @@ function hoverFixture() {
 }
 
 describe('composable canvas events', () => {
-  it.each(['click', 'pointerdown', 'pointerup', 'pointermove'])(
+  it.each(['click', 'dblclick', 'contextmenu', 'pointerdown', 'pointerup', 'pointermove'])(
     'runs parent %s capture before the picked mesh and honors interception', async type => {
       const { group, left, canvas, runtime } = hoverFixture();
       const calls: string[] = [];
