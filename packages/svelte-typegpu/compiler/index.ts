@@ -4,6 +4,7 @@ import MagicString from 'magic-string';
 import remapping from '@jridgewell/remapping';
 import { compile, parse, type CompileOptions, type Warning } from 'svelte/compiler';
 import { sceneDiagnostics } from './diagnostics.ts';
+import { prepareAttributeValues } from './attributes.ts';
 
 const hostModule = 'svelte-typegpu/internal/viewport-canvas';
 const elementSizes = new Set(['clientWidth', 'clientHeight', 'offsetWidth', 'offsetHeight']);
@@ -16,7 +17,7 @@ export interface PreparedTypeGpuSource {
   warnings: Warning[];
 }
 
-/** Lower only a single, unconditional canvas. Scene-only files are unchanged. */
+/** Adapt structured scene values and, when present, a single unconditional canvas. */
 export function prepareTypeGpuSource(source: string, filename: string): PreparedTypeGpuSource {
   const ast = parse(source, { modern: true, filename });
   const warnings = sceneDiagnostics(ast, source, filename);
@@ -24,7 +25,25 @@ export function prepareTypeGpuSource(source: string, filename: string): Prepared
   visit(ast.fragment, (node) => {
     if (node.type === 'RegularElement' && node.name === 'canvas') canvases.push(node);
   });
-  if (!canvases.length) return { code: source, viewport: false, warnings };
+  const identifiers = new Set<string>();
+  visit(ast, (node) => { if (node.type === 'Identifier') identifiers.add(node.name); });
+  const fresh = (name: string) => {
+    while (identifiers.has(name)) name += '_';
+    identifiers.add(name);
+    return name;
+  };
+  const result = new MagicString(source);
+  const values = prepareAttributeValues(ast, source, result, fresh);
+  const valueImport = values ? `import * as ${values} from 'svelte-typegpu/internal/attribute-values';` : '';
+  const addImports = (code: string) => {
+    if (ast.instance) result.appendLeft((ast.instance.content as any).start, code);
+    else result.prepend(`<script>${code}</script>\n`);
+  };
+  if (!canvases.length) {
+    if (!values) return { code: source, viewport: false, warnings };
+    addImports(valueImport);
+    return { code: result.toString(), map: result.generateMap({ source: filename, includeContent: true, hires: true }), viewport: false, warnings };
+  }
   const roots = ast.fragment.nodes.filter((node) =>
     node.type !== 'Comment' && node.type !== 'SnippetBlock' && !(node.type === 'Text' && !node.data.trim())
   );
@@ -35,22 +54,13 @@ export function prepareTypeGpuSource(source: string, filename: string): Prepared
   if (ast.options?.customRenderer !== undefined) {
     throw new Error(`${filename}: viewport renderer selection is owned by the TypeGPU compiler.`);
   }
-  const identifiers = new Set<string>();
-  visit(ast, (node) => { if (node.type === 'Identifier') identifiers.add(node.name); });
-  const fresh = (name: string) => {
-    while (identifiers.has(name)) name += '_';
-    identifiers.add(name);
-    return name;
-  };
   const host = fresh('TypeGpuViewportCanvas');
   const hasSizeBindings = canvas.attributes.some((attribute: any) => attribute.type === 'BindDirective' &&
     (elementSizes.has(attribute.name) || observerSizes.has(attribute.name)));
   const bindings = hasSizeBindings ? fresh('TypeGpuCanvasBindings') : null;
-  const result = new MagicString(source);
-  const importCode = `import ${host} from ${JSON.stringify(hostModule)};` +
+  const importCode = valueImport + `import ${host} from ${JSON.stringify(hostModule)};` +
     (bindings ? `import * as ${bindings} from 'svelte-typegpu/internal/canvas-bindings';` : '');
-  if (ast.instance) result.appendLeft((ast.instance.content as any).start, importCode);
-  else result.prepend(`<script>${importCode}</script>\n`);
+  addImports(importCode);
   result.overwrite(canvas.start + 1, canvas.start + 7, host);
   const closeStart = canvas.end - '</canvas>'.length;
   const selfClosing = source.slice(canvas.start, canvas.end).endsWith('/>');
@@ -185,10 +195,19 @@ export function compileTypeGpu(source: string, options: CompileOptions & { filen
   const compiled = compile(server?.code ?? prepared.code, {
     ...options,
     hmr: false,
-    sourcemap: server && prepared.map ? remapping([server.map as any, prepared.map as any], () => null) : prepared.map ?? options.sourcemap,
+    sourcemap: undefined,
     experimental: { ...options.experimental, customRenderer: serverViewport ? () => null :
       options.experimental?.customRenderer ?? 'svelte-typegpu/svelte-renderer' }
   });
+  // Compose here: the pinned compiler discards preprocessor sourcesContent but
+  // retains its transformed input, which makes debugger source text misleading.
+  const maps = [server?.map, prepared.map, options.sourcemap].filter((map) => map != null);
+  if (maps.length) {
+    Object.assign(compiled.js.map, remapping([compiled.js.map, ...maps] as any, () => null));
+    if (compiled.css?.map) {
+      Object.assign(compiled.css.map, remapping([compiled.css.map, ...maps] as any, () => null));
+    }
+  }
   if (prepared.viewport && !serverViewport) {
     compiled.js = adaptViewportClient(compiled.js.code, compiled.js.map) as typeof compiled.js;
   }

@@ -6,6 +6,7 @@ import { compileTypeGpu } from '../compiler/index';
 import renderer from './svelte-renderer';
 import ViewportCanvas from './ViewportCanvas.svelte';
 import * as canvasBindings from './canvas-bindings';
+import * as attributeValues from './attribute-values';
 
 export function compileViewportSource<Exports extends Record<string, unknown> = Record<string, never>>(
   source: string, dependencies: Record<string, unknown> = {}
@@ -19,7 +20,8 @@ export function compileViewportSource<Exports extends Record<string, unknown> = 
   const imports = { ...dependencies };
   const modules: Record<string, unknown> = {
     'svelte-typegpu/internal/viewport-canvas': ViewportCanvas,
-    'svelte-typegpu/internal/canvas-bindings': canvasBindings
+    'svelte-typegpu/internal/canvas-bindings': canvasBindings,
+    'svelte-typegpu/internal/attribute-values': attributeValues
   };
   for (const statement of parse(compiled.js.code, { ecmaVersion: 'latest', sourceType: 'module' }).body) {
     if (statement.type !== 'ImportDeclaration') continue;

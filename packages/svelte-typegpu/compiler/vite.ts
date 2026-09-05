@@ -27,7 +27,7 @@ export function typegpuSvelte(options: Options = {}) {
             return { code: prepared.code, map: prepared.map };
           }
           viewports.delete(filename);
-          return unchanged();
+          return { code: prepared.code, map: prepared.map ?? unchanged().map };
         } }
       ],
       compilerOptions: {

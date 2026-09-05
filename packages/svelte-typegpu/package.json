@@ -31,6 +31,7 @@
     "./vite": "./compiler/vite.ts",
     "./internal/viewport-canvas": "./src/ViewportCanvas.svelte",
     "./internal/canvas-bindings": "./src/canvas-bindings.ts",
+    "./internal/attribute-values": "./src/attribute-values.ts",
     "./canvas": {
       "types": "./src/Canvas.svelte",
       "svelte": "./src/Canvas.svelte",

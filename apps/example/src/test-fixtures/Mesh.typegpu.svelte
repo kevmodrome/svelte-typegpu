@@ -1,5 +1,7 @@
 <script>
   let { angle, onclick } = $props();
+  const rotation = $state([0, 0, 0]);
+  $effect(() => { rotation[1] = angle; });
 </script>
 
-<mesh rotation={[0, angle, 0]} {onclick}><boxGeometry /></mesh>
+<mesh {rotation} {onclick}><boxGeometry /></mesh>

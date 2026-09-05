@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
 import { build, createLogger, createServer } from 'vite';
 import { expect, it, vi } from 'vitest';
 import { typegpuSvelte } from 'svelte-typegpu/vite';
@@ -13,7 +14,7 @@ it.each([false, true])('builds the viewport through Vite (SSR: %s)', async (ssr)
     configFile: false, customLogger: logger, plugins: [typegpuSvelte({ configFile: false })],
     ssr: { noExternal: ['svelte-typegpu'] },
     build: {
-      write: false, minify: false, ssr: ssr ? entry : false,
+      write: false, minify: false, sourcemap: true, ssr: ssr ? entry : false,
       lib: { entry, formats: ['es'], fileName: 'viewport' }
     }
   });
@@ -23,6 +24,10 @@ it.each([false, true])('builds the viewport through Vite (SSR: %s)', async (ssr)
   expect(code).toContain('canvas');
   expect(code).toContain('Build test');
   if (!ssr) {
+    expect(code).toContain('value("rotation", rotation)');
+    const source = readFileSync(new URL('./test-fixtures/Mesh.typegpu.svelte', import.meta.url), 'utf8');
+    const sources = outputs.flatMap(item => item.type === 'chunk' ? item.map?.sourcesContent ?? [] : []);
+    expect(sources).toContain(source);
     const css = outputs.filter((item) => item.type === 'asset').map((item) => String(item.source)).join('\n');
     expect(css).toContain('420px');
     expect(css).toContain('typegpu-');

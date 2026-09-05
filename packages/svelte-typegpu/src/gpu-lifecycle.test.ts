@@ -35,6 +35,7 @@ import CanvasMotionHost from './test-fixtures/CanvasMotionHost.svelte';
 import NativeEvents from '../../../apps/docs/src/generated/typegpu-scenes/native-events/NativeEvents.typegpu.js';
 import { createViewProjectionMatrix, readCameraState } from './camera';
 import { rotateVectorXyz, transformPoint4 } from './math3d';
+import { vectorTuple } from './attributes';
 
 const captured = vi.hoisted(() => ({ bindings: [] as unknown[][], counts: [] as number[] }));
 
@@ -449,11 +450,11 @@ describe('GPU resource and frame lifecycle', () => {
         { hz, kind, frameloop: 'demand' as const, rendererFirst: false },
         { hz, kind, frameloop: 'demand' as const, rendererFirst: true },
         { hz, kind, frameloop: 'manual' as const, rendererFirst: false }
-      ].flatMap((clock) => [false, true].map((viewport) => ({ ...clock, viewport }))))
+      ].flatMap((clock) => [false, true].flatMap((viewport) => [false, true].map((spread) => ({ ...clock, viewport, spread })))))
     )
   )(
-    'retains Canvas and GPU state during $kind and native prop updates at $hz Hz ($frameloop, renderer first: $rendererFirst, viewport: $viewport)',
-    async ({ hz, kind, frameloop, rendererFirst, viewport }) => {
+    'retains Canvas and GPU state during $kind and deep prop updates at $hz Hz ($frameloop, renderer first: $rendererFirst, viewport: $viewport, spread: $spread)',
+    async ({ hz, kind, frameloop, rendererFirst, viewport, spread }) => {
       const pending = new Map<number, FrameRequestCallback>();
       const producers = new WeakSet<FrameRequestCallback>();
       let id = 0;
@@ -492,10 +493,12 @@ describe('GPU resource and frame lifecycle', () => {
         .mockClear()
         .mockResolvedValue(gpu as never);
       vi.stubGlobal('navigator', { gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
-      const Scene = compileTypeGpuSource(`
+      const Scene = compileViewportSource(`
         <script>
           let { motion, setup, children } = $props();
           let retained = $state(null);
+          const moving = $state({ position: { x: 0, y: 0, z: 0 } });
+          $effect(() => { moving.position.x = motion.current; });
           function retain(node) {
             retained = node;
             const cleanup = setup(node, () => retained);
@@ -507,7 +510,7 @@ describe('GPU resource and frame lifecycle', () => {
             <mesh position={[i + 10, 0, 0]}><boxGeometry /><standardMaterial /></mesh>
           {/each}
           {#if children}{@render children()}{:else}
-          <mesh position={[motion.current, 0, 0]} {@attach retain}>
+          <mesh ${spread ? '{...moving}' : 'position={moving.position}'} {@attach retain}>
             <boxGeometry /><standardMaterial />
           </mesh>
           {/if}
@@ -540,6 +543,8 @@ describe('GPU resource and frame lifecycle', () => {
           let label = $state('Moving scene');
           let width = $state(0), height = $state(0);
           let retained = $state(null);
+          const moving = $state({ position: [0, 0, 0] });
+          $effect(() => { moving.position[0] = motion.current; moving.position[1] = height / 180 - 1; });
           function retain(node) {
             retained = node;
             const cleanup = setup(node, () => retained);
@@ -547,13 +552,13 @@ describe('GPU resource and frame lifecycle', () => {
           }
           export function rename(value) { label = value; }
         </script>
-        {#snippet marker(x, height)}
-          <mesh position={[x, height / 180 - 1, 0]} {@attach retain}><boxGeometry /><standardMaterial /></mesh>
+        {#snippet marker(props)}
+          <mesh ${spread ? '{...props}' : 'position={props.position}'} {@attach retain}><boxGeometry /><standardMaterial /></mesh>
         {/snippet}
         <canvas {frameloop} maxDevicePixelRatio={1} {onready} onrenderererror={onerror}
           data-motion={motion.current} aria-label={label} class={{ moving: motion.current > 0 }}
           {@attach domSetup} bind:clientWidth={width} bind:clientHeight={height} data-size={width + 'x' + height}>
-          <Scene {motion} {setup}>{@render marker(motion.current, height)}</Scene>
+          <Scene {motion} {setup}>{@render marker(moving)}</Scene>
         </canvas>
       `);
       const instance = mount(viewport ? Viewport : CanvasMotionHost, {
@@ -621,7 +626,7 @@ describe('GPU resource and frame lifecycle', () => {
           expect(Number(canvas.dataset.motion)).toBe(motion.current);
           expect(readReference() === marker).toBe(true);
           expect(readReference()!.attributes).toBe(marker.attributes);
-          expect((readReference()!.attributes.position as number[])[0]).toBe(motion.current);
+          expect(vectorTuple(readReference()!.attributes.position)[0]).toBe(motion.current);
           expect(document.querySelector('canvas')).toBe(canvas);
           expect([canvas.width, canvas.height]).toEqual(dimensions);
           expect(canvas.classList.contains('renderer-root-canvas')).toBe(true);
