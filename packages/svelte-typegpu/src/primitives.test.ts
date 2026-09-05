@@ -243,6 +243,8 @@ describe('TypeGPU primitive descriptors', () => {
     expectExactDirty(dirtyForInsert('keyboardControls'), Dirty.Tree, Dirty.Camera);
     expectExactDirty(dirtyForEventListener('mesh', 'click'), Dirty.Interaction);
     expectExactDirty(dirtyForEventListener('mesh', 'dragmove'), Dirty.Interaction);
+    expectExactDirty(dirtyForEventListener('group', 'pointerenter'), Dirty.Interaction);
+    expectExactDirty(dirtyForEventListener('scene', 'click'), Dirty.Interaction);
     expectExactDirty(dirtyForEventListener('mesh', 'keydown'), Dirty.None);
     expectExactDirty(dirtyForAttribute('mesh', 'drag', undefined, 'rotate'), Dirty.Interaction);
   });

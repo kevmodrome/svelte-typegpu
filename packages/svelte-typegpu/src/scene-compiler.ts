@@ -1,4 +1,5 @@
 import { numberArg } from './attributes';
+import { POINTER_NODE_EVENTS } from './node-events';
 import { transformBounds } from './bounds';
 import { readCameraState } from './camera';
 import type { TypeGpuNode } from './core';
@@ -79,18 +80,6 @@ interface MeshResourceResult<T> {
   value: T;
 }
 
-const POINTER_EVENT_TYPES = new Set([
-  'click',
-  'pointermove',
-  'pointerenter',
-  'pointerleave',
-  'pointerdown',
-  'pointerup',
-  'dragstart',
-  'dragmove',
-  'dragend'
-]);
-
 export function createTypeGpuSceneCache(
   options: CreateTypeGpuSceneCacheOptions = {}
 ): TypeGpuSceneCache {
@@ -164,14 +153,19 @@ export function createSceneState(
 
   const interaction = recomputeInteraction
     ? createInteractionIndex(
-        (drawItems ?? collectMeshDrawItems(root, cache)).flatMap(interactionTargetFor)
+        createInteractionTargets(
+          drawItems ??
+            (cache.lastState && options.reuseDrawBatches !== true
+              ? cache.resourceItems
+              : collectMeshDrawItems(root, cache))
+        )
       )
     : cache.cleanInteraction;
 
   if (recomputeInteraction) {
     cache.cleanInteraction = interaction;
   }
-  if (drawItems) cache.transforms.attachInteraction(interaction.targets);
+  if (drawItems || recomputeInteraction) cache.transforms.attachInteraction(interaction.targets);
   if (recomputeDrawBatches) cache.transforms.commit();
 
   return (cache.lastState = {
@@ -560,9 +554,17 @@ function createLiveResourceKeys(): TypeGpuLiveResourceKeys {
   };
 }
 
-function interactionTargetFor(item: TypeGpuMeshDrawItem): TypeGpuInteractionTarget[] {
+function interactionTargetFor(
+  item: TypeGpuMeshDrawItem,
+  handlers: Set<string>
+): TypeGpuInteractionTarget[] {
   if (item.visible === false) return [];
-  const handlers = pointerHandlersFor(item.node);
+
+  // Interaction-only attribute edits reuse geometry and transform projections.
+  item.hitTest = hitTestMode(item.node.attributes.hitTest);
+  item.pointerEvents = item.node.attributes.pointerEvents === 'none' ? 'none' : 'auto';
+  item.drag = stringAttribute(item.node.attributes.drag);
+  item.dragButton = dragButtonAttribute(item.node.attributes.dragButton);
 
   if (item.pointerEvents === 'none' || item.hitTest === 'none' || handlers.size === 0) {
     return [];
@@ -585,14 +587,23 @@ function interactionTargetFor(item: TypeGpuMeshDrawItem): TypeGpuInteractionTarg
   ];
 }
 
-function pointerHandlersFor(node: TypeGpuNode): Set<string> {
-  const handlers = new Set<string>();
-
-  for (const type of POINTER_EVENT_TYPES) {
-    if ((node.listeners.get(type)?.size ?? 0) > 0) handlers.add(type);
+function createInteractionTargets(items: TypeGpuMeshDrawItem[]): TypeGpuInteractionTarget[] {
+  const cache = new Map<TypeGpuNode, Set<string>>();
+  const empty = new Set<string>();
+  function handlersFor(node: TypeGpuNode): Set<string> {
+    const previous = cache.get(node);
+    if (previous) return previous;
+    const inherited = node.parent ? handlersFor(node.parent) : empty;
+    let handlers = inherited;
+    for (const [type, listeners] of node.listeners) {
+      if (!listeners.size || !POINTER_NODE_EVENTS.has(type) || handlers.has(type)) continue;
+      if (handlers === inherited) handlers = new Set(inherited);
+      handlers.add(type);
+    }
+    cache.set(node, handlers);
+    return handlers;
   }
-
-  return handlers;
+  return items.flatMap((item) => interactionTargetFor(item, handlersFor(item.node)));
 }
 
 function shouldRecomputeDrawBatches(dirty: Dirty): boolean {

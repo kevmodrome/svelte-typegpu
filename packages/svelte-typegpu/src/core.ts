@@ -1,4 +1,6 @@
 import { Dirty, mergeDirty } from './dirty';
+import type { TypeGpuNodeEvent } from './node-events';
+export { dispatchNodeEvent, type TypeGpuNodeEvent, type TypeGpuNodeEventInit } from './node-events';
 import {
   dirtyForAttribute,
   dirtyForEventListener,
@@ -33,14 +35,6 @@ let nextNodeUid = 1;
 
 export interface TypeGpuRuntime {
   scheduleSync(root: TypeGpuNode, dirtyNode?: TypeGpuNode, dirtyMask?: Dirty): void;
-}
-
-export interface TypeGpuNodeEvent {
-  type: string;
-  target: TypeGpuNode;
-  currentTarget: TypeGpuNode;
-  detail?: unknown;
-  originalEvent?: Event;
 }
 
 export function createFragment(): TypeGpuNode {
@@ -204,16 +198,6 @@ export function removeEventListener(
     node.listeners.delete(type);
   }
   invalidateFrom(node, dirtyForEventListener(node.name, type));
-}
-
-export function dispatchNodeEvent(
-  node: TypeGpuNode,
-  type: string,
-  init: Partial<TypeGpuNodeEvent> = {}
-): void {
-  for (const handler of node.listeners.get(type) ?? []) {
-    handler({ type, target: node, currentTarget: node, ...init });
-  }
 }
 
 export function setText(node: TypeGpuNode, value: string): void {

@@ -1,4 +1,5 @@
 import { Dirty, mergeDirty } from './dirty';
+import { POINTER_NODE_EVENTS } from './node-events';
 
 const aliases = new Map<string, string>([
   ['perspective-camera', 'perspectiveCamera'],
@@ -123,17 +124,6 @@ const cameraBridgeAttributes = new Map<string, Set<string>>([
   ]
 ]);
 const modelGeometryAttributes = new Set(['src', 'data', 'asset']);
-const pointerEvents = new Set([
-  'click',
-  'pointermove',
-  'pointerenter',
-  'pointerleave',
-  'pointerdown',
-  'pointerup',
-  'dragstart',
-  'dragmove',
-  'dragend'
-]);
 const MAX_STABLE_TUPLE_LENGTH = 32;
 
 export function normalizePrimitiveName(name: string): string {
@@ -289,7 +279,7 @@ export function dirtyForEventListener(nodeName: string | undefined, eventName: s
   const customDirty = customDescriptors.get(name)?.dirtyForEventListener?.(eventName);
   if (customDirty !== undefined) return customDirty;
 
-  return (name === 'mesh' || name === 'model') && pointerEvents.has(eventName)
+  return POINTER_NODE_EVENTS.has(eventName)
     ? Dirty.Interaction
     : Dirty.None;
 }

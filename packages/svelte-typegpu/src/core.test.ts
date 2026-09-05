@@ -748,7 +748,7 @@ describe('TypeGPU renderer core', () => {
 
   it('stores and dispatches element events', () => {
     const box = createElement('box');
-    const handler = vi.fn();
+    const handler = vi.fn((event) => expect(event.currentTarget).toBe(box));
 
     addEventListener(box, 'click', handler);
     dispatchNodeEvent(box, 'click', { detail: { selected: true } });
@@ -757,7 +757,6 @@ describe('TypeGPU renderer core', () => {
       expect.objectContaining({
         type: 'click',
         target: box,
-        currentTarget: box,
         detail: { selected: true }
       })
     );

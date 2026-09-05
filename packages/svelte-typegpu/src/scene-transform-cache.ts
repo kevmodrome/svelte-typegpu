@@ -86,6 +86,7 @@ export class SceneTransformCache {
   }
 
   attachInteraction(targets: TypeGpuInteractionTarget[]): void {
+    for (const entry of this.#items.values()) entry.target = undefined;
     for (const target of targets) {
       if (target.drawItemId === undefined) continue;
       const entry = this.#items.get(target.drawItemId);
