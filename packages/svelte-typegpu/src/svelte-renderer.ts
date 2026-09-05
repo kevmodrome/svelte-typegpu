@@ -191,6 +191,7 @@ function createRuntime(
   let currentScene: TypeGpuSceneState | null = null;
   let hoveredTarget: TypeGpuInteractionTarget | null = null;
   let hoveredPath: TypeGpuNode[] = [];
+  let wheelListening = false;
 
   gpu.setFrameHandler?.((frame) => {
     if (disposed) return false;
@@ -238,8 +239,22 @@ function createRuntime(
       dirtyNodes: sceneNodes
     });
     gpu.setScene(scene);
+    if (scene.interaction !== currentScene?.interaction) {
+      setWheelListening(scene.interaction.targets.some((target) => target.handlers.has('wheel')));
+    }
     cameraInteraction.reconcile(scene);
     currentScene = scene;
+  }
+
+  function setWheelListening(listening: boolean) {
+    if (wheelListening === listening) return;
+    wheelListening = listening;
+    if (listening) {
+      // Scene cancellation must precede camera zoom, including late subscriptions.
+      canvas.addEventListener('wheel', dispatchCanvasPickedEvent, { capture: true, passive: false });
+    } else {
+      canvas.removeEventListener('wheel', dispatchCanvasPickedEvent, true);
+    }
   }
 
   function dispatchCanvasClick(event: MouseEvent) {
@@ -562,6 +577,7 @@ function createRuntime(
       currentScene = null;
       hoveredTarget = null;
       hoveredPath = [];
+      setWheelListening(false);
       cameraInteraction.dispose();
       canvas.removeEventListener('click', dispatchCanvasClick);
       canvas.removeEventListener('dblclick', dispatchCanvasPickedEvent);

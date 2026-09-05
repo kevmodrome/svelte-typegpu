@@ -27,8 +27,8 @@ to the event path. The Svelte Motion example uses one group click handler for
 
 ## Events and propagation
 
-`click`, `dblclick`, `contextmenu`, `pointerdown`, `pointerup`, `pointermove`, `dragstart`, `dragmove`, and
-`dragend` bubble from the picked mesh/model through scene-node ancestors. A parent
+`click`, `dblclick`, `contextmenu`, `wheel`, `pointerdown`, `pointerup`, `pointermove`,
+`dragstart`, `dragmove`, and `dragend` bubble from the picked mesh/model through scene-node ancestors. A parent
 handler makes eligible descendant geometry pickable, even without mesh listeners.
 Picking still chooses the nearest eligible geometry for the event, not every hit
 along the ray. Mesh `pointerEvents="none"`, `hitTest="none"`, and hierarchy
@@ -93,6 +93,49 @@ Handlers receive `TypeGpuNodeEvent`, not a DOM `PointerEvent`:
 One shared event follows a snapshotted ancestor path, so reparenting in a handler
 does not change that dispatch. Handler exceptions propagate to the caller.
 
+## Wheel interaction
+
+Use `onwheel` to manipulate a picked object and `ondblclick` to reset it:
+
+```svelte
+<script lang="ts">
+  import type { TypeGpuNodeEvent } from 'svelte-typegpu';
+  let size = $state(1);
+
+  function resize(event: TypeGpuNodeEvent) {
+    const input = event.originalEvent as WheelEvent;
+    if (!input.deltaY) return;
+    event.preventDefault();
+    size = Math.max(0.25, Math.min(4, size - Math.sign(input.deltaY) * 0.1));
+  }
+</script>
+
+<mesh scale={[size, size, size]} onwheel={resize} ondblclick={() => size = 1}>
+  <boxGeometry />
+  <standardMaterial color={[0.3, 0.8, 0.6, 1]} />
+</mesh>
+```
+
+Canceling a cancelable wheel input also prevents orbit-camera zoom for that input.
+The scene handles it before camera controls, even if its subscription was added
+later. `stopPropagation()` only stops scene propagation; it does not cancel zoom.
+Wheel input over empty space or geometry without eligible handlers still reaches
+camera controls. With no camera controls, unhandled wheel input retains normal
+browser behavior. Non-cancelable native wheel inputs cannot be canceled.
+
+Native `deltaX`, `deltaY`, `deltaZ`, `deltaMode`, and modifier keys are available
+on `originalEvent`. The example uses only direction for fixed size steps; code
+using the delta magnitude must account for its native units. See
+[WheelEvent behavior](https://developer.mozilla.org/en-US/docs/Web/API/Element/wheel_event).
+
+The runtime installs one non-passive canvas wheel listener only while eligible
+registered scene handlers exist. It reconciles that subscription when interaction
+membership changes, not on every bounds or material update. The pinned Svelte
+compiler retains a literal `onwheel={callback}` wrapper when `callback` becomes
+null. Use `<group {...{ onwheel: enabled ? resize : null }}>` to actually remove
+the registration without unmounting the group. Hiding all eligible geometry or
+disposing the root removes the scene's canvas wheel listener too.
+
 ## Performance and lifecycle
 
 Handler discovery happens when the interaction index is rebuilt, not every frame.
@@ -111,3 +154,6 @@ Tests cover compiled-Svelte event props, group boundaries, propagation controls,
 listener changes, reparenting, and disposal. The real Tween/Spring cadence matrix
 runs at synthetic 60/120/144 Hz with both callback orders, asserting targeted
 uploads, shared interaction data, GPU resource reuse, and demand-mode idle.
+The same clocks exercise double-click/context-menu/wheel-driven state changes in
+demand and manual modes. A retained wheel subscription adds no per-frame scan or
+listener churn. Event dispatch without reactive changes does not request a frame.

@@ -4,6 +4,7 @@ export const BUBBLING_NODE_EVENTS = new Set([
   'click',
   'dblclick',
   'contextmenu',
+  'wheel',
   'pointerdown',
   'pointerup',
   'pointermove',

@@ -55,6 +55,14 @@ No scene wheel handlers means no additional scroll-blocking listener. Adding,
 removing, hiding, or unmounting eligible geometry updates the subscription. Disposal
 removes it with matching capture options. No timers, frame tasks, or extra RAF.
 
+Compiler evidence refined the registration contract: a literal `onwheel={callback}`
+keeps a Svelte wrapper even when the callback becomes null. A conditional event
+prop spread removes the registration. Eligibility follows the actual scene listener
+registry; it does not inspect or rewrite compiler-owned closures. Tests cover both
+literal attributes and late subscriptions through spreads. The happy-dom fixture
+supplies canvas offsets and WheelEvent mouse fields because that test environment
+does not compute/inherit them; native capture/default-cancellation remains real.
+
 ## 5. Vertical slices and verification
 
 1. Double-click/context menu: compiled props, capture/target/bubble, cancellation,
@@ -65,6 +73,12 @@ removes it with matching capture options. No timers, frame tasks, or extra RAF.
    add event-driven cadence checks and commit separately.
 3. Full workspace tests/builds and live example verification when the Mac is
    unlocked. Synthetic clocks do not establish physical display throughput.
+
+Verification: all 648 workspace tests pass (577 renderer, 42 docs, 24 example,
+5 workspace), as do renderer typechecking and both production builds. The 27-case
+event-input matrix and 24-case real Tween/Spring matrix cover 60/120/144 Hz,
+callback order, targeted uploads, GPU reuse, and listener stability. Browser
+verification remains pending because computer-use reports the Mac locked.
 
 ## 6. Risks and unresolved decisions
 

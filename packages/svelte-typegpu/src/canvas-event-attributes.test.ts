@@ -28,25 +28,29 @@ function setup() {
   return { canvas, gpu, root, runtime };
 }
 
-function input(canvas: HTMLCanvasElement, type: string, init: MouseEventInit = {}) {
-  const event = new MouseEvent(type, {
+function input(canvas: HTMLCanvasElement, type: string, init: WheelEventInit = {}) {
+  const EventConstructor = type === 'wheel' ? WheelEvent : MouseEvent;
+  const event = new EventConstructor(type, {
     clientX: 50,
     clientY: 50,
     bubbles: true,
     cancelable: true,
     ...init
   });
-  // happy-dom does not derive canvas offsets from client coordinates.
+  // happy-dom neither computes offsets nor inherits WheelEvent mouse coordinates.
   Object.defineProperties(event, {
-    offsetX: { value: event.clientX },
-    offsetY: { value: event.clientY }
+    clientX: { value: init.clientX ?? 50 },
+    clientY: { value: init.clientY ?? 50 },
+    offsetX: { value: init.clientX ?? 50 },
+    offsetY: { value: init.clientY ?? 50 },
+    ctrlKey: { value: init.ctrlKey ?? false }
   });
   canvas.dispatchEvent(event);
   return event;
 }
 
 describe('native canvas event attributes', () => {
-  it.each(['dblclick', 'contextmenu'])(
+  it.each(['dblclick', 'contextmenu', 'wheel'])(
     'routes %s through compiled capture, target and parent props without scheduling frames',
     async (type) => {
       const Scene = compileTypeGpuSource(`
@@ -109,7 +113,7 @@ describe('native canvas event attributes', () => {
     }
   );
 
-  it.each(['dblclick', 'contextmenu'])(
+  it.each(['dblclick', 'contextmenu', 'wheel'])(
     'updates parent-only %s handlers and respects local picking opt-outs',
     async (type) => {
       const Scene = compileTypeGpuSource<{ replace(): void; disable(): void; hide(): void }>(`
@@ -155,6 +159,151 @@ describe('native canvas event attributes', () => {
         await unmount(instance);
         runtime.dispose();
       }
+    }
+  );
+
+  it('attaches wheel only for eligible handlers and retains the subscription during motion', async () => {
+    const Scene = compileTypeGpuSource<{
+      listen(callback: ((event: TypeGpuNodeEvent) => void) | null): void;
+      show(visible: boolean): void;
+      move(x: number): void;
+    }>(`
+      <script>
+        let onwheel = $state(null);
+        let visible = $state(true);
+        let x = $state(0);
+        export function listen(callback) { onwheel = callback; }
+        export function show(value) { visible = value; }
+        export function move(value) { x = value; }
+      </script>
+      <scene><group {...{ onwheel }}>
+        <mesh {visible} position={[x, 0, 0]}><boxGeometry /></mesh>
+      </group></scene>
+    `);
+    const { canvas, gpu, root, runtime } = setup();
+    const add = vi.spyOn(canvas, 'addEventListener');
+    const remove = vi.spyOn(canvas, 'removeEventListener');
+    const instance = mount(Scene, { renderer, target: root });
+    const first = vi.fn();
+    const second = vi.fn();
+    try {
+      flushSync();
+      await Promise.resolve();
+      expect(add.mock.calls.filter(([type]) => type === 'wheel')).toEqual([]);
+      flushSync(() => instance.listen(first));
+      await Promise.resolve();
+      expect(add).toHaveBeenCalledExactlyOnceWith('wheel', expect.any(Function), {
+        capture: true,
+        passive: false
+      });
+      const callback = add.mock.calls[0][1];
+      const interaction = gpu.setScene.mock.lastCall![0].interaction;
+      const scan = vi.spyOn(interaction.targets, 'some');
+      for (let x = 1; x <= 10; x++) {
+        flushSync(() => instance.move(x / 10));
+        await Promise.resolve();
+        expect(gpu.setScene.mock.lastCall![0].interaction).toBe(interaction);
+      }
+      expect(scan).not.toHaveBeenCalled();
+      expect(add).toHaveBeenCalledOnce();
+      expect(remove).not.toHaveBeenCalled();
+      flushSync(() => instance.listen(second));
+      await Promise.resolve();
+      expect(add).toHaveBeenCalledOnce();
+      flushSync(() => instance.show(false));
+      await Promise.resolve();
+      expect(remove).toHaveBeenCalledExactlyOnceWith('wheel', callback, true);
+      flushSync(() => instance.show(true));
+      await Promise.resolve();
+      expect(add).toHaveBeenCalledTimes(2);
+      flushSync(() => instance.listen(null));
+      await Promise.resolve();
+      expect(remove).toHaveBeenCalledTimes(2);
+      flushSync(() => instance.listen(first));
+      await Promise.resolve();
+      expect(add).toHaveBeenCalledTimes(3);
+    } finally {
+      await unmount(instance);
+      runtime.dispose();
+    }
+    expect(remove.mock.calls.filter(([type]) => type === 'wheel')).toHaveLength(3);
+  });
+
+  it.each([
+    { method: 'preventDefault', cancelable: true, capture: false, zooms: false },
+    { method: 'preventDefault', cancelable: true, capture: true, zooms: false },
+    { method: 'preventDefault', cancelable: false, capture: false, zooms: true },
+    { method: 'stopPropagation', cancelable: true, capture: false, zooms: true },
+    { method: null, cancelable: true, capture: false, zooms: true }
+  ] as const)(
+    'handles late wheel $method (cancelable: $cancelable, capture: $capture) before camera zoom',
+    async ({ method, cancelable, capture, zooms }) => {
+      const pending = new Map<number, FrameRequestCallback>();
+      let id = 0;
+      vi.stubGlobal(
+        'requestAnimationFrame',
+        vi.fn((callback: FrameRequestCallback) => {
+          pending.set(++id, callback);
+          return id;
+        })
+      );
+      vi.stubGlobal('cancelAnimationFrame', (id: number) => pending.delete(id));
+      const Scene = compileTypeGpuSource<{
+        listen(handler: (event: TypeGpuNodeEvent) => void): void;
+      }>(`
+        <script>
+          let handler = $state(null);
+          export function listen(callback) { handler = callback; }
+        </script>
+        <scene>
+          <perspectiveCamera position={[0, 0, 5]} target={[0, 0, 0]}>
+            <controls mode="orbit"><pointerControls wheel="zoom" /></controls>
+          </perspectiveCamera>
+          <group {...{ onwheel${capture ? 'capture' : ''}: handler }}>
+            <mesh><boxGeometry /></mesh>
+          </group>
+        </scene>
+      `);
+      const { canvas, gpu, root, runtime } = setup();
+      const instance = mount(Scene, { renderer, target: root });
+      const handler = vi.fn((event: TypeGpuNodeEvent) => {
+        if (method) event[method]();
+      });
+      try {
+        flushSync();
+        await Promise.resolve();
+        // Camera listeners already exist before the first scene wheel handler.
+        flushSync(() => instance.listen(handler));
+        await Promise.resolve();
+        const event = input(canvas, 'wheel', {
+          deltaY: 40,
+          deltaMode: 1,
+          ctrlKey: true,
+          cancelable
+        });
+        expect(handler).toHaveBeenCalledOnce();
+        expect(handler.mock.calls[0][0].originalEvent).toBe(event);
+        expect(event).toMatchObject({ deltaY: 40, deltaMode: 1, ctrlKey: true });
+        expect(pending.size).toBe(zooms ? 1 : 0);
+        for (const [id, callback] of [...pending]) {
+          pending.delete(id);
+          callback(1000 / 120);
+        }
+        expect(gpu.setCamera).toHaveBeenCalledTimes(zooms ? 1 : 0);
+        expect(pending.size).toBe(0);
+        input(canvas, 'wheel', { clientX: 0, clientY: 0, deltaY: 20 });
+        expect(handler).toHaveBeenCalledOnce();
+        expect(pending.size).toBe(1);
+        for (const [id, callback] of [...pending]) {
+          pending.delete(id);
+          callback(2000 / 120);
+        }
+        expect(gpu.setCamera).toHaveBeenCalledTimes(zooms ? 2 : 1);
+      } finally {
+        await unmount(instance);
+        runtime.dispose();
+      }
+      expect(pending.size).toBe(0);
     }
   );
 });

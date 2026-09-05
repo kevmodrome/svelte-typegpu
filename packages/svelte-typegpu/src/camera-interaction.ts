@@ -234,7 +234,13 @@ export function createCameraInteractionController({
 
   const onWheel = (event: Event) => {
     const wheelEvent = event as WheelEvent;
-    if (!activeScene || !activePointerControls || !orbit || activePointerControls.wheel === 'none') {
+    if (
+      !activeScene ||
+      !activePointerControls ||
+      !orbit ||
+      activePointerControls.wheel === 'none' ||
+      wheelEvent.defaultPrevented
+    ) {
       return;
     }
 

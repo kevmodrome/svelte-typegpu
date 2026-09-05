@@ -11,7 +11,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | `{#snippet}` and `{@render}` | Supported, including attachment forwarding |
 | `<svelte:element>` | Dynamic geometry/materials, prop spreads, events, attachment cleanup, and keyed identity tested |
 | Component `$bindable` props and component `bind:this` | Supported and tested |
-| Scene event attributes and `onclickcapture` | Capture/target/bubble ordering, group hover, and propagation controls supported |
+| Scene event attributes and `onclickcapture` | Capture/target/bubble ordering, group hover, double-click/context-menu/wheel, and propagation controls supported |
 | `Tween` / `Spring` bound to transforms and material values | Supported; frame delivery tested at 60/120/144 Hz in both RAF callback orders |
 | `{@attach}` | Supported on scene nodes, including reactive replacement and component prop spreads |
 | `use:` | Supported for renderer-safe actions with update/destroy cleanup |

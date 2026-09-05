@@ -206,9 +206,12 @@ describe('GPU resource and frame lifecycle', () => {
       const { renderer, root: gpuRoot, buffers, submissions } = await setupRenderer('demand');
       const sceneUpdates = vi.spyOn(renderer, 'setScene');
       const root = createFragment();
+      const canvas = new EventTarget() as HTMLCanvasElement;
+      const addCanvasListener = vi.spyOn(canvas, 'addEventListener');
+      const removeCanvasListener = vi.spyOn(canvas, 'removeEventListener');
       const runtime = createTypeGpuRuntimeForTest(
         root,
-        new EventTarget() as HTMLCanvasElement,
+        canvas,
         renderer
       );
       root.runtime = runtime;
@@ -223,7 +226,9 @@ describe('GPU resource and frame lifecycle', () => {
           scene: Scene,
           sceneProps: {
             motion, setup, resourceSetup, geometry: 'boxGeometry', material: 'standardMaterial',
-            events: { [capture ? 'onclickcapture' : 'onclick']: vi.fn() }
+            events: Object.fromEntries(['click', 'dblclick', 'contextmenu', 'wheel'].map(type => [
+              `on${type}${capture ? 'capture' : ''}`, vi.fn()
+            ]))
           }
         }
       });
@@ -247,12 +252,15 @@ describe('GPU resource and frame lifecycle', () => {
         const interaction = sceneUpdates.mock.lastCall![0].interaction;
         expect(interaction.targets).toHaveLength(301);
         const handlers = interaction.targets[0].handlers;
-        expect(handlers).toEqual(new Set(['click']));
+        expect(handlers).toEqual(new Set(['click', 'dblclick', 'contextmenu', 'wheel']));
         expect(interaction.targets.every(target => target.handlers === handlers)).toBe(true);
         expect(interaction.targets.every(target => target.node.captureListeners === undefined)).toBe(true);
         const group = interaction.targets[0].node.parent!;
         expect(group.captureListeners?.get('click')?.size ?? 0).toBe(capture ? 1 : 0);
         expect(group.listeners.get('click')?.size ?? 0).toBe(capture ? 0 : 1);
+        addCanvasListener.mockClear();
+        removeCanvasListener.mockClear();
+        const scanTargets = vi.spyOn(interaction.targets, 'some');
         sceneUpdates.mockClear();
         const buffer = buffers.find((buffer) => buffer.label.endsWith('instances'))!;
         gpuRoot.createBuffer.mockClear();
@@ -283,6 +291,9 @@ describe('GPU resource and frame lifecycle', () => {
         expect(cleanup).not.toHaveBeenCalled();
         expect(resourceSetup).toHaveBeenCalledTimes(2);
         expect(resourceCleanup).not.toHaveBeenCalled();
+        expect(addCanvasListener).not.toHaveBeenCalled();
+        expect(removeCanvasListener).not.toHaveBeenCalled();
+        expect(scanTargets).not.toHaveBeenCalled();
         expect(gpuRoot.createBuffer).not.toHaveBeenCalled();
         expect(gpuRoot.createBindGroup).not.toHaveBeenCalled();
         expect(createMeshPipeline).not.toHaveBeenCalled();
@@ -302,6 +313,143 @@ describe('GPU resource and frame lifecycle', () => {
       }
       expect(cleanup).toHaveBeenCalledOnce();
       expect(resourceCleanup).toHaveBeenCalledTimes(2);
+      expect(pending.size).toBe(0);
+    }
+  );
+
+  it.each(
+    [60, 120, 144].flatMap((hz) =>
+      ['dblclick', 'contextmenu', 'wheel'].flatMap((type) => [
+        { hz, type, frameloop: 'manual' as const, rendererFirst: false },
+        { hz, type, frameloop: 'demand' as const, rendererFirst: false },
+        { hz, type, frameloop: 'demand' as const, rendererFirst: true }
+      ])
+    )
+  )(
+    'delivers $type state changes at $hz Hz in $frameloop mode (renderer first: $rendererFirst)',
+    async ({ hz, type, frameloop, rendererFirst }) => {
+      const pending = new Map<number, FrameRequestCallback>();
+      let id = 0;
+      let now = 0;
+      let producing = true;
+      vi.stubGlobal(
+        'requestAnimationFrame',
+        vi.fn((callback: FrameRequestCallback) => {
+          pending.set(++id, callback);
+          return id;
+        })
+      );
+      vi.stubGlobal(
+        'cancelAnimationFrame',
+        vi.fn((id: number) => pending.delete(id))
+      );
+      const Scene = compileTypeGpuSource(`
+      <script>
+        let tint = $state(0);
+        function change(event) { event.preventDefault(); tint += 0.001; }
+      </script>
+      <scene>
+        <perspectiveCamera position={[0, 0, 5]} target={[0, 0, 0]} />
+        {#each Array.from({ length: 300 }, (_, i) => i) as i (i)}
+          <mesh position={[i + 10, 0, 0]}><boxGeometry /><standardMaterial /></mesh>
+        {/each}
+        <mesh on${type}={change}>
+          <boxGeometry /><standardMaterial color={[tint, 0, 0, 1]} />
+        </mesh>
+      </scene>
+    `);
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 100;
+      const { renderer, root: gpuRoot, buffers, submissions } = await setupRenderer(frameloop);
+      const updates = vi.spyOn(renderer, 'setScene');
+      const root = createFragment();
+      const runtime = createTypeGpuRuntimeForTest(root, canvas, renderer);
+      root.runtime = runtime;
+      const instance = mount(Scene, { renderer: sceneRenderer, target: root });
+      const order: string[] = [];
+      function dispatch() {
+        const EventConstructor = type === 'wheel' ? WheelEvent : MouseEvent;
+        const event = new EventConstructor(type, { bubbles: true, cancelable: true });
+        Object.defineProperties(event, { offsetX: { value: 50 }, offsetY: { value: 50 } });
+        canvas.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(true);
+      }
+      function producer() {
+        if (!producing) return;
+        dispatch();
+        requestAnimationFrame(producer);
+      }
+      async function step() {
+        now += 1000 / hz;
+        order.length = 0;
+        for (const [id, callback] of [...pending]) {
+          if (!pending.delete(id)) continue;
+          order.push(callback === producer ? 'input' : 'render');
+          callback(now);
+          flushSync();
+          await Promise.resolve();
+        }
+      }
+      try {
+        flushSync();
+        await Promise.resolve();
+        for (let i = 0; i < 3; i++) await step();
+        expect(pending.size).toBe(0);
+        const initial = updates.mock.lastCall![0];
+        const instances = buffers.find((buffer) => buffer.label.endsWith('instances'))!;
+        instances.write.mockClear();
+        gpuRoot.createBuffer.mockClear();
+        gpuRoot.createBindGroup.mockClear();
+        vi.mocked(createMeshPipeline).mockClear();
+        updates.mockClear();
+        if (frameloop === 'demand') {
+          if (rendererFirst) {
+            renderer.invalidate();
+            renderer.invalidate();
+          }
+          requestAnimationFrame(producer);
+          if (!rendererFirst) {
+            renderer.invalidate();
+            renderer.invalidate();
+          }
+        }
+        for (let frame = 0; frame < hz; frame++) {
+          const before = submissions.length;
+          if (frameloop === 'manual') {
+            dispatch();
+            flushSync();
+            await Promise.resolve();
+            now += 1000 / hz;
+            renderer.renderFrame(now);
+          } else {
+            await step();
+            expect(order).toEqual(rendererFirst ? ['render', 'input'] : ['input', 'render']);
+          }
+          expect(submissions.length - before).toBe(1);
+        }
+        expect(instances.write).toHaveBeenCalledTimes(hz);
+        for (const [, range] of instances.write.mock.calls) {
+          expect(range).toEqual({ startOffset: 300 * 96, endOffset: 301 * 96 });
+        }
+        expect(instances.data[300 * 24 + 4]).toBeCloseTo(hz * 0.001);
+        for (const [state] of updates.mock.calls) {
+          expect(state.interaction).toBe(initial.interaction);
+          expect(state.resourceItems).toBe(initial.resourceItems);
+          expect(state.drawBatchesChanged).toBe(false);
+        }
+        expect(gpuRoot.createBuffer).not.toHaveBeenCalled();
+        expect(gpuRoot.createBindGroup).not.toHaveBeenCalled();
+        expect(createMeshPipeline).not.toHaveBeenCalled();
+        producing = false;
+        for (let i = 0; i < 4; i++) await step();
+        expect(pending.size).toBe(0);
+        if (frameloop === 'manual') expect(requestAnimationFrame).not.toHaveBeenCalled();
+      } finally {
+        producing = false;
+        await unmount(instance);
+        runtime.dispose();
+        for (const [id, callback] of pending) if (callback === producer) pending.delete(id);
+      }
       expect(pending.size).toBe(0);
     }
   );
