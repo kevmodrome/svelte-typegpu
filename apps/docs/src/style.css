@@ -768,6 +768,11 @@ textarea {
     var(--shadow);
 }
 
+.preview-panel.preview-with-store-controls {
+  aspect-ratio: auto;
+  height: 480px;
+}
+
 .preview-panel::before,
 .preview-panel::after {
   position: absolute;
@@ -844,6 +849,10 @@ textarea {
   background: rgb(11 15 13 / 86%);
   color: var(--muted);
   font-size: 0.9rem;
+}
+
+.preview-with-store-controls .preview-status {
+  inset: 64px 14px auto;
 }
 
 .example-controls {

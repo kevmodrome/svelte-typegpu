@@ -108,9 +108,10 @@ The full build, renderer TypeScript/Svelte checks and all 1,115 workspace tests
 pass. The dev route `/examples/shared-stores` returns HTTP 200 on port 3334.
 The existing example app's 501.64 kB chunk warning is unchanged.
 
-Live desktop/mobile layout, pixel and actual GPU interaction checks remain
-pending: the computer-use tool reports the Mac locked. The user has been asked
-to unlock it. HTTP and mocked-GPU tests do not substitute for those checks.
+Physical desktop GPU checks remain pending while the Mac is locked. An isolated
+headless Chromium/SwiftShader check can establish layout and visible rendering,
+but is not evidence of hardware GPU throughput or the monitor's refresh rate.
+HTTP and mocked-GPU tests do not substitute for pixel and interaction checks.
 
 ## Generated child declarations
 
@@ -130,3 +131,42 @@ declaration. This is a build-time correction with no runtime or frame-loop chang
 
 The focused type check now reports zero diagnostics; all 1,117 workspace tests
 and the full production build pass after generating child declarations.
+
+## Mobile preview correction
+
+Headless layout inspection found that the shared preview's mobile 16:10 aspect
+ratio gave the canvas only 75px of height at a 390px viewport, after the store
+controls consumed their row. Give the Shared Stores preview a stable 480px height
+instead of deriving its total height from the canvas-only aspect ratio. A
+conditional DOM class in `ExamplePreview.svelte` scopes the rule in `style.css` to
+this example; ordinary canvas-only examples keep their sizing. This is a local docs layout change, not
+a renderer or scheduling change. Verify screenshots and layout bounds at desktop,
+390px and 320px widths: usable canvas height, visible controls and no overlap or
+horizontal overflow.
+
+A minimum-height override while retaining the aspect ratio transferred a 768px
+intrinsic width into the parent grid, clipping the controls on mobile. Explicit
+height without the aspect ratio avoids that coupling. Check actual element bounds
+against the viewport; page `scrollWidth` alone misses overflow that an ancestor
+clips.
+
+The loading/error status overlay also covered the selection and Reset controls.
+Position it below the FPS badge inside the canvas area for this workbench only.
+Include status/control non-overlap in the browser bounds checks.
+
+The first headless screenshots were blank even for Native Events. Explicit ANGLE
+SwiftShader flags produced visible Native Events geometry and a passing minimal
+WebGPU clear probe. Subsequent runs of both examples stalled in native
+`GPUAdapter.requestDevice()` before scene creation, with no validation errors;
+full Chromium and headless shell both exhibited the stall. Shared Stores pixel,
+scene-picking and manual/demand browser checks are therefore still open. Keep
+these failures separate from the verified controlled-clock and mocked-GPU tests.
+
+After the layout correction, Playwright bounds assertions and inspected screenshots
+pass at 1440x1100, 390x844 and 320x740. The canvas is 352px high on desktop and
+329px on both mobile widths. The preview stays within the viewport, controls stay
+inside the preview and below the canvas, and the status overlay does not overlap
+the controls. Verify both the observed pending state and an unavailable-adapter
+error injected into the isolated test browser; the longer error wraps without
+covering controls. These six layout checks do not claim scene pixels were drawn.
+All 50 docs tests and the docs production build pass. No frame-loop code changed.

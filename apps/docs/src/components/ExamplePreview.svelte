@@ -235,7 +235,7 @@
 {/if}
 
 <div class:preview-with-controls={hasControls}>
-  <section class="preview-panel" aria-label={`${label} live preview`}>
+  <section class="preview-panel" class:preview-with-store-controls={slug === 'shared-stores'} aria-label={`${label} live preview`}>
     {#key slug}
       {#if slug === 'native-events' || slug === 'shared-stores'}
         {@const Viewport = sceneComponents[slug]}
