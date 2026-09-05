@@ -25,6 +25,7 @@ describe('docs example registry', () => {
     expect(examples.map((example) => example.slug)).toEqual([
       'two-boxes',
       'svelte-motion',
+      'native-events',
       'phong-reflection',
       'simple-shadow',
       'disco-shader-pass',
@@ -70,6 +71,25 @@ describe('docs example registry', () => {
         '<scene'
       );
     }
+  });
+
+  it('publishes complete scene and DOM native event examples', () => {
+    const example = getExampleBySlug('native-events');
+    expect(example.category).toBe('interaction');
+    expect(example.sourceFiles.map((file) => file.filename)).toEqual([
+      'NativeEvents.typegpu.svelte',
+      'NativeEventsPreview.svelte',
+      'event-objects.ts'
+    ]);
+    for (const event of [
+      'onclick', 'onclickcapture', 'onpointerenter', 'onpointerleave',
+      'ondblclick', 'oncontextmenu', 'onwheel', 'onkeydown', 'onfocus', 'onblur'
+    ]) {
+      expect(example.code).toContain(event);
+    }
+    expect(example.code).toContain('canvasProps=');
+    expect(example.code).toContain("frameloop: 'demand'");
+    expect(example.code).not.toContain('requestAnimationFrame');
   });
 
   it('includes the Disco shader-pass example built from renderer primitives', () => {
@@ -271,12 +291,14 @@ describe('docs example registry', () => {
 
   it('keeps generated files portable across checkout locations', () => {
     const generatedRoot = new URL('../generated/', import.meta.url);
-    const absolutePathPattern = /(?:\/Users\/|\/home\/|\/tmp\/|\/private\/|[A-Za-z]:\\)/;
+    const absolutePathPattern = /(?:\/Users\/|\/home\/|\/tmp\/|\/private\/|\b[A-Za-z]:\\)/;
+    expect(JSON.stringify('default:\n  return;')).not.toMatch(absolutePathPattern);
+    expect(String.raw`C:\workspace\scene.ts`).toMatch(absolutePathPattern);
 
     for (const fileUrl of generatedFiles(generatedRoot)) {
       const source = readFileSync(fileUrl, 'utf8');
 
-      expect(source).not.toMatch(absolutePathPattern);
+      expect(source.match(absolutePathPattern), fileURLToPath(fileUrl)).toBeNull();
     }
   });
 });

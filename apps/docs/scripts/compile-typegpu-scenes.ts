@@ -172,13 +172,12 @@ function writeGeneratedSourceFile(
   const outPath = path.join(sceneDirectory, generatedModuleName(sourceFile.path));
 
   if (sourceFile.label.endsWith('.svelte')) {
+    const custom = sourceFile.label.endsWith('.typegpu.svelte');
     const compiled = compile(sourceFile.source, {
       filename: sourceFile.path,
       generate: 'client',
       runes: true,
-      experimental: {
-        customRenderer: rendererPath
-      }
+      experimental: custom ? { customRenderer: rendererPath } : undefined
     });
     const portableCode = rewriteGeneratedImports(
       compiled.js.code.replaceAll(rendererPath, 'svelte-typegpu/svelte-renderer'),
@@ -186,6 +185,9 @@ function writeGeneratedSourceFile(
     );
 
     writeFileSync(outPath, `${header(sourceFile.path)}\n${portableCode}`);
+    if (!custom) {
+      writeFileSync(outPath.replace(/\.js$/, '.d.ts'), sceneDeclaration(sourceFile.path));
+    }
     return;
   }
 

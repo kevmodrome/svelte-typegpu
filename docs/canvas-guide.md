@@ -75,6 +75,29 @@ are present during SSR, but attachments, handlers, and WebGPU do not run there.
 Adding a label or tabindex does not implement keyboard navigation among 3D objects;
 provide accessible DOM controls for scene interactions.
 
+## Complete native-event example
+
+The docs site's `/examples/native-events` playground pairs
+`NativeEvents.typegpu.svelte` with `NativeEventsPreview.svelte`. The DOM wrapper
+accepts the scene component, so it can be server-rendered before Canvas mounts
+the client-only scene:
+
+```svelte
+<script lang="ts">
+  import NativeEvents from './NativeEvents.typegpu.svelte';
+  import NativeEventsPreview from './NativeEventsPreview.svelte';
+</script>
+
+<NativeEventsPreview scene={NativeEvents} />
+```
+
+It demonstrates `canvasProps.onkeydown`, `onfocus`, `onblur`, and `onpointerdown`
+alongside scene `onclick`, `onclickcapture`, `onpointerenter`, `onpointerleave`,
+`onwheel`, `ondblclick`, and `oncontextmenu`. DOM controls offer the same object
+selection, rotation, and size changes as keyboard/pointer input. Only recognized
+unmodified keys are canceled, and wheel events over objects resize them without
+zooming the camera. Wheel events over the background retain camera zoom.
+
 ## Root lifetime
 
 `options` are initialization-only `TypeGpuRootOptions`, without `target`, `canvas`,

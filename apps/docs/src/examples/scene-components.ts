@@ -3,6 +3,7 @@ import type { ExampleSlug } from './example-definitions';
 import {
   DiscoShaderPass,
   Gravity,
+  NativeEvents,
   MultipleSmokyTriangles,
   PhongReflection,
   SimpleShadow,
@@ -14,6 +15,7 @@ import {
 type TypeGpuSceneComponent = Component<any>;
 
 export const sceneComponents = {
+  'native-events': NativeEvents,
   'svelte-motion': SvelteMotion,
   'two-boxes': TwoBoxes,
   'phong-reflection': PhongReflection,

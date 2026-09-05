@@ -38,6 +38,23 @@ export const exampleDefinitions = [
     typeGpuSourceFiles: []
   },
   {
+    slug: 'native-events',
+    title: 'Native Events',
+    category: 'interaction',
+    tags: ['3d', 'events', 'keyboard', 'picking'],
+    description: 'Three selectable objects with pointer, keyboard, and wheel interactions.',
+    notes:
+      'Hover to highlight, click to select, and scroll over an object to resize it. With the canvas focused, arrow keys rotate or resize the selection; Escape resets it. Double-click or right-click an object to reset it. Scene callbacks receive TypeGpuNodeEvent; canvasProps callbacks receive native DOM events.',
+    exportName: 'NativeEvents',
+    sourceUrl: new URL('./native-events/NativeEvents.typegpu.svelte', import.meta.url),
+    sourceFiles: [
+      new URL('./native-events/NativeEvents.typegpu.svelte', import.meta.url),
+      new URL('./native-events/NativeEventsPreview.svelte', import.meta.url),
+      new URL('./native-events/event-objects.ts', import.meta.url)
+    ],
+    typeGpuSourceFiles: []
+  },
+  {
     slug: 'phong-reflection',
     title: 'Phong Reflection Model',
     category: 'rendering',

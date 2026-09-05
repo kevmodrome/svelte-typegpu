@@ -1,5 +1,6 @@
 <script lang="ts">
   import Canvas from 'svelte-typegpu/canvas';
+  import NativeEventsPreview from '../examples/native-events/NativeEventsPreview.svelte';
   import type { TypeGpuCameraSettings, Vector3Tuple } from 'svelte-typegpu';
   import type { ExampleSlug } from '../examples/example-definitions';
   import { sceneComponents } from '../examples/scene-components';
@@ -190,6 +191,9 @@
   }
 </script>
 
+{#if slug === 'native-events'}
+  <NativeEventsPreview scene={sceneComponents['native-events']} />
+{:else}
 <div class:preview-with-controls={hasControls}>
   <section class="preview-panel" aria-label={`${label} live preview`}>
     {#key slug}
@@ -518,3 +522,4 @@
     </section>
   {/if}
 </div>
+{/if}

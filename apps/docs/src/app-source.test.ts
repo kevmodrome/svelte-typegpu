@@ -100,6 +100,18 @@ describe('docs app source wiring', () => {
     expect(orbitField).not.toMatch(/from ['"]\.\/disco-fragment['"]/);
   });
 
+  it('compiles native event DOM wrappers separately from their scene', () => {
+    const dom = read('./generated/typegpu-scenes/native-events/NativeEventsPreview.js');
+    const scene = read('./generated/typegpu-scenes/native-events/NativeEvents.typegpu.js');
+    expect(dom).toContain("from './event-objects.js'");
+    expect(dom).not.toContain("from 'svelte-typegpu/svelte-renderer'");
+    expect(scene).toContain("from 'svelte-typegpu/svelte-renderer'");
+    const preview = read('./components/ExamplePreview.svelte');
+    expect(preview).toContain("<NativeEventsPreview scene={sceneComponents['native-events']} />");
+    expect(preview).toContain("from '../examples/native-events/NativeEventsPreview.svelte'");
+    expect(read('./style.css')).toContain('.native-events-preview canvas:focus-visible');
+  });
+
   it('hydrates the live preview but keeps the code panel static on the examples route', () => {
     const routeSource = read('./routes/Examples.svelte');
     const workbenchSource = read('./components/ExampleWorkbench.svelte');
