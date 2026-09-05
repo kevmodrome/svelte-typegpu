@@ -31,6 +31,7 @@ import {
   type TypeGpuRuntime
 } from './core';
 import { Dirty } from './dirty';
+import { dispatchNodeEventOnPath } from './node-events';
 import { createSceneState, createTypeGpuSceneCache } from './scene-state';
 import { createModelCache, type TypeGpuModelCacheOptions } from './model-cache';
 import type {
@@ -341,6 +342,11 @@ function createRuntime(
     }
   }
 
+  function dispatchCanvasPointerEntry(event: PointerEvent) {
+    if (activeDrag) return;
+    updateHoveredTarget(pickCanvasTarget(event), event);
+  }
+
   function dispatchCanvasPointerUp(event: PointerEvent) {
     if (finishActiveDrag(event, false)) return;
 
@@ -400,11 +406,27 @@ function createRuntime(
     hoveredTarget = nextTarget;
     hoveredPath = nextPath;
 
+    if (previousTarget) {
+      dispatchNodeEventOnPath(previousPath, 'pointerout', {
+        originalEvent: event,
+        relatedTarget: nextTarget?.node ?? null,
+        detail: { instanceId: previousTarget.instanceId }
+      });
+      if (disposed || hoveredPath !== nextPath) return false;
+    }
     for (let i = 0; i < previousPath.length - common; i++) {
       dispatchNodeEvent(previousPath[i], 'pointerleave', {
         originalEvent: event,
         relatedTarget: nextTarget?.node ?? null,
         detail: { instanceId: previousTarget!.instanceId }
+      });
+      if (disposed || hoveredPath !== nextPath) return false;
+    }
+    if (hit) {
+      dispatchNodeEventOnPath(nextPath, 'pointerover', {
+        originalEvent: event,
+        relatedTarget: previousTarget?.node ?? null,
+        detail: { instanceId: hit.instanceId, point: hit.point }
       });
       if (disposed || hoveredPath !== nextPath) return false;
     }
@@ -546,6 +568,7 @@ function createRuntime(
   canvas.addEventListener('dblclick', dispatchCanvasPickedEvent);
   canvas.addEventListener('contextmenu', dispatchCanvasPickedEvent);
   canvas.addEventListener('pointerdown', dispatchCanvasPointerDown);
+  canvas.addEventListener('pointerover', dispatchCanvasPointerEntry);
   canvas.addEventListener('pointermove', dispatchCanvasPointerMove);
   canvas.addEventListener('pointerup', dispatchCanvasPointerUp);
   canvas.addEventListener('pointercancel', dispatchCanvasPointerCancel);
@@ -601,6 +624,7 @@ function createRuntime(
       canvas.removeEventListener('dblclick', dispatchCanvasPickedEvent);
       canvas.removeEventListener('contextmenu', dispatchCanvasPickedEvent);
       canvas.removeEventListener('pointerdown', dispatchCanvasPointerDown);
+      canvas.removeEventListener('pointerover', dispatchCanvasPointerEntry);
       canvas.removeEventListener('pointermove', dispatchCanvasPointerMove);
       canvas.removeEventListener('pointerup', dispatchCanvasPointerUp);
       canvas.removeEventListener('pointercancel', dispatchCanvasPointerCancel);

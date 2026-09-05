@@ -4,6 +4,7 @@ import { createTypeGpuRuntimeForTest } from './svelte-renderer';
 import type { TypeGpuRenderer } from './gpu-renderer';
 import type { TypeGpuLoadedModel } from './glb-loader';
 import { Dirty, hasDirty } from './dirty';
+import { readInlineGeometry, readInlineMaterial } from './resources';
 
 class FakeCanvas {
   clientWidth = 800;
@@ -94,6 +95,173 @@ function hoverFixture() {
 }
 
 describe('composable canvas events', () => {
+  it('bubbles hover transitions between siblings while preserving group boundaries', async () => {
+    const { scene, group, left, right, canvas, runtime, move } = hoverFixture();
+    const calls: string[] = [];
+    const related: unknown[] = [];
+    for (const [node, name] of [[scene, 'scene'], [group, 'group'], [left, 'left'], [right, 'right']] as const) {
+      for (const type of ['pointerover', 'pointerout', 'pointerenter', 'pointerleave']) {
+        addEventListener(node, type, event => calls.push(`${name}:${event.type}`));
+      }
+    }
+    addEventListener(group, 'pointerover', event => related.push([event.target, event.relatedTarget]));
+    addEventListener(group, 'pointerout', event => related.push([event.target, event.relatedTarget]));
+    await Promise.resolve();
+    const entered = canvas.dispatch<PointerEvent>('pointerover', { offsetX: 30, offsetY: 50 });
+    expect(calls).toEqual([
+      'left:pointerover', 'group:pointerover', 'scene:pointerover',
+      'scene:pointerenter', 'group:pointerenter', 'left:pointerenter'
+    ]);
+    calls.length = 0;
+    move(30); move(30);
+    expect(calls).toEqual([]);
+    move(70);
+    expect(calls).toEqual([
+      'left:pointerout', 'group:pointerout', 'scene:pointerout', 'left:pointerleave',
+      'right:pointerover', 'group:pointerover', 'scene:pointerover', 'right:pointerenter'
+    ]);
+    calls.length = 0;
+    canvas.dispatch('pointerout');
+    canvas.dispatch('pointerleave');
+    expect(calls).toEqual([
+      'right:pointerout', 'group:pointerout', 'scene:pointerout',
+      'right:pointerleave', 'group:pointerleave', 'scene:pointerleave'
+    ]);
+    expect(related).toEqual([[left, null], [left, right], [right, left], [right, null]]);
+    runtime.dispose();
+    canvas.dispatch('pointerover', entered);
+    expect(related).toHaveLength(4);
+  });
+
+  it.each(['reparent', 'remove'] as const)('routes pointerout through saved ancestors after %s', async action => {
+    const { scene, group, left, runtime, move } = hoverFixture();
+    const calls: string[] = [];
+    addEventListener(group, 'pointerover', () => calls.push('over'));
+    addEventListener(group, 'pointerout', () => calls.push('out'));
+    addEventListener(left, 'pointerover', vi.fn());
+    await Promise.resolve();
+    move(30);
+    if (action === 'reparent') insert(scene, left, null);
+    else remove(left);
+    await Promise.resolve();
+    move(30);
+    expect(calls).toEqual(['over', 'out']);
+    runtime.dispose();
+  });
+
+  it.each(['pointerover', 'pointerout'])('keeps %s propagation controls local to that boundary event', async type => {
+    const { group, left, right, runtime, move } = hoverFixture();
+    const bubble = vi.fn();
+    const boundary = vi.fn();
+    addEventListener(group, type, event => event.stopPropagation(), true);
+    addEventListener(group, type, bubble);
+    addEventListener(left, 'pointerleave', boundary);
+    addEventListener(right, 'pointerenter', boundary);
+    await Promise.resolve();
+    move(30); move(70);
+    expect(bubble).not.toHaveBeenCalled();
+    expect(boundary).toHaveBeenCalledTimes(2);
+    runtime.dispose();
+  });
+
+  it.each(['pointerover', 'pointerout'])('stops stale hover work when %s disposes the runtime', async type => {
+    const { left, right, runtime, move } = hoverFixture();
+    const enter = vi.fn();
+    const moved = vi.fn();
+    addEventListener(type === 'pointerover' ? right : left, type, () => runtime.dispose());
+    addEventListener(right, 'pointerenter', enter);
+    addEventListener(right, 'pointermove', moved);
+    // The starting mesh must be pickable even when only the destination disposes.
+    addEventListener(left, 'pointerenter', vi.fn());
+    await Promise.resolve();
+    move(30); move(70);
+    expect(enter).not.toHaveBeenCalled();
+    expect(moved).not.toHaveBeenCalled();
+  });
+
+  it.each(['pointerover', 'pointerout'])('preserves a nested hover transition from %s', async type => {
+    const { left, right, runtime, move } = hoverFixture();
+    const entered = vi.fn();
+    const moved = vi.fn();
+    addEventListener(left, type, () => move(70));
+    addEventListener(right, 'pointerover', entered);
+    addEventListener(left, 'pointermove', moved);
+    await Promise.resolve();
+    move(30);
+    moved.mockClear();
+    if (type === 'pointerout') move(0);
+    move(70);
+    expect(entered).toHaveBeenCalledOnce();
+    expect(moved).not.toHaveBeenCalled();
+    runtime.dispose();
+  });
+
+  it('does not discover hover changes or schedule frames while the pointer is stationary', async () => {
+    const { group, left, canvas, gpu, runtime, move } = hoverFixture();
+    const over = vi.fn();
+    const out = vi.fn();
+    addEventListener(group, 'pointerover', over);
+    addEventListener(group, 'pointerout', out);
+    await Promise.resolve();
+    const scene = vi.mocked(gpu.setScene).mock.lastCall![0];
+    const pick = vi.spyOn(scene.interaction, 'pick');
+    const add = vi.spyOn(canvas, 'addEventListener');
+    const remove = vi.spyOn(canvas, 'removeEventListener');
+    vi.mocked(gpu.setScene).mockClear();
+    move(30);
+    for (let i = 0; i < 100; i++) move(30);
+    expect(over).toHaveBeenCalledOnce();
+    expect(out).not.toHaveBeenCalled();
+    await Promise.resolve();
+    expect(gpu.setScene).not.toHaveBeenCalled();
+    expect(gpu.invalidate).not.toHaveBeenCalled();
+    pick.mockClear();
+    setAttribute(left, 'position', [0, 0, 0]);
+    await Promise.resolve();
+    expect(pick).not.toHaveBeenCalled();
+    expect(out).not.toHaveBeenCalled();
+    expect(add).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    move(30);
+    expect(out).toHaveBeenCalledOnce();
+    runtime.dispose();
+  });
+
+  it('distinguishes primitive instances of the same model in bubbling hover events', async () => {
+    const { group, left, right, gpu, runtime, move } = hoverFixture();
+    remove(left);
+    remove(right);
+    const model = createElement('model');
+    const asset: TypeGpuLoadedModel = {
+      key: 'hover-pair',
+      meshes: [-2, 2].map(x => ({
+        geometry: readInlineGeometry(createElement('boxGeometry'))!,
+        material: readInlineMaterial(createElement('standardMaterial'))!,
+        transform: { position: [x, 0, 0], scale: [1, 1, 1], rotation: [0, 0, 0] }
+      }))
+    };
+    setAttribute(model, 'asset', asset);
+    insert(group, model, null);
+    const calls: unknown[] = [];
+    for (const type of ['pointerover', 'pointerout']) {
+      addEventListener(group, type, event => {
+        expect(event.target).toBe(model);
+        calls.push([event.type, event.detail, event.relatedTarget]);
+      });
+    }
+    await Promise.resolve();
+    const targets = vi.mocked(gpu.setScene).mock.lastCall![0].interaction.targets;
+    expect(targets).toHaveLength(2);
+    move(30); move(70); move(70);
+    expect(calls).toEqual([
+      ['pointerover', { instanceId: targets[0].instanceId, point: expect.any(Array) }, null],
+      ['pointerout', { instanceId: targets[0].instanceId }, model],
+      ['pointerover', { instanceId: targets[1].instanceId, point: expect.any(Array) }, model]
+    ]);
+    expect(targets[0].instanceId).not.toBe(targets[1].instanceId);
+    runtime.dispose();
+  });
+
   it.each(['click', 'dblclick', 'contextmenu', 'wheel', 'pointerdown', 'pointerup', 'pointermove'])(
     'runs parent %s capture before the picked mesh and honors interception', async type => {
       const { group, left, canvas, runtime } = hoverFixture();

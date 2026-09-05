@@ -30,7 +30,7 @@ function setup() {
 }
 
 function input(canvas: HTMLCanvasElement, type: string, init: WheelEventInit = {}) {
-  const EventConstructor = type === 'wheel' ? WheelEvent : MouseEvent;
+  const EventConstructor = type === 'wheel' ? WheelEvent : type.startsWith('pointer') ? PointerEvent : MouseEvent;
   const event = new EventConstructor(type, {
     clientX: 50,
     clientY: 50,
@@ -51,6 +51,85 @@ function input(canvas: HTMLCanvasElement, type: string, init: WheelEventInit = {
 }
 
 describe('native canvas event attributes', () => {
+  it.each(['pointerover', 'pointerout'])(
+    'forwards compiled %s props with capture, related targets and native cancellation', async type => {
+      const Boxes = compileTypeGpuSource(`
+        <script>let { children, ...events } = $props();</script>
+        <group {...events}>{@render children()}</group>
+      `);
+      const Scene = compileTypeGpuSource<{ replace(): void; hide(): void }>(`
+        <script>
+          let { Boxes, first, second, capture, target } = $props();
+          let callback = $state(first);
+          let visible = $state(true);
+          export function replace() { callback = second; }
+          export function hide() { visible = false; }
+        </script>
+        <scene>
+          <perspectiveCamera position={[0, 0, 5]} target={[0, 0, 0]} />
+          {#if visible}
+            <Boxes on${type}capture={capture} on${type}={callback}>
+              <mesh on${type}={target}><boxGeometry /></mesh>
+            </Boxes>
+          {/if}
+        </scene>
+      `);
+      const { canvas, gpu, root, runtime } = setup();
+      const calls: string[] = [];
+      const first = vi.fn(() => calls.push('first'));
+      const second = vi.fn(() => calls.push('second'));
+      const capture = vi.fn((event: TypeGpuNodeEvent) => {
+        expect(event.eventPhase).toBe(1);
+        calls.push('capture');
+      });
+      const target = vi.fn((event: TypeGpuNodeEvent) => {
+        expect(event.eventPhase).toBe(2);
+        calls.push('target');
+        event.preventDefault();
+      });
+      const instance = mount(Scene, { renderer, target: root, props: { Boxes, first, second, capture, target } });
+      const transition = () => {
+        input(canvas, type === 'pointerover' ? 'pointerout' : 'pointerover');
+        return input(canvas, type);
+      };
+      try {
+        flushSync();
+        await Promise.resolve();
+        const mesh = gpu.setScene.mock.lastCall![0].interaction.targets[0].node;
+        gpu.setScene.mockClear();
+        const raf = vi.fn();
+        vi.stubGlobal('requestAnimationFrame', raf);
+        const original = transition();
+        expect(calls).toEqual(['capture', 'target', 'first']);
+        expect(target.mock.calls[0][0]).toMatchObject({ target: mesh, relatedTarget: null, originalEvent: original });
+        expect(target.mock.calls[0][0].currentTarget).toBeNull();
+        expect(original.defaultPrevented).toBe(true);
+        input(canvas, type);
+        expect(first).toHaveBeenCalledOnce();
+        flushSync(() => instance.replace());
+        await Promise.resolve();
+        calls.length = 0;
+        transition();
+        expect(calls).toEqual(['capture', 'target', 'second']);
+        expect(gpu.setScene).not.toHaveBeenCalled();
+        expect(raf).not.toHaveBeenCalled();
+        // Leave before removal to distinguish cleanup from a pending exit transition.
+        input(canvas, 'pointerout');
+        flushSync(() => instance.hide());
+        await Promise.resolve();
+        calls.length = 0;
+        transition();
+        expect(calls).toEqual([]);
+      } finally {
+        await unmount(instance);
+        runtime.dispose();
+      }
+      calls.length = 0;
+      transition();
+      expect(calls).toEqual([]);
+    }
+  );
+
   it.each(['dblclick', 'contextmenu', 'wheel'])(
     'routes %s through compiled capture, target and parent props without scheduling frames',
     async (type) => {

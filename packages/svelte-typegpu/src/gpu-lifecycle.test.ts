@@ -1237,7 +1237,7 @@ describe('GPU resource and frame lifecycle', () => {
           scene: Scene,
           sceneProps: {
             motion, setup, resourceSetup, geometry: 'boxGeometry', material: 'standardMaterial',
-            events: Object.fromEntries(['click', 'dblclick', 'contextmenu', 'wheel'].map(type => [
+            events: Object.fromEntries(['click', 'dblclick', 'contextmenu', 'wheel', 'pointerover', 'pointerout'].map(type => [
               `on${type}${capture ? 'capture' : ''}`, vi.fn()
             ]))
           }
@@ -1263,7 +1263,7 @@ describe('GPU resource and frame lifecycle', () => {
         const interaction = sceneUpdates.mock.lastCall![0].interaction;
         expect(interaction.targets).toHaveLength(301);
         const handlers = interaction.targets[0].handlers;
-        expect(handlers).toEqual(new Set(['click', 'dblclick', 'contextmenu', 'wheel']));
+        expect(handlers).toEqual(new Set(['click', 'dblclick', 'contextmenu', 'wheel', 'pointerover', 'pointerout']));
         expect(interaction.targets.every(target => target.handlers === handlers)).toBe(true);
         expect(interaction.targets.every(target => target.node.captureListeners === undefined)).toBe(true);
         const group = interaction.targets[0].node.parent!;
@@ -1330,7 +1330,7 @@ describe('GPU resource and frame lifecycle', () => {
 
   it.each(
     [60, 120, 144].flatMap((hz) =>
-      ['dblclick', 'contextmenu', 'wheel'].flatMap((type) => [
+      ['dblclick', 'contextmenu', 'wheel', 'pointerover', 'pointerout'].flatMap((type) => [
         { hz, type, frameloop: 'manual' as const, rendererFirst: false },
         { hz, type, frameloop: 'demand' as const, rendererFirst: false },
         { hz, type, frameloop: 'demand' as const, rendererFirst: true }
@@ -1379,7 +1379,12 @@ describe('GPU resource and frame lifecycle', () => {
       const instance = mount(Scene, { renderer: sceneRenderer, target: root });
       const order: string[] = [];
       function dispatch() {
-        const EventConstructor = type === 'wheel' ? WheelEvent : MouseEvent;
+        if (type === 'pointerover' || type === 'pointerout') {
+          const opposite = new PointerEvent(type === 'pointerover' ? 'pointerout' : 'pointerover');
+          Object.defineProperties(opposite, { offsetX: { value: 50 }, offsetY: { value: 50 } });
+          canvas.dispatchEvent(opposite);
+        }
+        const EventConstructor = type === 'wheel' ? WheelEvent : type.startsWith('pointer') ? PointerEvent : MouseEvent;
         const event = new EventConstructor(type, { bubbles: true, cancelable: true });
         Object.defineProperties(event, { offsetX: { value: 50 }, offsetY: { value: 50 } });
         canvas.dispatchEvent(event);

@@ -8,6 +8,8 @@ export const BUBBLING_NODE_EVENTS = new Set([
   'pointerdown',
   'pointerup',
   'pointermove',
+  'pointerover',
+  'pointerout',
   'dragstart',
   'dragmove',
   'dragend'
@@ -121,9 +123,28 @@ export function dispatchNodeEvent(
     !hasCaptureListener(node, type)
   )
     return;
-  const event = new NodeEvent(node, type, init);
   const path: TypeGpuNode[] = [node];
   for (let parent = node.parent; parent; parent = parent.parent) path.push(parent);
+  dispatchAlongPath(node, type, init, path);
+}
+
+/** Internal hover dispatch preserves the old ancestry across scene edits. */
+export function dispatchNodeEventOnPath(
+  path: readonly TypeGpuNode[],
+  type: string,
+  init: TypeGpuNodeEventInit
+): void {
+  if (!path.some(node => node.listeners.get(type)?.size || node.captureListeners?.get(type)?.size)) return;
+  dispatchAlongPath(path[0], type, init, path);
+}
+
+function dispatchAlongPath(
+  node: TypeGpuNode,
+  type: string,
+  init: TypeGpuNodeEventInit,
+  path: readonly TypeGpuNode[]
+): void {
+  const event = new NodeEvent(node, type, init);
   try {
     for (let i = path.length - 1; i >= 0; i--) {
       event.invoke(path[i], true);
