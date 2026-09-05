@@ -192,13 +192,14 @@ describe('GPU resource and frame lifecycle', () => {
           ? motion.set(motion.current, { duration: 0 })
           : motion.set(motion.current, { instant: true });
       const Scene = compileTypeGpuSource(`
-      <script>let { motion, setup, events } = $props();</script>
+      <script>let { motion, setup, resourceSetup, geometry, material, events } = $props();</script>
       <scene><group {...events}>
         {#each Array.from({ length: 300 }, (_, i) => i) as i (i)}
           <mesh position={[i, 0, -5]}><boxGeometry /><standardMaterial /></mesh>
         {/each}
         <mesh position={[motion.current, 0, 0]} {@attach setup}>
-          <boxGeometry /><standardMaterial color={[motion.current / 10, 0, 0, 1]} />
+          <svelte:element this={geometry} {@attach resourceSetup} />
+          <svelte:element this={material} color={[motion.current / 10, 0, 0, 1]} {@attach resourceSetup} />
         </mesh>
       </group></scene>
     `);
@@ -213,12 +214,17 @@ describe('GPU resource and frame lifecycle', () => {
       root.runtime = runtime;
       const cleanup = vi.fn();
       const setup = vi.fn<TypeGpuAttachment>(() => cleanup);
+      const resourceCleanup = vi.fn();
+      const resourceSetup = vi.fn<TypeGpuAttachment>(() => resourceCleanup);
       const instance = mount(SceneHost, {
         renderer: sceneRenderer,
         target: root,
         props: {
           scene: Scene,
-          sceneProps: { motion, setup, events: { [capture ? 'onclickcapture' : 'onclick']: vi.fn() } }
+          sceneProps: {
+            motion, setup, resourceSetup, geometry: 'boxGeometry', material: 'standardMaterial',
+            events: { [capture ? 'onclickcapture' : 'onclick']: vi.fn() }
+          }
         }
       });
       async function step() {
@@ -275,6 +281,8 @@ describe('GPU resource and frame lifecycle', () => {
         }
         expect(setup).toHaveBeenCalledOnce();
         expect(cleanup).not.toHaveBeenCalled();
+        expect(resourceSetup).toHaveBeenCalledTimes(2);
+        expect(resourceCleanup).not.toHaveBeenCalled();
         expect(gpuRoot.createBuffer).not.toHaveBeenCalled();
         expect(gpuRoot.createBindGroup).not.toHaveBeenCalled();
         expect(createMeshPipeline).not.toHaveBeenCalled();
@@ -293,9 +301,87 @@ describe('GPU resource and frame lifecycle', () => {
         renderer.dispose();
       }
       expect(cleanup).toHaveBeenCalledOnce();
+      expect(resourceCleanup).toHaveBeenCalledTimes(2);
       expect(pending.size).toBe(0);
     }
   );
+
+  it.each([60, 120, 144].flatMap(hz =>
+    (['demand', 'manual'] as const).map(frameloop => ({ hz, frameloop }))
+  ))('replaces dynamic geometry at $hz Hz in $frameloop mode without leaking buffers', async ({ hz, frameloop }) => {
+    const pending = new Map<number, FrameRequestCallback>();
+    let id = 0;
+    let now = 0;
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
+      pending.set(++id, callback);
+      return id;
+    }));
+    vi.stubGlobal('cancelAnimationFrame', vi.fn((id: number) => pending.delete(id)));
+    const Scene = compileTypeGpuSource<{ shape(value: string | null): void }>(`
+      <script>
+        let { setup } = $props();
+        let geometry = $state('boxGeometry');
+        export function shape(value) { geometry = value; }
+      </script>
+      <scene><mesh {@attach setup}><svelte:element this={geometry} /><standardMaterial /></mesh></scene>
+    `);
+    const { renderer, buffers, submissions } = await setupRenderer(frameloop);
+    const root = createFragment();
+    const runtime = createTypeGpuRuntimeForTest(root, new EventTarget() as HTMLCanvasElement, renderer);
+    root.runtime = runtime;
+    const setup = vi.fn();
+    const instance = mount(Scene, { renderer: sceneRenderer, target: root, props: { setup } });
+    async function step() {
+      now += 1000 / hz;
+      for (const [id, callback] of [...pending]) {
+        pending.delete(id);
+        callback(now);
+        await Promise.resolve();
+      }
+    }
+    async function drawMutation(change?: () => void) {
+      flushSync(change);
+      await Promise.resolve();
+      const before = submissions.length;
+      if (frameloop === 'manual') {
+        now += 1000 / hz;
+        renderer.renderFrame(now);
+      } else {
+        await step();
+      }
+      expect(submissions.length - before).toBe(1);
+      // Coalesced invalidations may retain one frame for external motion producers.
+      await step();
+      expect(submissions.length - before).toBeLessThanOrEqual(frameloop === 'manual' ? 1 : 2);
+      expect(pending.size).toBe(0);
+    }
+    try {
+      await drawMutation();
+      const box = buffers.find(buffer => buffer.label === 'TypeGPU box:1:1:1 vertices')!;
+      expect(box).toBeDefined();
+      await drawMutation(() => instance.shape('sphereGeometry'));
+      expect(box.destroy).toHaveBeenCalledOnce();
+      const sphere = buffers.find(buffer => buffer.label.startsWith('TypeGPU sphere:') && buffer.label.endsWith('vertices'))!;
+      expect(sphere).toBeDefined();
+      const count = buffers.length;
+      flushSync(() => instance.shape('sphereGeometry'));
+      await Promise.resolve();
+      expect(buffers.length).toBe(count);
+      expect(pending.size).toBe(0);
+      await drawMutation(() => instance.shape(null));
+      expect(sphere.destroy).toHaveBeenCalledOnce();
+      await drawMutation(() => instance.shape('boxGeometry'));
+      expect(setup).toHaveBeenCalledOnce();
+      if (frameloop === 'manual') expect(requestAnimationFrame).not.toHaveBeenCalled();
+    } finally {
+      await unmount(instance);
+      runtime.dispose();
+    }
+    expect(pending.size).toBe(0);
+    for (const buffer of buffers.filter(buffer => buffer.label.endsWith('vertices'))) {
+      expect(buffer.destroy).toHaveBeenCalledOnce();
+    }
+  });
 
   it.each([60, 120, 144])('keeps demand rendering in step with external motion at %i Hz', async (hz) => {
     const pending = new Map<number, FrameRequestCallback>();

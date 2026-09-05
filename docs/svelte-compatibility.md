@@ -9,6 +9,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | DOM `Canvas` host | Reactive scene props, inherited context, SSR shell, and async startup/unmount cleanup tested |
 | Consumer component types | Canvas props/callbacks/bindings checked; scene-element declarations deferred due to language-tools casing and action-target gaps |
 | `{#snippet}` and `{@render}` | Supported, including attachment forwarding |
+| `<svelte:element>` | Dynamic geometry/materials, prop spreads, events, attachment cleanup, and keyed identity tested |
 | Component `$bindable` props and component `bind:this` | Supported and tested |
 | Scene event attributes and `onclickcapture` | Capture/target/bubble ordering, group hover, and propagation controls supported |
 | `Tween` / `Spring` bound to transforms and material values | Supported; frame delivery tested at 60/120/144 Hz in both RAF callback orders |
@@ -36,6 +37,41 @@ Their successful ready paths do not establish safe lifecycle behavior. See the
 [async investigation](async-expressions-design.md) and the
 [pending-boundary teardown reproducer](../packages/svelte-typegpu/repros/README.md).
 Continue using ordinary `{#await}` for supported async scene composition.
+
+## Dynamic primitives
+
+Use `<svelte:element>` inside a stable mesh when the primitive type is dynamic.
+It uses the existing renderer hooks; there is no extra renderer component or
+per-frame traversal:
+
+```svelte
+<script>
+  let { geometry = 'boxGeometry', material = 'standardMaterial', color } = $props();
+</script>
+
+<mesh onclick={() => console.log('selected')}>
+  <svelte:element this={geometry} />
+  <svelte:element this={material} {color} />
+</mesh>
+```
+
+Changing a tag replaces only that primitive and runs its attachment cleanup.
+The surrounding mesh keeps its identity and handlers. With an unchanged tag,
+reactive props update the existing node. A `null` tag removes that subtree; a mesh
+without geometry contributes no draw batch. Use valid scene primitive names,
+including their casing, and pass only props appropriate to the chosen primitive.
+
+An ordinary Svelte component can forward a dynamic tag and `{...props}` in the
+same way. Keyed component moves preserve node identity and attachments.
+Geometry/material type changes are structural and can create GPU resources;
+animate transforms, color, and other values instead of switching types each frame.
+Stable dynamic tags with real Tween/Spring values are tested at 60/120/144 Hz in
+both callback orders, with targeted instance writes and no buffer, bind-group,
+pipeline, or attachment recreation. Geometry replacement is tested for buffer
+cleanup and bounded demand frames; manual mode never requests RAF.
+
+Dynamic tags do not bypass the host-binding, transition, or editor limitations
+listed above.
 
 ## Async scenes
 
