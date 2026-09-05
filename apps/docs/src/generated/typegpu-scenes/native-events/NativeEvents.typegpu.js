@@ -31,8 +31,7 @@ var root_1 = $.from_tree([
 			['boxGeometry'],
 			['standardMaterial']
 		],
-		' ',
-		['group'],
+		' ',,
 		' ',
 		[
 			'mesh',
@@ -43,40 +42,41 @@ var root_1 = $.from_tree([
 	]
 ]);
 
-export default function NativeEvents_typegpu($$anchor, $$props) {
+export default function NativeEvents_typegpu($$anchor) {
 	var $$pop_renderer = $.push_renderer($renderer);
 
-	$.push($$props, true);
+	let objects = $.proxy([
+		{
+			name: 'Coral',
+			color: [0.94, 0.24, 0.2],
+			x: -2.8,
+			angle: 0,
+			size: 1
+		},
 
+		{
+			name: 'Jade',
+			color: [0.15, 0.76, 0.46],
+			x: 0,
+			angle: 0,
+			size: 1
+		},
+
+		{
+			name: 'Cobalt',
+			color: [0.22, 0.48, 0.96],
+			x: 2.8,
+			angle: 0,
+			size: 1
+		}
+	]);
+
+	let selected = $.state(0);
 	let hovered = $.state(null);
 
-	function hover(index) {
-		$.set(hovered, index, true);
-		$$props.onhover(index === null ? null : $$props.objects[index].name);
-	}
-
-	function select(event, index) {
-		$$props.onselect(index);
-		$$props.onevent(`click / ${$$props.objects[index].name}`);
-		$$props.onpath('mesh');
-
-		if (!$$props.bubbleClicks) event.stopPropagation();
-	}
-
-	function resize(event, index) {
-		event.preventDefault();
-
-		const wheel = event.originalEvent;
-		const pixels = wheel.deltaY * (wheel.deltaMode === 1 ? 16 : wheel.deltaMode === 2 ? 400 : 1);
-
-		$$props.onresize(index, -pixels * 0.002);
-		$$props.onevent(`wheel / ${$$props.objects[index].name}`);
-	}
-
-	function reset(event, index) {
-		event.preventDefault();
-		$$props.onreset(index);
-		$$props.onevent(`${event.type} / ${$$props.objects[index].name}`);
+	function reset(object) {
+		object.angle = 0;
+		object.size = 1;
 	}
 
 	var scene = root_1();
@@ -114,9 +114,9 @@ export default function NativeEvents_typegpu($$anchor, $$props) {
 	$.set_attribute(standardMaterial, 'color', [0.17, 0.2, 0.23]);
 	$.reset(mesh);
 
-	var group = $.sibling(mesh, 2);
+	var node = $.sibling(mesh, 2);
 
-	$.each(group, 23, () => $$props.objects, (object) => object.name, ($$anchor, object, index) => {
+	$.each(node, 19, () => objects, (object) => object.name, ($$anchor, object, index) => {
 		var mesh_1 = root();
 		var standardMaterial_1 = $.sibling($.child(mesh_1));
 
@@ -135,18 +135,36 @@ export default function NativeEvents_typegpu($$anchor, $$props) {
 			$.set_attribute(standardMaterial_1, 'color', $.get(hovered) === $.get(index) ? [1, 0.85, 0.4] : $.get(object).color);
 		});
 
-		$.event('pointerenter', mesh_1, () => hover($.get(index)));
-		$.event('pointerleave', mesh_1, () => hover(null));
-		$.event('click', mesh_1, (event) => select(event, $.get(index)));
-		$.event('dblclick', mesh_1, (event) => reset(event, $.get(index)));
-		$.event('contextmenu', mesh_1, (event) => reset(event, $.get(index)));
-		$.event('wheel', mesh_1, (event) => resize(event, $.get(index)));
+		$.event('pointerenter', mesh_1, () => $.set(hovered, $.get(index), true));
+		$.event('pointerleave', mesh_1, () => $.set(hovered, null));
+
+		$.event('click', mesh_1, () => {
+			$.set(selected, $.get(index), true);
+			($.get(object).angle = ($.get(object).angle + 15) % 360);
+		});
+
+		$.event('dblclick', mesh_1, () => reset($.get(object)));
+
+		$.event('contextmenu', mesh_1, (event) => {
+			event.preventDefault();
+			reset($.get(object));
+		});
+
+		$.event('wheel', mesh_1, (event) => {
+			event.preventDefault();
+
+			const wheel = event.originalEvent;
+			const pixels = wheel.deltaY * (wheel.deltaMode === 1 ? 16 : wheel.deltaMode === 2 ? 400 : 1);
+
+			(
+				$.get(object).size = Math.max(0.6, Math.min(1.6, $.get(object).size - pixels * 0.002))
+			);
+		});
+
 		$.append($$anchor, mesh_1);
 	});
 
-	$.reset(group);
-
-	var mesh_2 = $.sibling(group, 2);
+	var mesh_2 = $.sibling(node, 2);
 
 	$.set_attribute(mesh_2, 'scale', [1.9, 0.12, 1.9]);
 
@@ -156,13 +174,10 @@ export default function NativeEvents_typegpu($$anchor, $$props) {
 	$.reset(scene);
 
 	$.template_effect(() => {
-		$.set_attribute(mesh_2, 'position', [$$props.objects[$$props.selected].x, -0.12, 0]);
-		$.set_attribute(basicMaterial, 'color', $$props.objects[$$props.selected].color);
+		$.set_attribute(mesh_2, 'position', [objects[$.get(selected)].x, -0.12, 0]);
+		$.set_attribute(basicMaterial, 'color', objects[$.get(selected)].color);
 	});
 
-	$.event('click', group, () => $$props.onpath('group capture', true), true);
-	$.event('click', group, () => $$props.onpath('group bubble'));
 	$.append($$anchor, scene);
-	$.pop();
 	$$pop_renderer();
 }

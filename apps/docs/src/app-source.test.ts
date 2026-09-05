@@ -49,7 +49,7 @@ describe('docs app source wiring', () => {
     expect(previewSource).toContain('let fps = $state<number | null>(null)');
     expect(previewSource).toContain('onfps={(value) => fps = value}');
     expect(previewSource).toContain('aria-label="Preview frames per second"');
-    expect(previewSource).toContain('{fps === null ?');
+    expect(previewSource).toContain("{!ready ? '...' : fps || 'Idle'}");
     expect(styleSource).toContain('.fps-badge');
     expect(styleSource).toContain('position: absolute');
   });
@@ -100,16 +100,13 @@ describe('docs app source wiring', () => {
     expect(orbitField).not.toMatch(/from ['"]\.\/disco-fragment['"]/);
   });
 
-  it('compiles native event DOM wrappers separately from their scene', () => {
-    const dom = read('./generated/typegpu-scenes/native-events/NativeEventsPreview.js');
+  it('runs the self-contained native event scene in the standard demand preview', () => {
     const scene = read('./generated/typegpu-scenes/native-events/NativeEvents.typegpu.js');
-    expect(dom).toContain("from './event-objects.js'");
-    expect(dom).not.toContain("from 'svelte-typegpu/svelte-renderer'");
     expect(scene).toContain("from 'svelte-typegpu/svelte-renderer'");
     const preview = read('./components/ExamplePreview.svelte');
-    expect(preview).toContain("<NativeEventsPreview scene={sceneComponents['native-events']} />");
-    expect(preview).toContain("from '../examples/native-events/NativeEventsPreview.svelte'");
-    expect(read('./style.css')).toContain('.native-events-preview canvas:focus-visible');
+    expect(preview).not.toContain('NativeEventsPreview');
+    expect(preview).toContain('scene={sceneComponents[slug]}');
+    expect(preview).toContain("slug === 'native-events' ? 'demand' : 'always'");
   });
 
   it('hydrates the live preview but keeps the code panel static on the examples route', () => {

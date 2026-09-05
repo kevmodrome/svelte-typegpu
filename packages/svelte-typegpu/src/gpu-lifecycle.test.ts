@@ -1,7 +1,15 @@
 // @vitest-environment happy-dom
 import tgpu, { d } from 'typegpu';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createElement, createFragment, insert, remove, setAttribute } from './core';
+import {
+  createElement,
+  createFragment,
+  insert,
+  remove,
+  setAttribute,
+  walk,
+  type TypeGpuNode
+} from './core';
 import { Dirty } from './dirty';
 import { createTypeGpuRenderer } from './gpu-renderer';
 import {
@@ -23,7 +31,7 @@ import { loadModel } from './model-loader';
 import type { TypeGpuLoadedModel } from './types';
 import SceneHost from './SceneHost.svelte';
 import CanvasMotionHost from './test-fixtures/CanvasMotionHost.svelte';
-import NativeEventsPreview from '../../../apps/docs/src/generated/typegpu-scenes/native-events/NativeEventsPreview.js';
+import Canvas from './Canvas.svelte';
 import NativeEvents from '../../../apps/docs/src/generated/typegpu-scenes/native-events/NativeEvents.typegpu.js';
 import { createViewProjectionMatrix, readCameraState } from './camera';
 import { rotateVectorXyz, transformPoint4 } from './math3d';
@@ -63,10 +71,14 @@ afterEach(() => {
 
 describe('GPU resource and frame lifecycle', () => {
   it.each(
-    [60, 120, 144].flatMap((hz) => [false, true].map((rendererFirst) => ({ hz, rendererFirst })))
+    [60, 120, 144].flatMap((hz) => [
+      { hz, frameloop: 'demand' as const, rendererFirst: false },
+      { hz, frameloop: 'demand' as const, rendererFirst: true },
+      { hz, frameloop: 'manual' as const, rendererFirst: false }
+    ])
   )(
-    'delivers native example keyboard input at $hz Hz (renderer first: $rendererFirst)',
-    async ({ hz, rendererFirst }) => {
+    'delivers direct mesh clicks at $hz Hz ($frameloop, renderer first: $rendererFirst)',
+    async ({ hz, frameloop, rendererFirst }) => {
       const warn = vi.spyOn(console, 'warn');
       const pending = new Map<number, FrameRequestCallback>();
       let id = 0;
@@ -88,21 +100,20 @@ describe('GPU resource and frame lifecycle', () => {
         .mockResolvedValue(gpu as never);
       vi.stubGlobal('navigator', { gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
       let root!: TypeGpuRoot;
-      const instance = mount(NativeEventsPreview, {
+      const instance = mount(Canvas, {
         target: document.body,
-        props: { scene: NativeEvents, onready: (value: TypeGpuRoot) => (root = value) }
+        props: {
+          scene: NativeEvents,
+          sceneProps: {},
+          options: { frameloop },
+          onready: (value: TypeGpuRoot) => (root = value)
+        }
       });
       const order: string[] = [];
       let active = true;
       function producer() {
         if (!active) return;
-        root.canvas.dispatchEvent(
-          new KeyboardEvent('keydown', {
-            key: 'ArrowRight',
-            bubbles: true,
-            cancelable: true
-          })
-        );
+        dispatchExampleInput(root, 'click', 0);
         requestAnimationFrame(producer);
       }
       async function step() {
@@ -122,6 +133,7 @@ describe('GPU resource and frame lifecycle', () => {
         for (let i = 0; i < 4; i++) await step();
         expect(root).toBeDefined();
         expect(pending.size).toBe(0);
+        if (frameloop === 'manual') root.gpu.renderFrame(now);
         const canvas = root.canvas;
         const dimensions = [canvas.width, canvas.height];
         const buffer = buffers.find(
@@ -136,25 +148,24 @@ describe('GPU resource and frame lifecycle', () => {
         gpu.createBuffer.mockClear();
         gpu.createBindGroup.mockClear();
         vi.mocked(createMeshPipeline).mockClear();
-        const beforeFocus = submissions.length;
-        canvas.focus();
-        await tick();
-        expect(document.querySelector('[data-event="focus"]')?.textContent).toBe('Focused');
-        expect(pending.size).toBe(0);
-        expect(submissions).toHaveLength(beforeFocus);
         if (rendererFirst) {
           root.gpu.invalidate();
           root.gpu.invalidate();
         }
         requestAnimationFrame(producer);
-        if (!rendererFirst) {
+        if (frameloop === 'demand' && !rendererFirst) {
           root.gpu.invalidate();
           root.gpu.invalidate();
         }
         for (let frame = 0; frame < hz; frame++) {
           const before = submissions.length;
           await step();
-          expect(order).toEqual(rendererFirst ? ['render', 'input'] : ['input', 'render']);
+          if (frameloop === 'manual') {
+            expect(order).toEqual(['input']);
+            root.gpu.renderFrame(now);
+          } else {
+            expect(order).toEqual(rendererFirst ? ['render', 'input'] : ['input', 'render']);
+          }
           expect(submissions.length - before).toBe(1);
           expect(captured.counts.slice(-2).sort()).toEqual([1, 4]);
           expect(document.querySelector('canvas')).toBe(canvas);
@@ -162,11 +173,7 @@ describe('GPU resource and frame lifecycle', () => {
         }
         active = false;
         for (let i = 0; i < 4; i++) await step();
-        const expectedAngle = ((hz * 15 + 180) % 360) - 180;
-        expect(document.querySelector('input[type="range"]')?.getAttribute('max')).toBe('180');
-        expect(
-          (document.querySelector('input[type="range"]') as HTMLInputElement).valueAsNumber
-        ).toBe(expectedAngle);
+        const expectedAngle = (hz * 15) % 360;
         const direction = rotateVectorXyz(
           [1, 0, 0],
           [buffer.data[24 + 13], buffer.data[24 + 14], buffer.data[24 + 15]]
@@ -185,9 +192,7 @@ describe('GPU resource and frame lifecycle', () => {
         expect(createMeshPipeline).not.toHaveBeenCalled();
         expect(tgpu.init).toHaveBeenCalledOnce();
         const idle = submissions.length;
-        canvas.blur();
-        await tick();
-        expect(document.querySelector('[data-event="focus"]')?.textContent).toBe('Unfocused');
+        for (let i = 0; i < 4; i++) await step();
         expect(pending.size).toBe(0);
         expect(submissions).toHaveLength(idle);
         expect(warn).not.toHaveBeenCalled();
@@ -202,7 +207,7 @@ describe('GPU resource and frame lifecycle', () => {
     }
   );
 
-  it('routes real playground pointer and keyboard events with bounded feedback and local cancellation', async () => {
+  it('updates scene-owned objects through direct mesh events with local wheel cancellation', async () => {
     const pending = new Map<number, FrameRequestCallback>();
     let id = 0;
     let now = 0;
@@ -215,9 +220,14 @@ describe('GPU resource and frame lifecycle', () => {
     vi.mocked(tgpu.init).mockResolvedValue(gpu as never);
     vi.stubGlobal('navigator', { gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
     let root!: TypeGpuRoot;
-    const instance = mount(NativeEventsPreview, {
+    const instance = mount(Canvas, {
       target: document.body,
-      props: { scene: NativeEvents, onready: (value: TypeGpuRoot) => (root = value) }
+      props: {
+        scene: NativeEvents,
+        sceneProps: {},
+        options: { frameloop: 'demand' },
+        onready: (value: TypeGpuRoot) => (root = value)
+      }
     });
     async function settle() {
       await tick();
@@ -230,105 +240,76 @@ describe('GPU resource and frame lifecycle', () => {
       }
       expect(pending.size).toBe(0);
     }
-    const read = (name: string) => document.querySelector(`[data-event="${name}"]`)?.textContent;
-    const input = (type: string, index = 1, deltaY = 0) => {
-      const size = root.gpu.getRenderSize();
-      const matrix = createViewProjectionMatrix(
-        size.width / size.height,
-        readCameraState(root).settings
-      );
-      const point = transformPoint4(matrix, [(index - 1) * 2.8, 0.6, 0]);
-      const x = index === -1 ? 0 : ((point[0] + 1) * size.width) / 2;
-      const y = index === -1 ? 0 : ((1 - point[1]) * size.height) / 2;
-      const Constructor =
-        type === 'wheel' ? WheelEvent : type.startsWith('pointer') ? PointerEvent : MouseEvent;
-      const event = new Constructor(type, {
-        bubbles: true,
-        cancelable: true,
-        clientX: x,
-        clientY: y,
-        deltaY,
-        pointerId: 1,
-        button: type === 'contextmenu' ? 2 : 0
-      });
-      Object.defineProperties(event, {
-        clientX: { value: x },
-        clientY: { value: y },
-        offsetX: { value: x },
-        offsetY: { value: y }
-      });
-      root.canvas.dispatchEvent(event);
-      return event;
-    };
     try {
       flushSync();
       await settle();
-      input('pointermove');
+      const meshes: TypeGpuNode[] = [];
+      walk(root, (node) => {
+        if (node.name === 'mesh') meshes.push(node);
+      });
+      const [floor, coral, jade, cobalt, selection] = meshes;
+      const color = (node: TypeGpuNode) =>
+        node.children.find((child) => child.originalName === 'standardMaterial')!.attributes.color;
+      const transforms = (node: TypeGpuNode) => ({
+        position: node.attributes.position,
+        rotation: node.attributes.rotation,
+        scale: node.attributes.scale
+      });
+      const initialOthers = [floor, coral, cobalt].map(transforms);
+      const initialColor = color(jade);
+      dispatchExampleInput(root, 'pointermove');
       await settle();
-      expect(read('hover')).toBe('Jade');
-      input('pointerdown');
-      input('pointerup');
-      input('click');
+      expect(color(jade)).toEqual([1, 0.85, 0.4]);
+      dispatchExampleInput(root, 'pointerdown');
+      dispatchExampleInput(root, 'pointerup');
+      dispatchExampleInput(root, 'click');
       await settle();
-      expect(document.activeElement).toBe(root.canvas);
-      expect(read('scene')).toBe('click / Jade');
-      expect(read('path')).toBe('group capture > mesh > group bubble');
-      expect((document.querySelector('select') as HTMLSelectElement).selectedIndex).toBe(1);
-      const checkbox = document.querySelector('input[type="checkbox"]') as HTMLInputElement;
-      checkbox.click();
-      await settle();
-      for (let i = 0; i < 10; i++) input('click');
-      await settle();
-      expect(read('path')).toBe('group capture > mesh');
+      expect(jade.attributes.rotation).toEqual([0, Math.PI / 12, 0]);
+      expect(selection.attributes.position).toEqual([0, -0.12, 0]);
       const cameraUpdate = vi.spyOn(root.gpu, 'setCamera');
       const initialCamera = readCameraState(root).settings;
-      expect(input('wheel', 1, -100).defaultPrevented).toBe(true);
+      expect(dispatchExampleInput(root, 'wheel', 1, -100).defaultPrevented).toBe(true);
       await settle();
       for (const [camera] of cameraUpdate.mock.calls) expect(camera).toEqual(initialCamera);
-      expect(read('scene')).toBe('wheel / Jade');
-      const sizeInput = document.querySelectorAll<HTMLInputElement>('input[type="range"]')[1];
-      expect(sizeInput.valueAsNumber).toBeCloseTo(1.2);
-      expect(input('contextmenu').defaultPrevented).toBe(true);
-      await settle();
-      expect(sizeInput.valueAsNumber).toBe(1);
-      expect(read('scene')).toBe('contextmenu / Jade');
-      const key = new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true });
-      root.canvas.dispatchEvent(key);
-      await settle();
-      expect(key.defaultPrevented).toBe(true);
-      expect(sizeInput.valueAsNumber).toBeCloseTo(1.1);
-      expect(read('native')).toBe('keydown / ArrowUp');
-      input('dblclick');
-      await settle();
-      expect(sizeInput.valueAsNumber).toBe(1);
-      expect(read('scene')).toBe('dblclick / Jade');
-      const before = submissions.length;
-      for (const init of [
-        { key: 'Tab' },
-        { key: 'ArrowLeft', metaKey: true },
-        { key: 'ArrowUp', shiftKey: true },
-        { key: 'ArrowUp', isComposing: true }
-      ]) {
-        const event = new KeyboardEvent('keydown', { ...init, bubbles: true, cancelable: true });
-        root.canvas.dispatchEvent(event);
-        expect(event.defaultPrevented).toBe(false);
+      expect((jade.attributes.scale as number[])[0]).toBeCloseTo(1.8);
+      for (const deltaMode of [0, 1, 2]) {
+        dispatchExampleInput(root, 'dblclick');
+        await settle();
+        dispatchExampleInput(root, 'wheel', 1, -100 / [1, 16, 400][deltaMode], deltaMode);
+        await settle();
+        expect((jade.attributes.scale as number[])[0]).toBeCloseTo(1.8);
       }
+      dispatchExampleInput(root, 'wheel', 1, -10000);
       await settle();
-      expect(submissions).toHaveLength(before);
-      input('pointermove', -1);
+      expect((jade.attributes.scale as number[])[0]).toBeCloseTo(2.4);
+      dispatchExampleInput(root, 'wheel', 1, 10000);
       await settle();
-      expect(read('hover')).toBe('None');
-      const background = input('contextmenu', -1);
+      expect((jade.attributes.scale as number[])[0]).toBeCloseTo(0.9);
+      expect(dispatchExampleInput(root, 'contextmenu').defaultPrevented).toBe(true);
+      await settle();
+      expect(jade.attributes.scale).toEqual([1.5, 1.5, 1.5]);
+      expect(jade.attributes.rotation).toEqual([0, 0, 0]);
+      dispatchExampleInput(root, 'click');
+      dispatchExampleInput(root, 'dblclick');
+      await settle();
+      expect(jade.attributes.rotation).toEqual([0, 0, 0]);
+      expect([floor, coral, cobalt].map(transforms)).toEqual(initialOthers);
+      dispatchExampleInput(root, 'pointermove', -1);
+      await settle();
+      expect(color(jade)).toEqual(initialColor);
+      const before = submissions.length;
+      dispatchExampleInput(root, 'click', -1);
+      const background = dispatchExampleInput(root, 'contextmenu', -1);
       expect(background.defaultPrevented).toBe(false);
       await settle();
+      expect(submissions).toHaveLength(before);
       const beforeZoom = submissions.length;
       cameraUpdate.mockClear();
-      input('wheel', -1, 80);
+      dispatchExampleInput(root, 'wheel', -1, 80);
       await settle();
       expect(cameraUpdate).toHaveBeenCalledOnce();
       expect(cameraUpdate.mock.calls[0][0].position).not.toEqual(initialCamera.position);
       expect(submissions.length).toBeGreaterThan(beforeZoom);
-      expect(read('scene')).toBe('dblclick / Jade');
     } finally {
       await unmount(instance);
       document.body.replaceChildren();
@@ -1319,6 +1300,41 @@ describe('GPU resource and frame lifecycle', () => {
     textures.dispose();
   });
 });
+
+function dispatchExampleInput(
+  root: TypeGpuRoot,
+  type: string,
+  index = 1,
+  deltaY = 0,
+  deltaMode = 0
+) {
+  const size = root.gpu.getRenderSize();
+  const matrix = createViewProjectionMatrix(size.width / size.height, readCameraState(root).settings);
+  const point = transformPoint4(matrix, [(index - 1) * 2.8, 0.6, 0]);
+  const x = index === -1 ? 0 : ((point[0] + 1) * size.width) / 2;
+  const y = index === -1 ? 0 : ((1 - point[1]) * size.height) / 2;
+  const Constructor =
+    type === 'wheel' ? WheelEvent : type.startsWith('pointer') ? PointerEvent : MouseEvent;
+  const event = new Constructor(type, {
+    bubbles: true,
+    cancelable: true,
+    clientX: x,
+    clientY: y,
+    deltaY,
+    deltaMode,
+    pointerId: 1,
+    button: type === 'contextmenu' ? 2 : 0
+  });
+  // happy-dom does not preserve wheel coordinates through the constructor.
+  Object.defineProperties(event, {
+    clientX: { value: x },
+    clientY: { value: y },
+    offsetX: { value: x },
+    offsetY: { value: y }
+  });
+  root.canvas.dispatchEvent(event);
+  return event;
+}
 
 async function setupRenderer(frameloop: 'manual' | 'demand' | 'always' = 'manual') {
   const fake = fakeRoot();

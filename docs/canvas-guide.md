@@ -75,28 +75,40 @@ are present during SSR, but attachments, handlers, and WebGPU do not run there.
 Adding a label or tabindex does not implement keyboard navigation among 3D objects;
 provide accessible DOM controls for scene interactions.
 
-## Complete native-event example
+## Direct object events
 
-The docs site's `/examples/native-events` playground pairs
-`NativeEvents.typegpu.svelte` with `NativeEventsPreview.svelte`. The DOM wrapper
-accepts the scene component, so it can be server-rendered before Canvas mounts
-the client-only scene:
+Object handlers belong directly on scene primitives. They do not require
+`canvasProps`, callback forwarding through `sceneProps`, or IDs. For example,
+inside a `.typegpu.svelte` scene:
 
 ```svelte
 <script lang="ts">
-  import NativeEvents from './NativeEvents.typegpu.svelte';
-  import NativeEventsPreview from './NativeEventsPreview.svelte';
+  let angle = $state(0);
+  let hovered = $state(false);
 </script>
 
-<NativeEventsPreview scene={NativeEvents} />
+<mesh
+  rotation={[0, angle, 0]}
+  onclick={() => angle += Math.PI / 12}
+  onpointerenter={() => hovered = true}
+  onpointerleave={() => hovered = false}
+>
+  <boxGeometry />
+  <standardMaterial color={hovered ? [1, 0.85, 0.4] : [0.15, 0.76, 0.46]} />
+</mesh>
 ```
 
-It demonstrates `canvasProps.onkeydown`, `onfocus`, `onblur`, and `onpointerdown`
-alongside scene `onclick`, `onclickcapture`, `onpointerenter`, `onpointerleave`,
-`onwheel`, `ondblclick`, and `oncontextmenu`. DOM controls offer the same object
-selection, rotation, and size changes as keyboard/pointer input. Only recognized
-unmodified keys are canceled, and wheel events over objects resize them without
-zooming the camera. Wheel events over the background retain camera zoom.
+The docs site's `/examples/native-events` example is one self-contained scene.
+It owns its object state and attaches hover, click, wheel, double-click, and
+context-menu handlers to each mesh. The standard host passes `sceneProps={{}}`
+and uses demand mode: Svelte state changes update the affected objects and
+request a frame; idle scenes do not keep rendering. Wheel cancellation over a
+mesh prevents camera zoom there, while background wheel events still zoom.
+
+The current box primitive is `mesh` plus `boxGeometry` and a material; there is
+no `<box>` shorthand yet. `canvasProps` remains useful for canvas-wide DOM
+attributes and keyboard/focus events, but it is not the object-event API.
+This pointer-focused example does not implement keyboard object navigation.
 
 ## Root lifetime
 

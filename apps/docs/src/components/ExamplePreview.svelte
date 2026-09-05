@@ -1,6 +1,5 @@
 <script lang="ts">
   import Canvas from 'svelte-typegpu/canvas';
-  import NativeEventsPreview from '../examples/native-events/NativeEventsPreview.svelte';
   import type { TypeGpuCameraSettings, Vector3Tuple } from 'svelte-typegpu';
   import type { ExampleSlug } from '../examples/example-definitions';
   import { sceneComponents } from '../examples/scene-components';
@@ -191,9 +190,6 @@
   }
 </script>
 
-{#if slug === 'native-events'}
-  <NativeEventsPreview scene={sceneComponents['native-events']} />
-{:else}
 <div class:preview-with-controls={hasControls}>
   <section class="preview-panel" aria-label={`${label} live preview`}>
     {#key slug}
@@ -204,7 +200,7 @@
         scene={sceneComponents[slug]}
         {sceneProps}
         options={{
-          frameloop: slug === 'gravity' || slug === 'svelte-motion' ? 'demand' : 'always',
+          frameloop: slug === 'gravity' || slug === 'svelte-motion' || slug === 'native-events' ? 'demand' : 'always',
           maxDevicePixelRatio: 1.5,
           clearColor: [0.045, 0.05, 0.055, 1],
           depth: true,
@@ -224,7 +220,7 @@
     {/key}
     <div class="fps-badge" aria-label="Preview frames per second">
       <span>FPS</span>
-      <strong>{fps === null ? '...' : fps}</strong>
+      <strong>{!ready ? '...' : fps || 'Idle'}</strong>
     </div>
     {#if error}
       <div class="preview-status" role="status">{error}</div>
@@ -522,4 +518,3 @@
     </section>
   {/if}
 </div>
-{/if}

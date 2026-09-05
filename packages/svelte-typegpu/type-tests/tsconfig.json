@@ -5,7 +5,6 @@
     "../src/SceneHost.svelte",
     "Scene.svelte",
     "Empty.svelte",
-    "valid/*.svelte",
-    "../../../apps/docs/src/examples/native-events/NativeEventsPreview.svelte"
+    "valid/*.svelte"
   ]
 }

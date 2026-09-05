@@ -41,17 +41,13 @@ export const exampleDefinitions = [
     slug: 'native-events',
     title: 'Native Events',
     category: 'interaction',
-    tags: ['3d', 'events', 'keyboard', 'picking'],
-    description: 'Three selectable objects with pointer, keyboard, and wheel interactions.',
+    tags: ['3d', 'events', 'picking'],
+    description: 'Object-local state and event handlers attached directly to mesh primitives.',
     notes:
-      'Hover to highlight, click to select, and scroll over an object to resize it. With the canvas focused, arrow keys rotate or resize the selection; Escape resets it. Double-click or right-click an object to reset it. Scene callbacks receive TypeGpuNodeEvent; canvasProps callbacks receive native DOM events.',
+      'One self-contained scene using Svelte $state and direct mesh events. No callback forwarding, IDs, or custom animation loop. Scene handlers receive TypeGpuNodeEvent, with the original DOM event available as originalEvent.',
     exportName: 'NativeEvents',
     sourceUrl: new URL('./native-events/NativeEvents.typegpu.svelte', import.meta.url),
-    sourceFiles: [
-      new URL('./native-events/NativeEvents.typegpu.svelte', import.meta.url),
-      new URL('./native-events/NativeEventsPreview.svelte', import.meta.url),
-      new URL('./native-events/event-objects.ts', import.meta.url)
-    ],
+    sourceFiles: [new URL('./native-events/NativeEvents.typegpu.svelte', import.meta.url)],
     typeGpuSourceFiles: []
   },
   {

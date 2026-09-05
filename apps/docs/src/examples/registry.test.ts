@@ -73,22 +73,21 @@ describe('docs example registry', () => {
     }
   });
 
-  it('publishes complete scene and DOM native event examples', () => {
+  it('publishes a self-contained scene with direct primitive event handlers', () => {
     const example = getExampleBySlug('native-events');
     expect(example.category).toBe('interaction');
     expect(example.sourceFiles.map((file) => file.filename)).toEqual([
-      'NativeEvents.typegpu.svelte',
-      'NativeEventsPreview.svelte',
-      'event-objects.ts'
+      'NativeEvents.typegpu.svelte'
     ]);
     for (const event of [
-      'onclick', 'onclickcapture', 'onpointerenter', 'onpointerleave',
-      'ondblclick', 'oncontextmenu', 'onwheel', 'onkeydown', 'onfocus', 'onblur'
+      'onclick', 'onpointerenter', 'onpointerleave', 'ondblclick', 'oncontextmenu', 'onwheel'
     ]) {
       expect(example.code).toContain(event);
     }
-    expect(example.code).toContain('canvasProps=');
-    expect(example.code).toContain("frameloop: 'demand'");
+    expect(example.code).toContain('let objects = $state(');
+    expect(example.code).not.toContain('$props()');
+    expect(example.code).not.toContain('canvasProps');
+    expect(example.code).not.toContain('sceneProps');
     expect(example.code).not.toContain('requestAnimationFrame');
   });
 
@@ -236,7 +235,7 @@ describe('docs example registry', () => {
       expect(source).toContain('<scene');
       expect(source).toContain('<perspectiveCamera');
       expect(definition.sourceFiles[0]?.toString()).toBe(definition.sourceUrl.toString());
-      expect(definition.sourceFiles.length).toBeGreaterThan(1);
+      expect(definition.sourceFiles.length).toBeGreaterThan(0);
       expect(definition.typeGpuSourceFiles.every((file) => file.loc > 0)).toBe(true);
     }
   });
