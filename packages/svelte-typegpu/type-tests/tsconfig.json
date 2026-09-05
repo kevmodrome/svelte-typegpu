@@ -3,7 +3,7 @@
   "include": [
     "../src/Canvas.svelte",
     "../src/ViewportCanvas.svelte",
-    "../src/SceneHost.svelte",
+    "../src/SceneHost.typegpu.svelte",
     "Scene.svelte",
     "Empty.svelte",
     "valid/*.svelte"

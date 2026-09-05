@@ -30,7 +30,7 @@ import { compileViewportSource } from './viewport-test-utils';
 import type { TypeGpuAttachment } from './attachments';
 import { loadModel } from './model-loader';
 import type { TypeGpuLoadedModel } from './types';
-import SceneHost from './SceneHost.svelte';
+import SceneHost from './SceneHost.typegpu.svelte';
 import CanvasMotionHost from './test-fixtures/CanvasMotionHost.svelte';
 import NativeEvents from '../../../apps/docs/src/generated/typegpu-scenes/native-events/NativeEvents.typegpu.js';
 import { createViewProjectionMatrix, readCameraState } from './camera';

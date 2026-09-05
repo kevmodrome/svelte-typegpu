@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { flushSync, getContext, mount, tick, unmount } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
-import SceneHost from './SceneHost.svelte';
+import SceneHost from './SceneHost.typegpu.svelte';
 import renderer from './svelte-renderer';
 import { createFragment, walk, type TypeGpuNode } from './core';
 import { compileTypeGpuSource } from './component-test-utils';

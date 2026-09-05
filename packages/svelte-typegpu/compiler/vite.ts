@@ -13,7 +13,6 @@ export function typegpuSvelte(options: Options = {}) {
   return [
     svelte({
       ...options,
-      hot: false,
       preprocess: [
         ...(Array.isArray(options.preprocess) ? options.preprocess : options.preprocess ? [options.preprocess] : []),
         { markup({ content, filename }) {
@@ -32,6 +31,7 @@ export function typegpuSvelte(options: Options = {}) {
       ],
       compilerOptions: {
         ...options.compilerOptions,
+        hmr: false,
         runes: true,
         experimental: { ...options.compilerOptions?.experimental, customRenderer: ({ filename }) =>
           filename.endsWith('.typegpu.svelte') ? 'svelte-typegpu/svelte-renderer' : null }
@@ -44,7 +44,7 @@ export function typegpuSvelte(options: Options = {}) {
           pendingWarnings.set(warningKey(args.filename, args.compileOptions.generate === 'server'),
             warnings.filter((warning) => filter?.(warning) ?? true));
         }
-        return { ...extra, ...(args.compileOptions.generate === 'server' && viewports.has(args.filename) ? {
+        return { ...extra, hmr: false, ...(args.compileOptions.generate === 'server' && viewports.has(args.filename) ? {
           experimental: { ...options.compilerOptions?.experimental, customRenderer: () => null }
         } : {}) };
       }
@@ -53,9 +53,12 @@ export function typegpuSvelte(options: Options = {}) {
       name: 'typegpu-viewport-server',
       enforce: 'pre' as const,
       transform(code: string, id: string, options?: { ssr?: boolean }) {
-        if (options?.ssr && viewports.has(id)) return omitViewportScene(code, id);
+        if (options?.ssr && viewports.has(id)) {
+          const omitted = omitViewportScene(code, id);
+          return { code: omitted.code, map: omitted.map.toString() };
+        }
       }
-    },
+    } satisfies Plugin,
     {
       name: 'typegpu-viewport-entry',
       enforce: 'post' as const,

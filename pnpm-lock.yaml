@@ -131,6 +131,9 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+      vite:
+        specifier: ^7.3.3
+        version: 7.3.3(@types/node@24.12.4)
       vitest:
         specifier: ^4.0.14
         version: 4.1.7(@types/node@24.12.4)(happy-dom@20.14.0)(vite@7.3.3(@types/node@24.12.4))
@@ -1294,7 +1297,7 @@ packages:
       typescript: ^5.0.0 || ^6.0.0
 
   svelte@https://pkg.svelte.dev/svelte/c/17e37a51bc539cdb6a923b424e5746fc6505ba89:
-    resolution: {tarball: https://pkg.svelte.dev/svelte/c/17e37a51bc539cdb6a923b424e5746fc6505ba89}
+    resolution: {integrity: sha512-JKWRPrijpN66rwYulc3t9BZw1KqrdsM6v9RYXf+sJ77GXqRfEkNwteUvuJSerQ+Q3ImT5dYN2VwqM4QrBETUoQ==, tarball: https://pkg.svelte.dev/svelte/c/17e37a51bc539cdb6a923b424e5746fc6505ba89}
     version: 5.57.0
     engines: {node: '>=18'}
 

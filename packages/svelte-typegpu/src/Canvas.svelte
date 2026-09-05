@@ -2,7 +2,7 @@
   import { getAllContexts, onMount, type Component } from 'svelte';
   import type { HTMLAttributes, HTMLCanvasAttributes } from 'svelte/elements';
   import type { TypeGpuRoot, TypeGpuRootOptions } from './svelte-renderer';
-  import SceneHost from './SceneHost.svelte';
+  import SceneHost from './SceneHost.typegpu.svelte';
   import { startCanvasScene } from './canvas-lifecycle';
 
   let {
