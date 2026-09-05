@@ -317,6 +317,21 @@ describe('docs example registry', () => {
       expect(source.match(absolutePathPattern), fileURLToPath(fileUrl)).toBeNull();
     }
   });
+
+  it('declares every compiled GPU component, including children imported by DOM wrappers', () => {
+    for (const definition of exampleDefinitions) {
+      for (const sourceUrl of definition.sourceFiles) {
+        const name = fileURLToPath(sourceUrl).split('/').at(-1)!;
+        if (!name.endsWith('.typegpu.svelte')) continue;
+        const declaration = readFileSync(new URL(
+          `../generated/typegpu-scenes/${definition.slug}/${name.replace(/\.svelte$/, '.d.ts')}`,
+          import.meta.url
+        ), 'utf8');
+        expect(declaration).toContain("import type { Component } from 'svelte'");
+        expect(declaration).toContain('export default component;');
+      }
+    }
+  });
 });
 
 function countSourceLines(source: string): number {

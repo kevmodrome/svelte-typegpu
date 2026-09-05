@@ -39,6 +39,12 @@ function check(config: string) {
 }
 
 describe('Canvas public Svelte types', () => {
+  it('accepts the generated DOM store editor and its imported GPU component', () => {
+    const result = check('tsconfig.docs.json');
+    expect(result.diagnostics, result.output).toEqual([]);
+    expect(result.status, result.output).toBe(0);
+  });
+
   it('accepts inferred scene props, callbacks, DOM attributes and root bindings', () => {
     const result = check('tsconfig.json');
     expect(result.diagnostics, result.output).toEqual([]);

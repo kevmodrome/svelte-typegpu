@@ -26,6 +26,8 @@ store notification -> Svelte store subscription -> template attribute effect
 ```diff
 + src/store-components.test.ts          subscription and update contracts
 ~ src/gpu-lifecycle.test.ts             controlled store notification cadence
+~ src/svelte-types.test.ts              generated DOM/GPU import type check
++ type-tests/tsconfig.docs.json         focused generated wrapper scope
 + apps/docs/src/examples/shared-stores/SharedStores.svelte
 + apps/docs/src/examples/shared-stores/StoreViewport.typegpu.svelte
 ~ apps/docs/src/examples/{example-definitions,scene-components,registry.test}.ts
@@ -44,8 +46,8 @@ Build evidence changed the generator assumption: precompiled DOM client modules
 import `svelte/internal/init-operations`, which accesses `window` when the docs
 server loads its module graph. Preserve ordinary `.svelte` files as generated
 source with rewritten local imports so Mochi/Vite own their client/SSR compilation.
-Only `.typegpu.svelte` files become precompiled `.js`; keep declarations for those
-JS entry modules. Add generator-output checks and run the production build to
+Only `.typegpu.svelte` files become precompiled `.js`; keep declarations for all
+compiled GPU components, including imported children. Add generator-output checks and run the production build to
 verify this boundary, not just happy-dom component tests.
 
 ## Contracts and invariants
@@ -109,3 +111,22 @@ The existing example app's 501.64 kB chunk warning is unchanged.
 Live desktop/mobile layout, pixel and actual GPU interaction checks remain
 pending: the computer-use tool reports the Mac locked. The user has been asked
 to unlock it. HTTP and mocked-GPU tests do not substitute for those checks.
+
+## Generated child declarations
+
+A focused Svelte type check found TS7016 in the generated DOM wrapper: its
+`StoreViewport.typegpu.js` child lacked a declaration because only entry modules
+received one. Move declaration emission into the GPU component writer, which
+owns each output module, and remove the entry-only duplication. All generated
+GPU components then have the existing `Component<any>` declaration shape.
+This fixes module resolution without weakening strict compiler options or adding
+a wildcard module declaration. It does not claim precise generated prop inference
+or resolve the separately gated scene-element language-tools issues.
+
+Verify the focused DOM wrapper with zero diagnostics, assert every generated GPU
+component has a matching declaration in the registry test, and run full tests and
+builds. Native `.svelte` outputs remain source and must not be overwritten by a
+declaration. This is a build-time correction with no runtime or frame-loop changes.
+
+The focused type check now reports zero diagnostics; all 1,117 workspace tests
+and the full production build pass after generating child declarations.

@@ -52,10 +52,6 @@ for (const definition of exampleDefinitions) {
   }
 
   const entryModuleName = generatedModuleName(sourcePath);
-  if (entryModuleName.endsWith('.js')) {
-    const dtsPath = path.join(sceneDirectory, entryModuleName.replace(/\.js$/, '.d.ts'));
-    writeFileSync(dtsPath, sceneDeclaration(sourcePath));
-  }
 
   codeEntries.push(`  ${JSON.stringify(definition.slug)}: ${JSON.stringify(displaySource)}`);
   sourceFileEntries.push(
@@ -202,6 +198,7 @@ function writeGeneratedSourceFile(
 
     const cssImport = compiled.css?.code ? `import './${path.basename(outPath).replace(/\.js$/, '.css')}';\n` : '';
     writeFileSync(outPath, `${header(sourceFile.path)}\n${cssImport}${portableCode}`);
+    writeFileSync(outPath.replace(/\.js$/, '.d.ts'), sceneDeclaration(sourceFile.path));
     return;
   }
 
