@@ -9,6 +9,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | Deep `$state` value props | Small vectors, colors, matrices, bounds, uniforms and material descriptors update through named props and spreads; bulk resource inputs remain reference-based |
 | DOM `Canvas` host | Reactive scene/canvas props, native DOM events/attachments, inherited context, SSR shell, and async startup/unmount cleanup tested |
 | Dedicated `<canvas>` viewport | Experimental compiler path: native attributes/events/attachments, `bind:this`, read-only size bindings, scoped CSS, SSR/hydration, scene switching and frame cadence tested; other canvas directives are explicitly rejected |
+| `<svelte:window>`, `<svelte:document>`, `<svelte:body>` | Not supported in `.typegpu.svelte`; the pinned compiler rejects them under a custom renderer. Keep them in an ordinary DOM parent component |
 | Reactive render settings | `frameloop` and `maxDevicePixelRatio` update in both canvas hosts without remounting; startup races, mode changes during real motion, resource reuse and manual/idle cancellation tested |
 | Consumer component types | Canvas props/callbacks/bindings checked; scene-element declarations deferred due to language-tools casing and action-target gaps |
 | Scene authoring diagnostics | Build-time warnings for unknown static primitives and definitely invalid resource/control parenting; components, snippets and dynamic tags retain composition flexibility |
@@ -39,6 +40,9 @@ canvas-owned entry syntax. Its DOM canvas binding support does not enable
 `bind:this` on custom scene primitives.
 Use [Canvas hosting](canvas-guide.md) to cross that boundary without manually
 mounting, remounting, or disposing the scene.
+See the [global-element investigation](viewport-global-elements-design.md) for
+the native initialization-order contract and why a canvas attachment is not an
+equivalent implementation of `<svelte:window>`.
 See the [element typing investigation](scene-element-types-design.md) for the
 reproducer and current editor limitations. These are separate from the tested
 runtime attachment behavior below.
