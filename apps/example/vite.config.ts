@@ -1,22 +1,9 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
-import { svelte } from '@sveltejs/vite-plugin-svelte';
-
-const typeGpuRenderer = fileURLToPath(import.meta.resolve('svelte-typegpu/svelte-renderer'));
+import { typegpuSvelte } from 'svelte-typegpu/vite';
 
 export default defineConfig({
-  plugins: [
-    svelte({
-      extensions: ['.svelte'],
-      compilerOptions: {
-        runes: true,
-        experimental: {
-          customRenderer: ({ filename }) =>
-            filename.endsWith('.typegpu.svelte') ? typeGpuRenderer : null
-        }
-      }
-    })
-  ],
+  plugins: [typegpuSvelte()],
   test: {
     alias: [
       {

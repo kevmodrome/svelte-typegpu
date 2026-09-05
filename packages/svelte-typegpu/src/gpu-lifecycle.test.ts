@@ -32,7 +32,6 @@ import { loadModel } from './model-loader';
 import type { TypeGpuLoadedModel } from './types';
 import SceneHost from './SceneHost.svelte';
 import CanvasMotionHost from './test-fixtures/CanvasMotionHost.svelte';
-import Canvas from './Canvas.svelte';
 import NativeEvents from '../../../apps/docs/src/generated/typegpu-scenes/native-events/NativeEvents.typegpu.js';
 import { createViewProjectionMatrix, readCameraState } from './camera';
 import { rotateVectorXyz, transformPoint4 } from './math3d';
@@ -106,6 +105,7 @@ describe('GPU resource and frame lifecycle', () => {
       await settle();
       const canvas = root.canvas;
       const vertices = buffers.filter((buffer) => buffer.label.includes('vertices'));
+      expect(vertices).toHaveLength(1);
       gpu.createBuffer.mockClear();
       gpu.createBindGroup.mockClear();
       vi.mocked(createMeshPipeline).mockClear();
@@ -166,12 +166,10 @@ describe('GPU resource and frame lifecycle', () => {
         .mockResolvedValue(gpu as never);
       vi.stubGlobal('navigator', { gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
       let root!: TypeGpuRoot;
-      const instance = mount(Canvas, {
+      const instance = mount(NativeEvents, {
         target: document.body,
         props: {
-          scene: NativeEvents,
-          sceneProps: {},
-          options: { frameloop },
+          frameloop,
           onready: (value: TypeGpuRoot) => (root = value)
         }
       });
@@ -286,12 +284,10 @@ describe('GPU resource and frame lifecycle', () => {
     vi.mocked(tgpu.init).mockResolvedValue(gpu as never);
     vi.stubGlobal('navigator', { gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
     let root!: TypeGpuRoot;
-    const instance = mount(Canvas, {
+    const instance = mount(NativeEvents, {
       target: document.body,
       props: {
-        scene: NativeEvents,
-        sceneProps: {},
-        options: { frameloop: 'demand' },
+        frameloop: 'demand',
         onready: (value: TypeGpuRoot) => (root = value)
       }
     });

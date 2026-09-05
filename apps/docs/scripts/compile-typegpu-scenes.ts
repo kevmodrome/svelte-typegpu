@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { codeToTokens } from 'shiki';
 import { compile } from 'svelte/compiler';
+import { compileTypeGpu } from 'svelte-typegpu/compiler';
 import ts from 'typescript';
 
 const scriptRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -173,18 +174,22 @@ function writeGeneratedSourceFile(
 
   if (sourceFile.label.endsWith('.svelte')) {
     const custom = sourceFile.label.endsWith('.typegpu.svelte');
-    const compiled = compile(sourceFile.source, {
+    const compiled = (custom ? compileTypeGpu : compile)(sourceFile.source, {
       filename: sourceFile.path,
       generate: 'client',
       runes: true,
       experimental: custom ? { customRenderer: rendererPath } : undefined
     });
+    if (compiled.css?.code) {
+      writeFileSync(outPath.replace(/\.js$/, '.css'), compiled.css.code);
+    }
     const portableCode = rewriteGeneratedImports(
       compiled.js.code.replaceAll(rendererPath, 'svelte-typegpu/svelte-renderer'),
       sourceFiles
     );
 
-    writeFileSync(outPath, `${header(sourceFile.path)}\n${portableCode}`);
+    const cssImport = compiled.css?.code ? `import './${path.basename(outPath).replace(/\.js$/, '.css')}';\n` : '';
+    writeFileSync(outPath, `${header(sourceFile.path)}\n${cssImport}${portableCode}`);
     if (!custom) {
       writeFileSync(outPath.replace(/\.js$/, '.d.ts'), sceneDeclaration(sourceFile.path));
     }

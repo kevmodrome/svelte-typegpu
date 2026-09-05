@@ -188,11 +188,26 @@
   function clamp01(value: number): number {
     return Math.max(0, Math.min(1, value));
   }
+
+  function handleReady() {
+    ready = true;
+    error = null;
+  }
+
+  function handleError(cause: unknown) {
+    error = cause instanceof Error
+      ? `Unable to start this preview: ${cause.message}`
+      : 'Unable to start this preview.';
+  }
 </script>
 
 <div class:preview-with-controls={hasControls}>
   <section class="preview-panel" aria-label={`${label} live preview`}>
     {#key slug}
+      {#if slug === 'native-events'}
+        {@const Viewport = sceneComponents[slug]}
+        <Viewport onfps={(value: number) => fps = value} onready={handleReady} onrenderererror={handleError} />
+      {:else}
       <Canvas
         class="preview-host"
         canvasProps={{ 'aria-label': `${label} 3D scene`, role: 'img' }}
@@ -207,16 +222,10 @@
           alphaMode: 'premultiplied'
         }}
         onfps={(value) => fps = value}
-        onready={() => {
-          ready = true;
-          error = null;
-        }}
-        onerror={(cause) => {
-          error = cause instanceof Error
-            ? `Unable to start this preview: ${cause.message}`
-            : 'Unable to start this preview.';
-        }}
+        onready={handleReady}
+        onerror={handleError}
       />
+      {/if}
     {/key}
     <div class="fps-badge" aria-label="Preview frames per second">
       <span>FPS</span>

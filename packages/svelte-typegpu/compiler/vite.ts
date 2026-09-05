@@ -1,5 +1,6 @@
 import { svelte, type Options } from '@sveltejs/vite-plugin-svelte';
-import { adaptViewportClient, prepareTypeGpuSource } from './index';
+import MagicString from 'magic-string';
+import { adaptViewportClient, omitViewportScene, prepareTypeGpuSource } from './index.ts';
 
 /** The normal Svelte Vite integration with the dedicated TypeGPU file boundary. */
 export function typegpuSvelte(options: Options = {}) {
@@ -11,10 +12,16 @@ export function typegpuSvelte(options: Options = {}) {
       preprocess: [
         ...(Array.isArray(options.preprocess) ? options.preprocess : options.preprocess ? [options.preprocess] : []),
         { markup({ content, filename }) {
-          if (!filename?.endsWith('.typegpu.svelte')) return;
+          if (!filename) return;
+          const unchanged = () => ({ code: content, map: new MagicString(content).generateMap({ source: filename, includeContent: true, hires: true }) });
+          if (!filename.endsWith('.typegpu.svelte')) return unchanged();
           const prepared = prepareTypeGpuSource(content, filename);
-          if (prepared.viewport) viewports.add(filename); else viewports.delete(filename);
-          return prepared;
+          if (prepared.viewport) {
+            viewports.add(filename);
+            return { code: prepared.code, map: prepared.map };
+          }
+          viewports.delete(filename);
+          return unchanged();
         } }
       ],
       compilerOptions: {
@@ -30,6 +37,13 @@ export function typegpuSvelte(options: Options = {}) {
         } : {}) };
       }
     }),
+    {
+      name: 'typegpu-viewport-server',
+      enforce: 'pre' as const,
+      transform(code: string, id: string, options?: { ssr?: boolean }) {
+        if (options?.ssr && viewports.has(id)) return omitViewportScene(code, id);
+      }
+    },
     {
       name: 'typegpu-viewport-entry',
       enforce: 'post' as const,

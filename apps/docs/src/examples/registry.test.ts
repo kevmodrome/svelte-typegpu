@@ -85,7 +85,8 @@ describe('docs example registry', () => {
       expect(example.code).toContain(event);
     }
     expect(example.code).toContain('let objects = $state(');
-    expect(example.code).not.toContain('$props()');
+    expect(example.code).toContain('<canvas');
+    expect(example.code).toContain('onkeydown=');
     expect(example.code).not.toContain('canvasProps');
     expect(example.code).not.toContain('sceneProps');
     expect(example.code).not.toContain('requestAnimationFrame');

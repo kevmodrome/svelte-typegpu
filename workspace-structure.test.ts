@@ -64,12 +64,14 @@ describe('pnpm workspace layout', () => {
       directory: 'packages/svelte-typegpu'
     });
     expect(packageJson.files).toEqual([
+      'compiler',
       'src',
       '!src/**/*.test.ts',
       '!src/test-fixtures',
       '!src/glb-test-fixtures.ts',
       '!src/test-paths.ts',
       '!src/component-test-utils.ts',
+      '!src/viewport-test-utils.ts',
       '!src/svelte-internal-client.d.ts'
     ]);
     expect(packageJson.publishConfig?.access).toBe('public');

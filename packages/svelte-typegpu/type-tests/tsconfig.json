@@ -2,6 +2,7 @@
   "extends": "../tsconfig.json",
   "include": [
     "../src/Canvas.svelte",
+    "../src/ViewportCanvas.svelte",
     "../src/SceneHost.svelte",
     "Scene.svelte",
     "Empty.svelte",

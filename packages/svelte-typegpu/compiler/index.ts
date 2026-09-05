@@ -92,6 +92,27 @@ export function adaptViewportClient(code: string, inputMap?: any) {
   const rendererImport = imports.find((node) => node.specifiers.some((s: any) => s.local.name === '$renderer'));
   const hostImport = imports.find((node) => node.source.value === hostModule);
   const hostName = hostImport?.specifiers[0]?.local.name;
+  const factories = new Set<string>();
+  for (const statement of ast.body) {
+    if (statement.type !== 'VariableDeclaration') continue;
+    for (const declaration of statement.declarations as any[]) {
+      if (declaration.init?.callee?.object?.name === '$' && declaration.init.callee.property?.name === 'from_tree') {
+        factories.add(declaration.id.name);
+      }
+    }
+  }
+  let foreignAnchor = false;
+  const inspectEntry = (node: any): void => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) { node.forEach(inspectEntry); return; }
+    if (['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(node.type)) return;
+    if (node.type === 'CallExpression' && (factories.has(node.callee.name) ||
+      (node.callee.object?.name === '$' && ['from_tree', 'comment', 'append', 'first_child'].includes(node.callee.property?.name)))) {
+      foreignAnchor = true;
+    }
+    Object.values(node).forEach(inspectEntry);
+  };
+  inspectEntry(statements);
   const hostCalls = statements.filter((statement: any) => {
     if (statement.type !== 'ExpressionStatement') return false;
     let expression = statement.expression;
@@ -101,7 +122,7 @@ export function adaptViewportClient(code: string, inputMap?: any) {
     return expression.type === 'CallExpression' && expression.callee.name === hostName;
   });
   if (scopes.length !== 1 || scope.init.arguments.length !== 1 || scope.init.arguments[0].name !== '$renderer' ||
-      !rendererImport || !hostName || hostCalls.length !== 1) {
+      !rendererImport || !hostName || hostCalls.length !== 1 || foreignAnchor) {
     throw new Error('Unsupported Svelte viewport output: renderer scope or static canvas host changed.');
   }
   const output = new MagicString(code);
@@ -111,13 +132,25 @@ export function adaptViewportClient(code: string, inputMap?: any) {
   return { code: output.toString(), map: inputMap ? remapping([map as any, inputMap], () => null) : map };
 }
 
+/** Scene snippets are never executed by the server host; do not compile them as HTML. */
+export function omitViewportScene(source: string, filename: string) {
+  const ast = parse(source, { modern: true, filename });
+  const host = ast.fragment.nodes.find((node) => node.type === 'Component');
+  if (!host || host.type !== 'Component') throw new Error('Missing lowered viewport host.');
+  const output = new MagicString(source);
+  const children = host.fragment.nodes;
+  if (children.length) output.remove(children[0].start, children.at(-1)!.end);
+  return { code: output.toString(), map: output.generateMap({ source: filename, includeContent: true, hires: true }) };
+}
+
 export function compileTypeGpu(source: string, options: CompileOptions & { filename: string }) {
   const prepared = prepareTypeGpuSource(source, options.filename);
   const serverViewport = prepared.viewport && options.generate === 'server';
-  const compiled = compile(prepared.code, {
+  const server = serverViewport ? omitViewportScene(prepared.code, options.filename) : undefined;
+  const compiled = compile(server?.code ?? prepared.code, {
     ...options,
     hmr: false,
-    sourcemap: prepared.map ?? options.sourcemap,
+    sourcemap: server && prepared.map ? remapping([server.map as any, prepared.map as any], () => null) : prepared.map ?? options.sourcemap,
     experimental: { ...options.experimental, customRenderer: serverViewport ? () => null :
       options.experimental?.customRenderer ?? 'svelte-typegpu/svelte-renderer' }
   });

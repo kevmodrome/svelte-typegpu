@@ -41,5 +41,8 @@ describe('viewport compiler boundary', () => {
   it('fails closed on incompatible compiler output', () => {
     expect(() => adaptViewportClient('export default () => {};')).toThrow(/Unsupported Svelte/);
     expect(() => adaptViewportClient('export default function Viewport() {}')).toThrow(/Unsupported Svelte/);
+    expect(() => compileTypeGpu('<!-- preserved --><canvas><scene /></canvas>', {
+      filename, preserveComments: true
+    })).toThrow(/Unsupported Svelte/);
   });
 });
