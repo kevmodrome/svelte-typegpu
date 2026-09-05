@@ -10,6 +10,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | Consumer component types | Canvas props/callbacks/bindings checked; scene-element declarations deferred due to language-tools casing and action-target gaps |
 | `{#snippet}` and `{@render}` | Supported, including attachment forwarding |
 | Component `$bindable` props and component `bind:this` | Supported and tested |
+| Scene event attributes and `onclickcapture` | Capture/target/bubble ordering, group hover, and propagation controls supported |
 | `Tween` / `Spring` bound to transforms and material values | Supported; frame delivery tested at 60/120/144 Hz in both RAF callback orders |
 | `{@attach}` | Supported on scene nodes, including reactive replacement and component prop spreads |
 | `use:` | Supported for renderer-safe actions with update/destroy cleanup |

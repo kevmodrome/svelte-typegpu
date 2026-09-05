@@ -600,6 +600,13 @@ function createInteractionTargets(items: TypeGpuMeshDrawItem[]): TypeGpuInteract
       if (handlers === inherited) handlers = new Set(inherited);
       handlers.add(type);
     }
+    if (node.captureListeners) {
+      for (const [type, listeners] of node.captureListeners) {
+        if (!listeners.size || !POINTER_NODE_EVENTS.has(type) || handlers.has(type)) continue;
+        if (handlers === inherited) handlers = new Set(inherited);
+        handlers.add(type);
+      }
+    }
     cache.set(node, handlers);
     return handlers;
   }

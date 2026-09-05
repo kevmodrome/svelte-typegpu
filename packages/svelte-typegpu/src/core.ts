@@ -1,6 +1,11 @@
 import { Dirty, mergeDirty } from './dirty';
-import type { TypeGpuNodeEvent } from './node-events';
-export { dispatchNodeEvent, type TypeGpuNodeEvent, type TypeGpuNodeEventInit } from './node-events';
+import { captureOption, type TypeGpuEventListenerOptions, type TypeGpuNodeEvent } from './node-events';
+export {
+  dispatchNodeEvent,
+  type TypeGpuEventListenerOptions,
+  type TypeGpuNodeEvent,
+  type TypeGpuNodeEventInit
+} from './node-events';
 import {
   dirtyForAttribute,
   dirtyForEventListener,
@@ -27,6 +32,7 @@ export interface TypeGpuNode {
   children: TypeGpuNode[];
   attributes: Record<string, unknown>;
   listeners: Map<string, Set<(event: TypeGpuNodeEvent) => void>>;
+  captureListeners?: Map<string, Set<(event: TypeGpuNodeEvent) => void>>;
   runtime?: TypeGpuRuntime;
   value?: string;
 }
@@ -175,27 +181,35 @@ export function getNextSibling(node: TypeGpuNode): TypeGpuNode | null {
 export function addEventListener(
   node: TypeGpuNode,
   type: string,
-  handler: (event: TypeGpuNodeEvent) => void
+  handler: (event: TypeGpuNodeEvent) => void,
+  options?: TypeGpuEventListenerOptions
 ): void {
-  const listeners = node.listeners.get(type) ?? new Set();
+  const registry = captureOption(options)
+    ? (node.captureListeners ??= new Map())
+    : node.listeners;
+  const listeners = registry.get(type) ?? new Set();
   if (listeners.has(handler)) return;
 
   listeners.add(handler);
-  node.listeners.set(type, listeners);
+  registry.set(type, listeners);
   invalidateFrom(node, dirtyForEventListener(node.name, type));
 }
 
 export function removeEventListener(
   node: TypeGpuNode,
   type: string,
-  handler: (event: TypeGpuNodeEvent) => void
+  handler: (event: TypeGpuNodeEvent) => void,
+  options?: TypeGpuEventListenerOptions
 ): void {
-  const listeners = node.listeners.get(type);
+  const capture = captureOption(options);
+  const registry = capture ? node.captureListeners : node.listeners;
+  const listeners = registry?.get(type);
   if (!listeners?.has(handler)) return;
 
   listeners.delete(handler);
   if (listeners.size === 0) {
-    node.listeners.delete(type);
+    registry!.delete(type);
+    if (capture && registry!.size === 0) delete node.captureListeners;
   }
   invalidateFrom(node, dirtyForEventListener(node.name, type));
 }

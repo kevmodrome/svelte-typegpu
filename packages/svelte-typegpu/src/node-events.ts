@@ -15,6 +15,12 @@ export const POINTER_NODE_EVENTS = new Set([
   'pointerleave'
 ]);
 
+export type TypeGpuEventListenerOptions = boolean | { capture?: boolean };
+
+export function captureOption(options: TypeGpuEventListenerOptions = false): boolean {
+  return typeof options === 'boolean' ? options : options.capture === true;
+}
+
 export interface TypeGpuNodeEventInit {
   detail?: unknown;
   originalEvent?: Event;
@@ -27,6 +33,7 @@ export interface TypeGpuNodeEvent {
   readonly type: string;
   readonly target: TypeGpuNode;
   readonly currentTarget: TypeGpuNode | null;
+  readonly eventPhase: 0 | 1 | 2 | 3;
   readonly detail?: unknown;
   readonly originalEvent?: Event;
   readonly relatedTarget: TypeGpuNode | null;
@@ -42,6 +49,7 @@ class NodeEvent implements TypeGpuNodeEvent {
   readonly type: string;
   readonly target: TypeGpuNode;
   currentTarget: TypeGpuNode | null = null;
+  eventPhase: 0 | 1 | 2 | 3 = 0;
   readonly detail?: unknown;
   readonly originalEvent?: Event;
   readonly relatedTarget: TypeGpuNode | null;
@@ -77,6 +85,25 @@ class NodeEvent implements TypeGpuNodeEvent {
     this.#defaultPrevented = true;
     this.originalEvent?.preventDefault();
   }
+
+  invoke(current: TypeGpuNode, capture: boolean): void {
+    const listeners = (capture ? current.captureListeners : current.listeners)?.get(this.type);
+    if (!listeners?.size) return;
+    this.currentTarget = current;
+    this.eventPhase = current === this.target ? 2 : capture ? 1 : 3;
+    for (const handler of [...listeners]) {
+      if (!listeners.has(handler)) continue;
+      handler(this);
+      if (this.immediatePropagationStopped) break;
+    }
+  }
+}
+
+function hasCaptureListener(node: TypeGpuNode, type: string): boolean {
+  for (let current: TypeGpuNode | null = node; current; current = current.parent) {
+    if (current.captureListeners?.get(type)?.size) return true;
+  }
+  return false;
 }
 
 export function dispatchNodeEvent(
@@ -84,26 +111,27 @@ export function dispatchNodeEvent(
   type: string,
   init: TypeGpuNodeEventInit = {}
 ): void {
-  if (!(init.bubbles ?? BUBBLING_NODE_EVENTS.has(type)) && !node.listeners.get(type)?.size) return;
+  if (
+    !(init.bubbles ?? BUBBLING_NODE_EVENTS.has(type)) &&
+    !node.listeners.get(type)?.size &&
+    !hasCaptureListener(node, type)
+  )
+    return;
   const event = new NodeEvent(node, type, init);
   const path: TypeGpuNode[] = [node];
-  if (event.bubbles) {
-    for (let parent = node.parent; parent; parent = parent.parent) path.push(parent);
-  }
+  for (let parent = node.parent; parent; parent = parent.parent) path.push(parent);
   try {
-    for (const current of path) {
-      const listeners = current.listeners.get(type);
-      if (listeners?.size) {
-        event.currentTarget = current;
-        for (const handler of [...listeners]) {
-          if (!listeners.has(handler)) continue;
-          handler(event);
-          if (event.immediatePropagationStopped) break;
-        }
-      }
+    for (let i = path.length - 1; i >= 0; i--) {
+      event.invoke(path[i], true);
+      if (event.propagationStopped) return;
+    }
+    const length = event.bubbles ? path.length : 1;
+    for (let i = 0; i < length; i++) {
+      event.invoke(path[i], false);
       if (event.propagationStopped) break;
     }
   } finally {
     event.currentTarget = null;
+    event.eventPhase = 0;
   }
 }

@@ -39,9 +39,26 @@ configuration: `drag` and `dragButton` still belong to the picked mesh/model.
 `pointerenter` and `pointerleave` do not bubble. They describe each node's hover
 boundary: enter ancestors before children, leave children before ancestors.
 Moving between siblings does not leave/re-enter their common group. There is no
-ambiguous `onhover` alias. `camerachange` stays local to its camera. Custom events
-dispatched through the low-level API stay local unless `{ bubbles: true }` is set.
-Capture handlers and automatic keyboard/focus routing are not implemented.
+ambiguous `onhover` alias. `camerachange` and custom events dispatched through the
+low-level API do not bubble unless `{ bubbles: true }` is set. Automatic
+keyboard/focus routing is not implemented.
+
+Use Svelte's capture suffix when a parent must observe an event before children:
+
+```svelte
+<group onclickcapture={inspectBeforeChildren} onclick={afterChildren}>
+  <mesh onclick={select}><boxGeometry /></mesh>
+</group>
+```
+
+Capture runs from scene ancestors toward the picked node, followed by target
+listeners, then bubbling back outward. Capture listeners can also observe
+non-bubbling events such as `pointerenter`; unlike a normal group enter handler,
+`onpointerentercapture` observes descendant boundary changes too. The syntax is
+the same as [Svelte's capture event attributes](https://svelte.dev/docs/svelte/v5-migration-guide#Event-changes-Event-modifiers).
+For an attachment subscription, pass `{ capture: true }` as the fourth argument
+to `onNodeEvent`. Its unsubscribe function retains the original capture flag.
+Only `capture` is supported in listener options, not DOM once/passive/signal options.
 
 Handlers receive `TypeGpuNodeEvent`, not a DOM `PointerEvent`:
 
@@ -49,12 +66,16 @@ Handlers receive `TypeGpuNodeEvent`, not a DOM `PointerEvent`:
   is the node whose boundary changed.
 - `currentTarget` is the node whose listener is running; it becomes `null` after
   dispatch. Save it synchronously if needed in asynchronous work.
+- `eventPhase` is 1 for ancestor capture, 2 at the target (capture and ordinary
+  listeners), 3 for ancestor bubbling, and 0 after dispatch.
 - `relatedTarget` is the previous/next picked node for hover transitions, or null.
 - `detail` contains the picked instance ID and, where available, world-space hit
   point. Drag events carry `TypeGpuDragEventDetail`.
 - `originalEvent` is the browser's canvas event.
-- `stopPropagation()` stops later ancestors; `stopImmediatePropagation()` also
-  stops remaining listeners on the current node. Neither stops native canvas
+- `stopPropagation()` completes the current node/phase, then stops later visits.
+  In target capture it also prevents the later target bubble pass.
+  `stopImmediatePropagation()` also stops remaining listeners in the current pass.
+  Neither stops native canvas
   listeners or automatically cancels camera/drag gestures.
 - `preventDefault()` forwards to the original event when cancelable;
   `defaultPrevented` reflects cancellation. This does not cancel scene bubbling.
