@@ -87,3 +87,22 @@ Prototype-based access changes enumeration, not scene traversal. Tests and
 repository searches must confirm no internal consumer depends on spreading host
 nodes. Rollback is local to node construction; no data migration or GPU format
 changes. Do not claim physical refresh-rate improvements from synthetic clocks.
+
+## Verification outcome
+
+- Two real compiled-component regressions failed on the original plain objects:
+  retained attachment references were not identical to the renderer's host nodes.
+  Both pass with host instances, including event selection, nested state, keyed
+  moves/removal, and identity-guarded cleanup.
+- `pnpm test`: 798 tests pass (5 workspace, 713 renderer, 46 docs, 34 example).
+  The 36-case canvas motion matrix now retains and reads host references on every
+  tick at 60/120/144 Hz. Existing frame counts, targeted 96-byte instance writes,
+  GPU/attachment reuse, demand settling, manual scheduling and disposal assertions
+  remain green. All 132 GPU lifecycle tests pass.
+- Factory tests cover all node kinds, absent optional fields, a shared getter
+  across 1,000 nodes, and fresh child snapshots after mutation.
+- Full workspace builds pass; Svelte check reports zero errors and warnings.
+  The consumer reference example compiles warning-free against the pinned
+  custom renderer. Generated docs scenes remain unchanged.
+- Live visual checks remain unavailable because the Mac is locked. No physical
+  display-cadence or GPU-throughput improvement is claimed.

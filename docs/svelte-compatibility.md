@@ -16,6 +16,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | Scene event attributes and `onclickcapture` | Capture/target/bubble ordering, group hover, double-click/context-menu/wheel, and propagation controls supported |
 | `Tween` / `Spring` bound to transforms and material values | Supported; frame delivery tested at 60/120/144 Hz in both RAF callback orders |
 | `{@attach}` | Supported on scene nodes, including reactive replacement and component prop spreads |
+| Scene node references in `$state` | Identity preserved for attachment/event targets, including nested state objects and arrays; node internals remain renderer-owned |
 | `use:` | Not part of the renderer API; use attachments. The pinned preview may accept scene actions incidentally; the canvas boundary rejects them |
 | `class:` and `style:` | Not part of the scene API; use material/transform props, and ordinary class/style attributes on the native canvas |
 | Host-element bindings, including `<mesh bind:this>` | Rejected by the pinned upstream compiler |
@@ -174,6 +175,40 @@ Prefer reactive props over mutating `node.attributes`, linked-list pointers, or
 GPU descriptors directly. `TypeGpuNode` is exported for typing/debugging, not as
 an alternative reactive store. `frameTask` remains the mechanism for per-frame
 simulation; attachments should not introduce their own RAF loops.
+
+### Retaining a node reference
+
+When an integration needs a reference, an attachment can retain the actual node
+in ordinary `$state`. Nodes are opaque host objects: Svelte does not deep-proxy
+them, even inside a reactive array or object. Identity comparisons with event
+targets and identity-based cleanup therefore work normally:
+
+```svelte
+<script lang="ts">
+  import type { TypeGpuAttachment, TypeGpuNode } from 'svelte-typegpu';
+  let reference = $state<TypeGpuNode | null>(null);
+  let selected = $state<TypeGpuNode | null>(null);
+  const remember: TypeGpuAttachment = (node) => {
+    reference = node;
+    return () => {
+      if (reference === node) reference = null;
+      if (selected === node) selected = null;
+    };
+  };
+</script>
+
+<mesh {@attach remember} onclick={(event) => selected = event.currentTarget}>
+  <boxGeometry />
+  <basicMaterial color={selected && selected === reference ? [1, 0.3, 0.2] : [0.2, 0.7, 0.5]} />
+</mesh>
+```
+
+Assigning a different reference is reactive. Reading a node's `attributes`,
+parent, or children does not subscribe to renderer mutations. Continue expressing
+scene changes through Svelte state and primitive props; do not use retained
+references as a second scene-state API. `children` returns a fresh snapshot when
+read; spreading or serializing a host object is not a supported tree-copy API.
+`<mesh bind:this>` remains unsupported by the pinned compiler.
 
 Attachments on wrapper components are forwarded by spreading their props onto
 the underlying primitive, using ordinary Svelte attachment syntax. See the
