@@ -28,6 +28,23 @@ scenes, updates local state and disposes both surfaces. This establishes the
 outer DOM renderer scope approach for the static host; it does not yet establish
 the source transform, native attribute contract, CSS or GPU behavior.
 
+Implemented foundation: `compiler/index.ts` now performs source lowering and
+validated client entry adaptation; `compiler/vite.ts` supplies the Vite boundary.
+`ViewportCanvas.svelte` owns a real canvas and uses `canvas-lifecycle.ts`, shared
+with the legacy Canvas host. The parameterless compiled children snippet itself
+is the mounted scene entry, so no additional SceneContent component is needed.
+Tests cover the actual server host, hydration identity, native canvas references,
+scoped CSS output, events, attachments, keyed moves, context, delayed startup and
+teardown. The real GPU lifecycle suite covers both hosts with Tween/Spring at
+60/120/144 Hz, both callback orders, and manual mode.
+
+The initial contract allows at most one mounted scene (including hidden scenes).
+Invalid multiple scenes report an error and dispose the owned scene/root. Empty
+content clears once and idles. Testing exposed a redundant invalidation through
+setScene -> setCamera; setScene now updates camera data and requests only one
+frame. All 646 renderer tests and consumer type checks pass at this checkpoint.
+Live verification is pending because the user's Mac is locked.
+
 ## 1. Scope and risk
 
 ```svelte

@@ -314,7 +314,9 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     if (this.#disposed) return;
 
     const depthChanged = this.#renderSettings.depth !== scene.renderSettings.depth;
-    this.setCamera(scene.camera);
+    // A scene update is one invalidation, including its camera projection.
+    this.#camera = scene.camera;
+    this.#projectionDirty = true;
     this.#updateRenderSettings(scene.renderSettings);
     this.#lights = scene.lights;
     this.#drawBatches = scene.drawBatches;

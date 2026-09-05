@@ -26,6 +26,7 @@ import { Spring, Tween } from 'svelte/motion';
 import * as svelteClient from 'svelte/internal/client';
 import sceneRenderer, { createTypeGpuRuntimeForTest, type TypeGpuRoot } from './svelte-renderer';
 import { compileTypeGpuSource } from './component-test-utils';
+import { compileViewportSource } from './viewport-test-utils';
 import type { TypeGpuAttachment } from './attachments';
 import { loadModel } from './model-loader';
 import type { TypeGpuLoadedModel } from './types';
@@ -70,6 +71,71 @@ afterEach(() => {
 });
 
 describe('GPU resource and frame lifecycle', () => {
+  it.each([60, 120, 144])('switches viewport scenes and clears an empty viewport at %s Hz', async (hz) => {
+    const pending = new Map<number, FrameRequestCallback>();
+    let id = 0;
+    let now = 0;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { pending.set(++id, callback); return id; });
+    vi.stubGlobal('cancelAnimationFrame', (key: number) => pending.delete(key));
+    const { root: gpu, buffers, submissions } = fakeRoot();
+    vi.mocked(tgpu.init).mockClear().mockResolvedValue(gpu as never);
+    vi.stubGlobal('navigator', { gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
+    let root!: TypeGpuRoot;
+    const onerror = vi.fn();
+    const Viewport = compileViewportSource<{ show(value: number): void }>(`
+      <script>let { onready, onerror } = $props(); let mode = $state(1);
+        export function show(value) { mode = value; }
+      </script>
+      <canvas frameloop="demand" {onready} onrenderererror={onerror}>
+        {#if mode === 1}<scene><mesh><boxGeometry /><basicMaterial /></mesh></scene>
+        {:else if mode === 2}<scene><mesh position={[2, 0, 0]}><boxGeometry /><basicMaterial /></mesh></scene>
+        {:else if mode === 3}<scene /><scene />{/if}
+      </canvas>
+    `);
+    const instance = mount(Viewport, { target: document.body, props: { onready: (value: TypeGpuRoot) => root = value, onerror } });
+    async function settle() {
+      await tick();
+      for (let i = 0; i < 4; i++) {
+        now += 1000 / hz;
+        for (const [id, callback] of [...pending]) { pending.delete(id); callback(now); }
+        flushSync(); await Promise.resolve();
+      }
+      expect(pending.size).toBe(0);
+    }
+    try {
+      await settle();
+      const canvas = root.canvas;
+      const vertices = buffers.filter((buffer) => buffer.label.includes('vertices'));
+      gpu.createBuffer.mockClear();
+      gpu.createBindGroup.mockClear();
+      vi.mocked(createMeshPipeline).mockClear();
+      flushSync(() => instance.show(2));
+      await settle();
+      expect(root.canvas).toBe(canvas);
+      expect(tgpu.init).toHaveBeenCalledOnce();
+      expect(gpu.createBuffer).not.toHaveBeenCalled();
+      expect(gpu.createBindGroup).not.toHaveBeenCalled();
+      expect(createMeshPipeline).not.toHaveBeenCalled();
+      expect(vertices.every((buffer) => buffer.destroy.mock.calls.length === 0)).toBe(true);
+      const before = submissions.length;
+      captured.counts.length = 0;
+      flushSync(() => instance.show(0));
+      await settle();
+      expect(submissions.length - before).toBe(1);
+      expect(captured.counts).toEqual([]);
+      expect(vertices.every((buffer) => buffer.destroy.mock.calls.length === 1)).toBe(true);
+      expect(gpu.destroy).not.toHaveBeenCalled();
+      flushSync(() => instance.show(3));
+      await settle();
+      expect(onerror).toHaveBeenCalledOnce();
+      expect(onerror.mock.calls[0][0].message).toContain('at most one mounted');
+      expect(gpu.destroy).toHaveBeenCalledOnce();
+      expect(canvas.dataset.typegpuStatus).toBe('error');
+    } finally { await unmount(instance); document.body.replaceChildren(); }
+    expect(pending.size).toBe(0);
+    expect(gpu.destroy).toHaveBeenCalledOnce();
+  });
+
   it.each(
     [60, 120, 144].flatMap((hz) => [
       { hz, frameloop: 'demand' as const, rendererFirst: false },
@@ -324,11 +390,11 @@ describe('GPU resource and frame lifecycle', () => {
         { hz, kind, frameloop: 'demand' as const, rendererFirst: false },
         { hz, kind, frameloop: 'demand' as const, rendererFirst: true },
         { hz, kind, frameloop: 'manual' as const, rendererFirst: false }
-      ])
+      ].flatMap((clock) => [false, true].map((viewport) => ({ ...clock, viewport }))))
     )
   )(
-    'retains Canvas and GPU state during $kind and native prop updates at $hz Hz ($frameloop, renderer first: $rendererFirst)',
-    async ({ hz, kind, frameloop, rendererFirst }) => {
+    'retains Canvas and GPU state during $kind and native prop updates at $hz Hz ($frameloop, renderer first: $rendererFirst, viewport: $viewport)',
+    async ({ hz, kind, frameloop, rendererFirst, viewport }) => {
       const pending = new Map<number, FrameRequestCallback>();
       const producers = new WeakSet<FrameRequestCallback>();
       let id = 0;
@@ -389,7 +455,19 @@ describe('GPU resource and frame lifecycle', () => {
         reject = no;
       });
       const onready = vi.fn(resolve);
-      const instance = mount(CanvasMotionHost, {
+      const Viewport = compileViewportSource<{ rename(value: string): void }>(`
+        <script>
+          let { Scene, motion, setup, domSetup, onready, onerror, frameloop } = $props();
+          let label = $state('Moving scene');
+          export function rename(value) { label = value; }
+        </script>
+        <canvas {frameloop} maxDevicePixelRatio={1} {onready} onrenderererror={onerror}
+          data-motion={motion.current} aria-label={label} class={{ moving: motion.current > 0 }}
+          {@attach domSetup}>
+          <Scene {motion} {setup} />
+        </canvas>
+      `);
+      const instance = mount(viewport ? Viewport : CanvasMotionHost, {
         target: document.body,
         props: {
           Scene,

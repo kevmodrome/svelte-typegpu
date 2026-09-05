@@ -16,15 +16,20 @@
     "custom-renderer"
   ],
   "files": [
+    "compiler",
     "src",
     "!src/**/*.test.ts",
     "!src/test-fixtures",
     "!src/glb-test-fixtures.ts",
     "!src/test-paths.ts",
     "!src/component-test-utils.ts",
+    "!src/viewport-test-utils.ts",
     "!src/svelte-internal-client.d.ts"
   ],
   "exports": {
+    "./compiler": "./compiler/index.ts",
+    "./vite": "./compiler/vite.ts",
+    "./internal/viewport-canvas": "./src/ViewportCanvas.svelte",
     "./canvas": {
       "types": "./src/Canvas.svelte",
       "svelte": "./src/Canvas.svelte",
@@ -53,10 +58,17 @@
     "access": "public"
   },
   "peerDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "svelte": ">=5.57.0 <6"
   },
+  "peerDependenciesMeta": {
+    "@sveltejs/vite-plugin-svelte": { "optional": true }
+  },
   "dependencies": {
+    "@jridgewell/remapping": "^2.3.5",
     "@typegpu/noise": "^0.11.0",
+    "acorn": "^8.18.0",
+    "magic-string": "^1.2.3",
     "typegpu": "^0.11.6"
   },
   "devDependencies": {

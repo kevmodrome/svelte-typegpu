@@ -26,6 +26,7 @@ import {
   removeEventListener,
   setAttribute,
   setText,
+  walk,
   type TypeGpuNode,
   type TypeGpuRuntime
 } from './core';
@@ -50,6 +51,9 @@ export interface TypeGpuRootOptions
   target: HTMLElement;
   canvas?: HTMLCanvasElement;
   onFps?: (fps: number) => void;
+  /** Used by declarative viewports; legacy roots retain their existing scene semantics. */
+  scenePolicy?: 'single';
+  onSceneError?: (error: Error) => void;
 }
 
 export type TypeGpuRoot = TypeGpuNode & {
@@ -66,6 +70,8 @@ type ListenerTarget = Pick<Window, 'addEventListener' | 'removeEventListener'>;
 type ListenerRegistration = [string, EventListener];
 
 interface RuntimeOptions {
+  scenePolicy?: 'single';
+  onSceneError?: (error: Error) => void;
   renderDefaults?: Partial<TypeGpuRenderSettings>;
   windowTarget?: ListenerTarget;
   loadUrl?: TypeGpuModelCacheOptions['loadUrl'];
@@ -125,7 +131,9 @@ export async function createTypeGpuRoot({
   maxDevicePixelRatio,
   clearColor,
   depth,
-  alphaMode
+  alphaMode,
+  scenePolicy,
+  onSceneError
 }: TypeGpuRootOptions): Promise<TypeGpuRoot> {
   canvas.classList.add('renderer-root-canvas');
   if (!canvas.parentNode) target.append(canvas);
@@ -141,7 +149,7 @@ export async function createTypeGpuRoot({
   });
   const root = createFragment() as TypeGpuRoot;
   const runtime = createRuntime(root, canvas, gpu, {
-    renderDefaults: { clearColor, depth, alphaMode }
+    renderDefaults: { clearColor, depth, alphaMode }, scenePolicy, onSceneError
   });
 
   root.runtime = runtime;
@@ -233,6 +241,16 @@ function createRuntime(
     dirty = Dirty.None;
     dirtyNodes = new Map();
     fullSync = false;
+    if (options.scenePolicy === 'single' && (sceneDirty & Dirty.Tree) !== 0) {
+      let scenes = 0;
+      walk(root, (node) => { if (node.name === 'scene') scenes++; });
+      if (scenes > 1) {
+        const error = new Error('A TypeGPU canvas supports at most one mounted <scene>. Use {#if} to switch scenes.');
+        if (options.onSceneError) options.onSceneError(error);
+        else throw error;
+        return;
+      }
+    }
     if ((sceneDirty & (Dirty.FrameTasks | Dirty.Tree)) !== 0) frameTasks.reconcile(root);
     const scene = createSceneState(root, sceneCache, {
       dirty: sceneDirty,

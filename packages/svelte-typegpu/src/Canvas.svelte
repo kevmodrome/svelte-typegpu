@@ -1,12 +1,9 @@
 <script lang="ts" generics="Props extends Record<string, any>">
-  import { getAllContexts, mount, onMount, unmount, type Component } from 'svelte';
+  import { getAllContexts, onMount, type Component } from 'svelte';
   import type { HTMLAttributes, HTMLCanvasAttributes } from 'svelte/elements';
-  import renderer, {
-    createTypeGpuRoot,
-    type TypeGpuRoot,
-    type TypeGpuRootOptions
-  } from './svelte-renderer';
+  import type { TypeGpuRoot, TypeGpuRootOptions } from './svelte-renderer';
   import SceneHost from './SceneHost.svelte';
+  import { startCanvasScene } from './canvas-lifecycle';
 
   let {
     scene,
@@ -44,56 +41,20 @@
   let startupError = $state<string | null>(null);
 
   onMount(() => {
-    let disposed = false;
-    let ownedRoot: TypeGpuRoot | null = null;
-    let instance: ReturnType<typeof mount> | null = null;
-
-    function cleanup() {
-      const current = instance;
-      instance = null;
-      try {
-        if (current) void unmount(current);
-      } finally {
-        ownedRoot?.dispose();
-        if (root === ownedRoot) root = null;
-        ownedRoot = null;
+    return startCanvasScene(
+      { ...options, target: host, canvas, onFps: (value) => onfps?.(value) },
+      SceneHost<Props>, {
+        get scene() { return scene; },
+        get sceneProps() { return sceneProps; }
+      }, context, {
+        ready(nextRoot) { root = nextRoot; onready?.(nextRoot); },
+        error(error) {
+          startupError = error instanceof Error ? error.message : 'Unable to start WebGPU.';
+          onerror?.(error);
+        },
+        cleared(previous) { if (root === previous) root = null; }
       }
-    }
-
-    void createTypeGpuRoot({ ...options, target: host, canvas, onFps: (value) => onfps?.(value) })
-      .then((nextRoot) => {
-        if (disposed) {
-          nextRoot.dispose();
-          return;
-        }
-        ownedRoot = nextRoot;
-        instance = mount(SceneHost<Props>, {
-          renderer,
-          target: nextRoot,
-          context,
-          props: {
-            get scene() {
-              return scene;
-            },
-            get sceneProps() {
-              return sceneProps;
-            }
-          }
-        });
-        root = nextRoot;
-        onready?.(nextRoot);
-      })
-      .catch((error) => {
-        cleanup();
-        if (disposed) return;
-        startupError = error instanceof Error ? error.message : 'Unable to start WebGPU.';
-        onerror?.(error);
-      });
-
-    return () => {
-      disposed = true;
-      cleanup();
-    };
+    );
   });
 </script>
 

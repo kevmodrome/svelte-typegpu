@@ -709,7 +709,6 @@ describe('TypeGPU GPU renderer', () => {
   it('exposes a narrow camera update method for runtime controls', () => {
     expect(rendererSource).toContain('setCamera(camera: TypeGpuCameraSettings): void');
     expect(rendererSource).toContain('setCamera(camera: TypeGpuCameraSettings): void {');
-    expect(rendererSource).toContain('this.setCamera(scene.camera);');
   });
 
   it('treats lighting changes as buffer writes separate from mesh uploads', () => {
