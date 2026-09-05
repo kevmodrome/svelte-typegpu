@@ -28,4 +28,10 @@ describe('app camera controls', () => {
     expect(styleSource).toContain('.renderer-root-canvas:focus-visible');
     expect(styleSource).toMatch(/\.renderer-root-canvas:focus-visible\s*{[^}]*outline:/s);
   });
+
+  it('labels the actual canvas through native props', () => {
+    expect(canvasSource).toContain(
+      "canvasProps={{ 'aria-label': 'Interactive TypeGPU scene', role: 'img' }}"
+    );
+  });
 });

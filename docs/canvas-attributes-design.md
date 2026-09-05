@@ -60,8 +60,20 @@ they are unrelated to scene-node attachments. Initial root options remain fixed.
 2. Run real Tween/Spring at 60/120/144 Hz in both RAF orders while updating canvas
    attributes. Assert frame delivery, instance upload ranges, GPU reuse, no
    attachment churn, manual/idle/disposal behavior; then commit this feature.
-3. Production builds and live browser checks. A locked Mac limits live evidence,
-   not the supported automated verification paths.
+3. Production builds and live browser checks, including responsive layout and
+   motion interaction. Record browser cadence separately from controlled clocks.
+
+### Verification
+
+- Full workspace suite: 669 tests pass, including 18 real Canvas/Tween/Spring
+  cases across 60/120/144 Hz, both demand callback orders, and manual rendering.
+- Renderer type checking and both application production builds pass.
+- The live Svelte Motion preview renders and responds to controls on desktop and
+  a 390 x 844 browser viewport. The mobile page has no horizontal overflow.
+- The native canvas exposes its scene label to the accessibility tree. Browser
+  warning/error logs were empty during these checks.
+- The live preview reports 60 FPS during motion. This does not establish a
+  physical 120/144 Hz display rate; those rates are covered by controlled tests.
 
 ## 6. Risks and unresolved decisions
 

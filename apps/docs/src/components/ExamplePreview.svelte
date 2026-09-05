@@ -195,6 +195,7 @@
     {#key slug}
       <Canvas
         class="preview-host"
+        canvasProps={{ 'aria-label': `${label} 3D scene`, role: 'img' }}
         data-ready={ready}
         scene={sceneComponents[slug]}
         {sceneProps}

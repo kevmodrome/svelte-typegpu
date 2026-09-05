@@ -54,6 +54,12 @@ describe('docs app source wiring', () => {
     expect(styleSource).toContain('position: absolute');
   });
 
+  it('labels the native canvas independently of the preview wrapper', () => {
+    const source = read('./components/ExamplePreview.svelte');
+    expect(source).toContain("canvasProps={{ 'aria-label': `${label} 3D scene`, role: 'img' }}");
+    expect(source).toContain('aria-label={`${label} live preview`}');
+  });
+
   it('renders generated Shiki tokens without raw HTML injection', () => {
     const source = read('./components/CodePanel.svelte');
 

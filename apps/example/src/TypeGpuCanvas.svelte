@@ -23,6 +23,7 @@
 <div class="renderer-canvas" aria-label="TypeGPU custom-rendered scene">
   <Canvas
     scene={Scene}
+    canvasProps={{ 'aria-label': 'Interactive TypeGPU scene', role: 'img' }}
     sceneProps={{ controls, onShapeClick, onCameraChange }}
     options={{
       frameloop: 'always',
