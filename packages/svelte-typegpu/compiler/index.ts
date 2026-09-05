@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { parse as parseJavaScript } from 'acorn';
 import MagicString from 'magic-string';
 import remapping from '@jridgewell/remapping';
-import { compile, parse, type CompileOptions } from 'svelte/compiler';
+import { compile, parse, type CompileOptions, type Warning } from 'svelte/compiler';
+import { sceneDiagnostics } from './diagnostics';
 
 const hostModule = 'svelte-typegpu/internal/viewport-canvas';
 const elementSizes = new Set(['clientWidth', 'clientHeight', 'offsetWidth', 'offsetHeight']);
@@ -12,16 +13,18 @@ export interface PreparedTypeGpuSource {
   code: string;
   map?: ReturnType<MagicString['generateMap']>;
   viewport: boolean;
+  warnings: Warning[];
 }
 
 /** Lower only a single, unconditional canvas. Scene-only files are unchanged. */
 export function prepareTypeGpuSource(source: string, filename: string): PreparedTypeGpuSource {
   const ast = parse(source, { modern: true, filename });
+  const warnings = sceneDiagnostics(ast, source, filename);
   const canvases: any[] = [];
   visit(ast.fragment, (node) => {
     if (node.type === 'RegularElement' && node.name === 'canvas') canvases.push(node);
   });
-  if (!canvases.length) return { code: source, viewport: false };
+  if (!canvases.length) return { code: source, viewport: false, warnings };
   const roots = ast.fragment.nodes.filter((node) =>
     node.type !== 'Comment' && node.type !== 'SnippetBlock' && !(node.type === 'Text' && !node.data.trim())
   );
@@ -94,7 +97,7 @@ export function prepareTypeGpuSource(source: string, filename: string): Prepared
       result.appendLeft(canvas.start + 7, ` scopeClass=${JSON.stringify(scopeClass)}`);
     }
   }
-  return { code: result.toString(), map: result.generateMap({ source: filename, includeContent: true, hires: true }), viewport: true };
+  return { code: result.toString(), map: result.generateMap({ source: filename, includeContent: true, hires: true }), viewport: true, warnings };
 }
 
 /** Fail closed if the pinned compiler stops emitting the proven static host shape. */
@@ -189,6 +192,7 @@ export function compileTypeGpu(source: string, options: CompileOptions & { filen
   if (prepared.viewport && !serverViewport) {
     compiled.js = adaptViewportClient(compiled.js.code, compiled.js.map) as typeof compiled.js;
   }
+  compiled.warnings.push(...prepared.warnings.filter((warning) => options.warningFilter?.(warning) ?? true));
   return compiled;
 }
 

@@ -6,7 +6,7 @@ const filename = 'Viewport.typegpu.svelte';
 describe('viewport compiler boundary', () => {
   it('leaves GPU-only files unchanged', () => {
     const source = '<scene><mesh><boxGeometry /></mesh></scene>';
-    expect(prepareTypeGpuSource(source, filename)).toEqual({ code: source, viewport: false });
+    expect(prepareTypeGpuSource(source, filename)).toEqual({ code: source, viewport: false, warnings: [] });
     expect(compileTypeGpu(source, { filename }).js.code).toContain('$.push_renderer($renderer)');
   });
   it.each([false, true])('keeps the entry DOM-owned and snippets scene-owned (dev %s)', (dev) => {
