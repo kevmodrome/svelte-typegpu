@@ -1,3 +1,7 @@
+<script module>
+  export { orb };
+</script>
+
 <script lang="ts">
   import Mesh from './Mesh.typegpu.svelte';
   let { editing = true } = $props();
@@ -5,11 +9,14 @@
   let angle = $state(0);
 </script>
 
+{#snippet clickableMesh(value)}<Mesh angle={value} onclick={() => angle += 1} />{/snippet}
+{#snippet orb()}<mesh><sphereGeometry /></mesh>{/snippet}
+
 <canvas bind:this={canvas} frameloop="demand" aria-label="Build test">
   {#if editing}
-    <scene><Mesh {angle} onclick={() => angle += 1} /></scene>
+    <scene>{@render clickableMesh(angle)}</scene>
   {:else}
-    <scene><mesh><sphereGeometry /></mesh></scene>
+    <scene>{@render orb()}</scene>
   {/if}
 </canvas>
 

@@ -41,17 +41,18 @@ const source = `<script>
   export function reorder() { items = [2, 1]; }
   export function rename() { label = 'Renamed'; }
 </script>
+{#snippet itemMesh(item)}<mesh name={item} color={theme?.color} {@attach setup} />{/snippet}
 <canvas frameloop="demand" bind:this={canvas} aria-label={label} tabindex={0}
   onkeydown={keydown} {@attach nativeSetup} {onready} {onrenderererror}>
   {#if editing}
-    <scene>{#each items as item (item)}<mesh name={item} color={theme?.color} {@attach setup} />{/each}</scene>
+    <scene>{#each items as item (item)}{@render itemMesh(item)}{/each}</scene>
   {:else}<scene><mesh name="preview" /></scene>{/if}
 </canvas>
 <style>canvas { height: 420px; } canvas:focus { outline: 2px solid red; }</style>`;
 type Exports = { reference(): HTMLCanvasElement | null | undefined; toggle(): void; reorder(): void; rename(): void };
 
 describe('declarative canvas', () => {
-  it('owns one native canvas while scene branches, keys, props and events change', async () => {
+  it('owns one native canvas while snippet branches, keys, props and events change', async () => {
     const events: string[] = [];
     const gpu = root(events);
     vi.mocked(createTypeGpuRoot).mockResolvedValue(gpu);

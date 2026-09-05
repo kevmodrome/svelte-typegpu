@@ -31,6 +31,22 @@ describe('viewport compiler boundary', () => {
     expect(compiled.js.code).toContain('TypeGpuViewportCanvas');
     expect(compiled.js.code).not.toContain('svelte-typegpu/svelte-renderer');
   });
+  it.each([false, true])('keeps top-level and exported snippets renderer-owned (dev %s)', (dev) => {
+    const source = `<script module>export { cube };</script>
+      {#snippet cube(x)}<mesh position={[x, 0, 0]}><boxGeometry /></mesh>{/snippet}
+      <canvas><scene>{@render cube(1)}</scene></canvas>
+      {#snippet unused()}<mesh onclick={() => {}} />{/snippet}
+      <style>canvas { height: 420px; }</style>`;
+    const client = compileTypeGpu(source, { filename, dev });
+    expect(client.js.code).toContain('$.push_renderer(null)');
+    expect(client.js.code).toContain('$.renderer_snippet($renderer');
+    expect(client.css?.code).toContain('canvas.typegpu-');
+    const server = compileTypeGpu(source, { filename, generate: 'server', dev });
+    expect(server.js.code).toContain('export { cube }');
+    expect(server.js.code).not.toContain('<mesh');
+    expect(server.js.code).not.toContain('<boxGeometry');
+    expect(server.warnings.filter((warning) => warning.code.startsWith('a11y_'))).toEqual([]);
+  });
   it.each([
     '{#if true}<canvas />{/if}', '<canvas /><canvas />', '<canvas><canvas /></canvas>',
     '<div /><canvas />', '<canvas bind:clientWidth={width} />', '<canvas width={300} />',

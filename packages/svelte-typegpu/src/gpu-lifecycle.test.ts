@@ -472,14 +472,16 @@ describe('GPU resource and frame lifecycle', () => {
         .mockResolvedValue(gpu as never);
       vi.stubGlobal('navigator', { gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
       const Scene = compileTypeGpuSource(`
-        <script>let { motion, setup } = $props();</script>
+        <script>let { motion, setup, children } = $props();</script>
         <scene>
           {#each Array.from({ length: 300 }, (_, i) => i) as i (i)}
             <mesh position={[i + 10, 0, 0]}><boxGeometry /><standardMaterial /></mesh>
           {/each}
+          {#if children}{@render children()}{:else}
           <mesh position={[motion.current, 0, 0]} {@attach setup}>
             <boxGeometry /><standardMaterial />
           </mesh>
+          {/if}
         </scene>
       `);
       const cleanup = vi.fn();
@@ -499,10 +501,13 @@ describe('GPU resource and frame lifecycle', () => {
           let label = $state('Moving scene');
           export function rename(value) { label = value; }
         </script>
+        {#snippet marker(x)}
+          <mesh position={[x, 0, 0]} {@attach setup}><boxGeometry /><standardMaterial /></mesh>
+        {/snippet}
         <canvas {frameloop} maxDevicePixelRatio={1} {onready} onrenderererror={onerror}
           data-motion={motion.current} aria-label={label} class={{ moving: motion.current > 0 }}
           {@attach domSetup}>
-          <Scene {motion} {setup} />
+          <Scene {motion} {setup}>{@render marker(motion.current)}</Scene>
         </canvas>
       `);
       const instance = mount(viewport ? Viewport : CanvasMotionHost, {

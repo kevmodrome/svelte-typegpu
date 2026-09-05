@@ -21,7 +21,7 @@ export function prepareTypeGpuSource(source: string, filename: string): Prepared
   });
   if (!canvases.length) return { code: source, viewport: false };
   const roots = ast.fragment.nodes.filter((node) =>
-    node.type !== 'Comment' && !(node.type === 'Text' && !node.data.trim())
+    node.type !== 'Comment' && node.type !== 'SnippetBlock' && !(node.type === 'Text' && !node.data.trim())
   );
   const canvas = canvases[0];
   if (canvases.length !== 1 || roots.length !== 1 || roots[0] !== canvas) {
@@ -60,8 +60,9 @@ export function prepareTypeGpuSource(source: string, filename: string): Prepared
     // scope class through the internal host. Scene primitives are never DOM CSS.
     const scopeClass = `typegpu-${createHash('sha256').update(filename + source).digest('hex').slice(0, 10)}`;
     const shell = new MagicString(source);
-    if (!selfClosing && canvas.fragment.nodes.length) {
-      shell.remove(canvas.fragment.nodes[0].start, canvas.fragment.nodes.at(-1).end);
+    if (!selfClosing) omitNodes(shell, canvas.fragment.nodes);
+    for (const node of ast.fragment.nodes) {
+      if (node.type === 'SnippetBlock') omitNodes(shell, node.body.nodes);
     }
     const css = compile(shell.toString(), {
       filename, generate: 'client', runes: true, css: 'external', cssHash: () => scopeClass
@@ -138,9 +139,16 @@ export function omitViewportScene(source: string, filename: string) {
   const host = ast.fragment.nodes.find((node) => node.type === 'Component');
   if (!host || host.type !== 'Component') throw new Error('Missing lowered viewport host.');
   const output = new MagicString(source);
-  const children = host.fragment.nodes;
-  if (children.length) output.remove(children[0].start, children.at(-1)!.end);
+  omitNodes(output, host.fragment.nodes);
+  for (const node of ast.fragment.nodes) {
+    // Keep declarations so module exports and references remain valid on SSR.
+    if (node.type === 'SnippetBlock') omitNodes(output, node.body.nodes);
+  }
   return { code: output.toString(), map: output.generateMap({ source: filename, includeContent: true, hires: true }) };
+}
+
+function omitNodes(output: MagicString, nodes: readonly { start: number; end: number }[]) {
+  if (nodes.length) output.remove(nodes[0].start, nodes.at(-1)!.end);
 }
 
 export function compileTypeGpu(source: string, options: CompileOptions & { filename: string }) {

@@ -76,10 +76,69 @@ The native canvas and GPU root survive both. No IDs, public `sceneProps`, or
 `canvasProps` object is required. A DOM parent can conditionally mount the entire
 viewport; that intentionally creates a new canvas/root lifetime when shown again.
 
+## Snippet composition
+
+Declare scene snippets at the top level or inside the scene, and render them with
+ordinary Svelte 5 `{@render}`. Parameters remain reactive. Scene components can
+accept typed snippet props, including `children`:
+
+```svelte
+<!-- MeshList.typegpu.svelte -->
+<script lang="ts" generics="Item">
+  import type { Snippet } from 'svelte';
+  let { items, children }: {
+    items: readonly Item[];
+    children: Snippet<[Item]>;
+  } = $props();
+</script>
+
+{#each items as item (item)}
+  {@render children(item)}
+{/each}
+```
+
+```svelte
+<!-- Viewport.typegpu.svelte -->
+<script>
+  import MeshList from './MeshList.typegpu.svelte';
+  let items = $state([
+    { x: -2, selected: false },
+    { x: 0, selected: false },
+    { x: 2, selected: false }
+  ]);
+</script>
+
+{#snippet box(item)}
+  <mesh position={[item.x, 0, 0]} onclick={() => item.selected = !item.selected}>
+    <boxGeometry />
+    <basicMaterial color={item.selected ? [0.9, 0.3, 0.2] : [0.2, 0.7, 0.5]} />
+  </mesh>
+{/snippet}
+
+<canvas aria-label="Selectable boxes">
+  <scene>
+    <perspectiveCamera active position={[0, 0, 8]} />
+    <MeshList {items}>
+      {#snippet children(item)}{@render box(item)}{/snippet}
+    </MeshList>
+  </scene>
+</canvas>
+```
+
+The list uses each item's identity as its Svelte key; no renderer connection IDs
+are required. Reordering retained items preserves their mesh nodes, and changing
+snippet parameters updates the existing nodes instead of recreating them.
+
+Author scene snippets in `.typegpu.svelte` files. Ordinary DOM-authored snippets
+cannot be rendered into a TypeGPU scene. Module-exported scene snippets follow
+Svelte's usual export restrictions. The server keeps their declarations but
+omits GPU markup; it still emits only the canvas shell.
+
 ## Canvas contract
 
-- Exactly one unconditional top-level canvas per viewport file. Put scene
-  composition inside it and DOM controls in an ordinary `.svelte` component.
+- Exactly one unconditional top-level canvas per viewport file. Top-level snippet
+  declarations are allowed alongside it. Put rendered scene content inside the
+  canvas and DOM controls in an ordinary `.svelte` component.
 - At most one mounted scene, including hidden scenes. Multiple scenes report an
   error and dispose the scene/root rather than silently combining them. Removing
   the last scene clears once and idles in demand mode.
@@ -98,7 +157,9 @@ viewport; that intentionally creates a new canvas/root lifetime when shown again
   creation-only; changing them warns without recreating GPU resources. Remount
   deliberately with a parent `{#key}` when changing these settings.
 - Optional `onready(root)`, `onfps(number)`, and `onrenderererror(error)` callbacks
-  report renderer state. `onerror` remains a native canvas event. Unhandled startup
+  report renderer state. `onfps` reports delivered render frames and emits `0`
+  after 500 ms without a frame, without requesting another render frame.
+  `onerror` remains a native canvas event. Unhandled startup
   failures log an error; `data-typegpu-status` is pending, ready, or error. Retry by
   remounting the viewport. GPU device-loss recovery is not implemented.
 - SSR emits the accessible canvas shell without mounting scene content or
