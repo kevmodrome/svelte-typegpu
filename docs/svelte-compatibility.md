@@ -20,7 +20,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | Cross-component context | Reactive context preserved through asynchronously mounted children |
 | `getAbortSignal()` | Cancels component-owned model requests on derived replacement and unmount |
 | `<svelte:boundary>` | Error/reset cleanup tested with an externally declared `failed` snippet passed as a prop; inline `failed` snippets crash the pinned compiler |
-| Async expressions and boundary `pending` snippets | Not enabled or verified; distinct from ordinary `{#await}` |
+| Async expressions and boundary `pending` snippets | Gated: ready/update paths work, but the pinned preview throws after unmounting a pending boundary; tracked by an isolated reproducer |
 
 DOM-oriented libraries are not automatically compatible. Scene nodes are not
 HTMLElements and do not implement layout, CSS, Web Animations, or DOM event APIs.
@@ -30,6 +30,12 @@ mounting, remounting, or disposing the scene.
 See the [element typing investigation](scene-element-types-design.md) for the
 reproducer and current editor limitations. These are separate from the tested
 runtime attachment/action behavior below.
+
+Async expressions (`await` in markup or `$derived`) are not enabled in the apps.
+Their successful ready paths do not establish safe lifecycle behavior. See the
+[async investigation](async-expressions-design.md) and the
+[pending-boundary teardown reproducer](../packages/svelte-typegpu/repros/README.md).
+Continue using ordinary `{#await}` for supported async scene composition.
 
 ## Async scenes
 

@@ -3,3 +3,5 @@ declare module 'svelte/internal/client' {
   const client: any;
   export default client;
 }
+
+declare module 'svelte/internal/flags/async';
