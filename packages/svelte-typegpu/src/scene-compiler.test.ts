@@ -118,6 +118,7 @@ describe('TypeGPU scene compiler', () => {
     expect(state.renderSettings).toEqual({
       clearColor: [0.2, 0.3, 0.4, 1],
       depth: false,
+      frustumCulling: true,
       alphaMode: 'opaque'
     });
     expect(state.camera.projection).toBe('perspective');

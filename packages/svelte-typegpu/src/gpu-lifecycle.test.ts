@@ -322,7 +322,9 @@ describe('GPU resource and frame lifecycle', () => {
       expect(gpu.createBuffer).not.toHaveBeenCalled();
       expect(gpu.createBindGroup).not.toHaveBeenCalled();
       expect(createMeshPipeline).not.toHaveBeenCalled();
-      expect(captured.counts.every(count => count === 301)).toBe(true);
+      expect(renderer.getRenderStats!().candidateInstances).toBe(301);
+      expect(renderer.getRenderStats!().culledInstances).toBeGreaterThan(0);
+      expect(captured.counts.every(count => count > 0 && count <= 301)).toBe(true);
 
       void motion.set(20);
       await step();
@@ -570,7 +572,9 @@ describe('GPU resource and frame lifecycle', () => {
       expect(gpu.createBuffer).not.toHaveBeenCalled();
       expect(gpu.createBindGroup).not.toHaveBeenCalled();
       expect(createMeshPipeline).not.toHaveBeenCalled();
-      expect(captured.counts.every(count => count === 301)).toBe(true);
+      expect(renderer.getRenderStats!().candidateInstances).toBe(301);
+      expect(renderer.getRenderStats!().culledInstances).toBeGreaterThan(0);
+      expect(captured.counts.every(count => count > 0 && count <= 301)).toBe(true);
       expect(buffers.every(buffer => buffer.destroy.mock.calls.length === 0)).toBe(true);
       if (frameloop === 'manual') {
         expect(request.mock.calls.every(([callback]) => producers.has(callback))).toBe(true);

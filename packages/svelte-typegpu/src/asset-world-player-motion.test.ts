@@ -124,6 +124,9 @@ describe('compiled camper frame delivery in a 20,000-model dense world', () => {
         const before = submissions.length;
         await step(); if (mode === 'manual') gpuRenderer.renderFrame(now);
         expect(submissions.length - before).toBe(1);
+        const visibility = gpuRenderer.getRenderStats!();
+        expect(visibility.culledInstances).toBeGreaterThan(0);
+        expect(visibility.submittedInstances).toBeLessThan(visibility.candidateInstances);
         expect(order).toEqual(mode === 'manual' ? ['motion'] : first ? ['render', 'motion'] : ['motion', 'render']);
         const writes = instanceBuffers.flatMap(buffer => buffer.write.mock.calls);
         if (frame > 0) {

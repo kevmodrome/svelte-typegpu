@@ -170,7 +170,9 @@ describe('native window values driving scene motion', () => {
       expect(setup).toHaveBeenCalledOnce(); expect(cleanup).not.toHaveBeenCalled();
       expect(gpu.createBuffer).not.toHaveBeenCalled(); expect(gpu.createBindGroup).not.toHaveBeenCalled();
       expect(createMeshPipeline).not.toHaveBeenCalled();
-      expect(captured.counts.every(count => count === 301)).toBe(true);
+      expect(gpuRenderer.getRenderStats!().candidateInstances).toBe(301);
+      expect(gpuRenderer.getRenderStats!().culledInstances).toBeGreaterThan(0);
+      expect(captured.counts.every(count => count > 0 && count <= 301)).toBe(true);
       expect(add.mock.calls.filter(([type]) => type === 'resize')).toHaveLength(1);
       expect(remove.mock.calls.filter(([type]) => type === 'resize')).toHaveLength(0);
 

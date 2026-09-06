@@ -10,6 +10,7 @@ export type {
   TypeGpuNodeEventListener
 } from './core';
 export type { TypeGpuFrameContext, TypeGpuFrameCallback } from './frame-tasks';
+export type { TypeGpuRenderStats } from './gpu-renderer';
 export {
   createTypeGpuRoot,
   type TypeGpuRoot,

@@ -85,25 +85,30 @@ describe('scene inheritance', () => {
     const defaults = {
       clearColor: [0.2, 0.3, 0.4, 0.5] as [number, number, number, number],
       depth: false,
+      frustumCulling: false,
       alphaMode: 'opaque' as const
     };
     const cache = createTypeGpuSceneCache({ renderDefaults: defaults });
     expect(createSceneState(scene, cache).renderSettings).toEqual(defaults);
     setAttribute(scene, 'depth', true);
+    setAttribute(scene, 'frustumCulling', true);
     setAttribute(scene, 'alphaMode', 'premultiplied');
     setAttribute(scene, 'clearColor', [1, 0, 0, 1]);
     expect(createSceneState(scene, cache).renderSettings).toEqual({
       clearColor: [1, 0, 0, 1],
       depth: true,
+      frustumCulling: true,
       alphaMode: 'premultiplied'
     });
     removeAttribute(scene, 'depth');
+    removeAttribute(scene, 'frustumCulling');
     removeAttribute(scene, 'alphaMode');
     removeAttribute(scene, 'clearColor');
     expect(createSceneState(scene, cache).renderSettings).toEqual(defaults);
     expect(createSceneState(scene).renderSettings).toEqual({
       clearColor: [0, 0, 0, 1],
       depth: true,
+      frustumCulling: true,
       alphaMode: 'premultiplied'
     });
   });

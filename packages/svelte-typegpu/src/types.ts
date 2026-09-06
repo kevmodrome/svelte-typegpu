@@ -289,6 +289,8 @@ export interface TypeGpuRenderSettings {
   clearColor: RgbaTuple;
   depth: boolean;
   alphaMode: GPUCanvasAlphaMode;
+  /** Conservative camera visibility selection. Defaults to true. */
+  frustumCulling?: boolean;
 }
 
 export interface TypeGpuMeshDrawItem {
@@ -348,6 +350,8 @@ export interface TypeGpuDrawBatch {
   instancesChanged: boolean;
   dirtyRanges: TypeGpuInstanceDirtyRange[];
   sortKey: number;
+  /** Canonical world bounds; camera selection never changes these instance slots. */
+  visibility?: import('./batch-visibility').BatchBounds;
 }
 
 export type TypeGpuShaderPassUniformBuiltIn = 'time' | 'resolution';

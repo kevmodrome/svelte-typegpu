@@ -159,7 +159,9 @@ describe('attachment listener lifecycle during real Svelte motion', () => {
       expect(buffer.data.slice(0, 100 * 24)).toEqual(staticData);
       expect(gpu.createBuffer).not.toHaveBeenCalled(); expect(gpu.createBindGroup).not.toHaveBeenCalled();
       expect(createMeshPipeline).not.toHaveBeenCalled();
-      expect(captured.counts.every(count => count === 101)).toBe(true);
+      expect(gpuRenderer.getRenderStats!().candidateInstances).toBe(101);
+      expect(gpuRenderer.getRenderStats!().culledInstances).toBeGreaterThan(0);
+      expect(captured.counts.every(count => count > 0 && count <= 101)).toBe(true);
       if (frameloop === 'manual') expect(request.mock.calls.every(([callback]) => producers.has(callback))).toBe(true);
       const settled = submissions.length;
       for (let i = 0; i < 4; i++) await step();

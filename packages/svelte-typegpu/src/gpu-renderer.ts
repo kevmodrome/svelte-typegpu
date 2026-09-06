@@ -9,6 +9,8 @@ import tgpu, {
   type UniformFlag
 } from 'typegpu';
 import { createFpsMeter } from './fps-meter';
+import { Frustum } from './frustum';
+import { VisibilitySelection } from './batch-visibility';
 import type { TypeGpuFrameContext } from './frame-tasks';
 import { createViewProjectionMatrix } from './camera-math';
 import { Dirty } from './dirty';
@@ -144,7 +146,22 @@ export interface TypeGpuRenderer {
   renderFrame(timestamp?: number): void;
   setFrameHandler?(handler: ((frame: TypeGpuFrameContext) => boolean) | null): void;
   getRenderSize(): { width: number; height: number };
+  /** Last delivered frame, not estimates from the retained scene. */
+  getRenderStats?(): TypeGpuRenderStats;
   dispose(): void;
+}
+
+export interface TypeGpuRenderStats {
+  retainedInstances: number;
+  candidateInstances: number;
+  submittedInstances: number;
+  culledInstances: number;
+  colorDraws: number;
+  colorTriangles: number;
+  shadowTriangles: number;
+  cullingCpuMs: number;
+  boundsTests: number;
+  rangeFallbacks: number;
 }
 
 export interface TypeGpuRendererOptions {
@@ -190,6 +207,13 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #depthTexture: TypeGpuDepthTexture | null = null;
   #disposed = false;
   #drawBatches: TypeGpuDrawBatch[] = [];
+  #frustum = new Frustum();
+  #visibility = new Map<string, VisibilitySelection>();
+  #retainedInstances = 0;
+  #renderStats: TypeGpuRenderStats = {
+    retainedInstances: 0, candidateInstances: 0, submittedInstances: 0, culledInstances: 0,
+    colorDraws: 0, colorTriangles: 0, shadowTriangles: 0, cullingCpuMs: 0, boundsTests: 0, rangeFallbacks: 0
+  };
   #fpsMeter;
   #frame: number | null = null;
   #geometryResources: GeometryResourceCache;
@@ -358,6 +382,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     }
 
     if (scene.drawBatchesChanged) {
+      this.#retainedInstances = scene.resourceItems?.length ?? scene.drawBatches.reduce((sum, batch) => sum + batch.instanceCount, 0);
       this.#syncMeshResources(scene);
     } else {
       for (const material of scene.materialUpdates ?? []) {
@@ -388,7 +413,10 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   }
 
   #syncMeshResources(scene: TypeGpuSceneState): void {
+    const activeBatches = new Set(scene.drawBatches.map(batch => batch.key));
+    for (const key of this.#visibility.keys()) if (!activeBatches.has(key)) this.#visibility.delete(key);
     for (const batch of scene.drawBatches) {
+      if (!this.#visibility.has(batch.key)) this.#visibility.set(batch.key, new VisibilitySelection());
       this.#geometryResources.getOrCreate(batch);
       this.#textureResources.getOrLoad(batch.material.map ?? batch.material.texture ?? null);
       this.#samplerResources.getOrCreate(batch.material.sampler ?? {
@@ -510,6 +538,12 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
     this.#resize();
     this.#writeUniforms();
+    this.#frustum.setMatrix(this.#uniformData);
+    const stats = this.#renderStats;
+    stats.retainedInstances = this.#retainedInstances;
+    stats.candidateInstances = stats.submittedInstances = stats.culledInstances = 0;
+    stats.colorDraws = stats.colorTriangles = stats.shadowTriangles = 0;
+    stats.cullingCpuMs = stats.boundsTests = stats.rangeFallbacks = 0;
     const activeShadow = this.#activeShadow();
 
     this.#prepareShadowResources(activeShadow);
@@ -529,6 +563,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
             const instanceResource = this.#instanceBuffers.getOrCreate(batch);
 
             if (!instanceResource.buffer || instanceResource.instanceCount === 0) continue;
+            stats.shadowTriangles += (geometryResource.indexCount ?? batch.geometry.vertexCount) / 3 * instanceResource.instanceCount;
 
             drawTypeGpuShadowBatch({
               pipeline: shadowPipeline,
@@ -551,12 +586,24 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       draw: (pass) => {
         drawTypeGpuRenderQueue(this.#renderQueue, {
           drawMesh: (batch) => {
+            const selection = this.#visibility.get(batch.key)!;
+            const start = performance.now();
+            selection.select(this.#frustum, this.#renderSettings.frustumCulling !== false ? batch.visibility : undefined, batch.instanceCount);
+            stats.cullingCpuMs += performance.now() - start;
+            stats.boundsTests += selection.boundsTests;
+            stats.rangeFallbacks += Number(selection.fallback);
+            stats.candidateInstances += batch.instanceCount;
+            stats.culledInstances += batch.instanceCount - selection.instanceCount;
+            if (!selection.instanceCount) return;
             const geometryResource = this.#geometryResources.getOrCreate(batch);
             const instanceResource = this.#instanceBuffers.getOrCreate(batch);
             const materialResource = this.#materialResources.getOrCreate(batch.material);
             const pipeline = this.#pipelines.getOrCreate(batch, this.#renderSettings.depth);
 
             if (!instanceResource.buffer || instanceResource.instanceCount === 0) return;
+            stats.submittedInstances += selection.instanceCount;
+            stats.colorDraws += selection.rangeCount;
+            stats.colorTriangles += (geometryResource.indexCount ?? batch.geometry.vertexCount) / 3 * selection.instanceCount;
 
             drawTypeGpuMaterialBatch({
               pipeline,
@@ -567,7 +614,8 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
               geometryResource,
               instanceResource,
               materialResource,
-              batch
+              batch,
+              selection
             });
           },
           drawShaderPass: (shaderPass) => {
@@ -592,6 +640,10 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
   getRenderSize(): { width: number; height: number } {
     return { ...this.#renderSize };
+  }
+
+  getRenderStats(): TypeGpuRenderStats {
+    return { ...this.#renderStats };
   }
 
   dispose(): void {
@@ -621,6 +673,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     for (const resource of this.#shaderPassResources.values()) resource.buffer.destroy();
     this.#shaderPassResources.clear();
     this.#renderQueue = [];
+    this.#visibility.clear();
     this.#shadowBuffer.destroy();
     this.#uniformBuffer.destroy();
     this.root.destroy();
@@ -977,7 +1030,7 @@ function beginTypeGpuShadowPass({
   }
 }
 
-function drawTypeGpuMaterialBatch({
+export function drawTypeGpuMaterialBatch({
   pipeline,
   pass,
   sceneBindGroup,
@@ -986,7 +1039,8 @@ function drawTypeGpuMaterialBatch({
   geometryResource,
   instanceResource,
   materialResource,
-  batch
+  batch,
+  selection
 }: {
   pipeline: TypeGpuMeshPipeline;
   pass: GPURenderPassEncoder;
@@ -997,6 +1051,7 @@ function drawTypeGpuMaterialBatch({
   instanceResource: TypeGpuInstanceBufferResource;
   materialResource: TypeGpuMaterialResource;
   batch: TypeGpuDrawBatch;
+  selection: VisibilitySelection;
 }): void {
   if (!instanceResource.buffer) return;
 
@@ -1007,13 +1062,16 @@ function drawTypeGpuMaterialBatch({
     .with(meshInstanceLayout, instanceResource.buffer.buffer);
 
   if (geometryResource.indexBuffer && geometryResource.indexCount && geometryResource.indexFormat) {
-    materialPipeline
-      .withIndexBuffer(geometryResource.indexBuffer.buffer, geometryResource.indexFormat)
-      .drawIndexed(geometryResource.indexCount, instanceResource.instanceCount);
+    const indexed = materialPipeline.withIndexBuffer(geometryResource.indexBuffer.buffer, geometryResource.indexFormat);
+    for (let i = 0; i < selection.rangeCount * 2; i += 2) {
+      indexed.drawIndexed(geometryResource.indexCount, selection.ranges[i + 1], 0, 0, selection.ranges[i]);
+    }
     return;
   }
 
-  materialPipeline.draw(batch.geometry.vertexCount, instanceResource.instanceCount);
+  for (let i = 0; i < selection.rangeCount * 2; i += 2) {
+    materialPipeline.draw(batch.geometry.vertexCount, selection.ranges[i + 1], 0, selection.ranges[i]);
+  }
 }
 
 export function drawTypeGpuShadowBatch({

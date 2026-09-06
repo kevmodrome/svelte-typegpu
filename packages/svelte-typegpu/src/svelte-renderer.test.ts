@@ -530,7 +530,7 @@ describe('TypeGPU Svelte renderer runtime', () => {
     const runtime = createTypeGpuRuntimeForTest(root, new FakeCanvas() as unknown as HTMLCanvasElement, gpu, { renderDefaults: defaults });
     runtime.scheduleSync(root);
     await Promise.resolve();
-    expect(vi.mocked(gpu.setScene).mock.lastCall?.[0].renderSettings).toEqual(defaults);
+    expect(vi.mocked(gpu.setScene).mock.lastCall?.[0].renderSettings).toEqual({ ...defaults, frustumCulling: true });
     runtime.dispose();
   });
   it('discards queued syncs and ignores new work after idempotent disposal', async () => {

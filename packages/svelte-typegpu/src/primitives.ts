@@ -135,6 +135,7 @@ export function dirtyForAttribute(
 
   if (name === 'scene') {
     if (attribute === 'activeCamera') return Dirty.Camera;
+    if (attribute === 'frustumCulling' || attribute === 'depth') return mergeDirty(Dirty.RenderSettings, Dirty.DrawBatches);
     if (sceneAttributes.has(attribute)) return Dirty.RenderSettings;
     return Dirty.None;
   }

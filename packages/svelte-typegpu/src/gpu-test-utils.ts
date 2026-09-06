@@ -3,14 +3,21 @@ import { vi } from 'vitest';
 export interface GpuDrawCapture {
   bindings: unknown[][];
   counts: number[];
+  draws?: { indexed: boolean; count: number; firstInstance: number }[];
 }
 
 export function createFakePipeline(captured: GpuDrawCapture, bindings: unknown[] = []) {
   return {
     with: (...values: unknown[]) => createFakePipeline(captured, [...bindings, ...values]),
     withIndexBuffer: (...values: unknown[]) => createFakePipeline(captured, [...bindings, ...values]),
-    draw: (_vertices: number, count = 1) => { captured.bindings.push(bindings); captured.counts.push(count); },
-    drawIndexed: (_indices: number, count = 1) => { captured.bindings.push(bindings); captured.counts.push(count); }
+    draw: (_vertices: number, count = 1, _firstVertex = 0, firstInstance = 0) => {
+      captured.bindings.push(bindings); captured.counts.push(count);
+      captured.draws?.push({ indexed: false, count, firstInstance });
+    },
+    drawIndexed: (_indices: number, count = 1, _firstIndex = 0, _baseVertex = 0, firstInstance = 0) => {
+      captured.bindings.push(bindings); captured.counts.push(count);
+      captured.draws?.push({ indexed: true, count, firstInstance });
+    }
   };
 }
 

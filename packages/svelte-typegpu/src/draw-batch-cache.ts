@@ -1,4 +1,5 @@
 import { growInstanceCapacity, MESH_INSTANCE_FLOATS, packMeshInstance } from './instance-data';
+import { BatchBounds, spatiallyOrderInstances } from './batch-visibility';
 import {
   compareDrawBatchKeys,
   drawBatchKey,
@@ -22,10 +23,11 @@ interface DrawBatchState {
   instanceIds: TypeGpuInstanceId[];
   revisions: number[];
   instances: Float32Array;
+  visibility?: BatchBounds;
 }
 
 export interface TypeGpuDrawBatchCache {
-  read(items: TypeGpuMeshDrawItem[]): TypeGpuDrawBatch[];
+  read(items: TypeGpuMeshDrawItem[], culling?: boolean, spatialOrder?: boolean): TypeGpuDrawBatch[];
   updateMaterials(items: TypeGpuMeshDrawItem[]): void;
   updateInstances(items: TypeGpuMeshDrawItem[]): {
     batches: TypeGpuDrawBatch[];
@@ -43,12 +45,13 @@ export function createDrawBatchCache(): TypeGpuDrawBatchCache {
   let dirtyBatches: TypeGpuDrawBatch[] = [];
 
   return {
-    read(items) {
+    read(items, culling = true, spatialOrder = true) {
       slots.clear();
       const groups = groupDrawItems(items);
+      if (culling && spatialOrder) for (const group of groups) group.items = spatiallyOrderInstances(group.items);
       const activeKeys = new Set(groups.map((group) => group.key));
       const batches = groups.map((group, index) =>
-        readDrawBatch(group, previousBatches.get(group.key), index)
+        readDrawBatch(group, previousBatches.get(group.key), index, culling)
       );
 
       for (const key of previousBatches.keys()) {
@@ -59,7 +62,8 @@ export function createDrawBatchCache(): TypeGpuDrawBatchCache {
         const state = {
           instanceIds: batch.instanceIds,
           revisions: groupRevisionList(groups[batch.sortKey]),
-          instances: batch.instances
+          instances: batch.instances,
+          visibility: batch.visibility
         };
         previousBatches.set(batch.key, state);
         batch.instanceIds.forEach((id, index) => slots.set(id, { batch, index, state }));
@@ -86,6 +90,7 @@ export function createDrawBatchCache(): TypeGpuDrawBatchCache {
         const { batch, index, state } = slot;
         if (state.revisions[index] === item.revision) continue;
         packMeshInstance(item, batch.instances, index * MESH_INSTANCE_FLOATS);
+        batch.visibility?.update(index, item);
         state.revisions[index] = item.revision;
         let indices = changed.get(batch);
         if (!indices) changed.set(batch, (indices = []));
@@ -123,7 +128,8 @@ function groupDrawItems(items: TypeGpuMeshDrawItem[]): DrawBatchGroup[] {
 function readDrawBatch(
   group: DrawBatchGroup,
   previous: DrawBatchState | undefined,
-  sortKey: number
+  sortKey: number,
+  culling: boolean
 ): TypeGpuDrawBatch {
   const items = group.items;
   const instanceIds = items.map((item) => item.id);
@@ -138,6 +144,12 @@ function readDrawBatch(
       ? previous.instances
       : new Float32Array(previous.instances.buffer, 0, requiredFloats);
   const dirtyRanges: TypeGpuInstanceDirtyRange[] = [];
+  const visibility = culling
+    ? previous?.visibility && previous.visibility.capacity >= items.length
+      ? previous.visibility
+      : new BatchBounds(growInstanceCapacity(items.length))
+    : undefined;
+  visibility?.rebuild(items);
 
   items.forEach((item, index) => {
     if (
@@ -156,6 +168,7 @@ function readDrawBatch(
     instanceIds,
     instanceCount: items.length,
     instancesChanged: dirtyRanges.length > 0,
+    visibility,
     dirtyRanges
   };
 }
