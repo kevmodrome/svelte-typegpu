@@ -2,17 +2,24 @@
   import type { TypeGpuFrameContext } from 'svelte-typegpu';
   import { createPlayerController, createPlayerState, initialCameraDirection, type CameraDirection } from './player-controller';
   import { idleMovement, type Movement } from './player-input';
-  let { movement = idleMovement, camera = initialCameraDirection, forest = true, paused = false, reducedMotion = false }: {
+  import { compactLandscape, type Landscape } from './landscape';
+  let { movement = idleMovement, camera = initialCameraDirection, forest = true, paused = false,
+    reducedMotion = false, landscape = compactLandscape, onposition }: {
     movement?: Movement; camera?: CameraDirection; forest?: boolean; paused?: boolean; reducedMotion?: boolean;
+    landscape?: Landscape; onposition?: (position: import('svelte-typegpu').Vector3Tuple) => void;
   } = $props();
   const player = $state(createPlayerState());
-  const controller = createPlayerController();
+  const controller = $derived(createPlayerController(landscape));
   const active = $derived(!paused && (movement.x !== 0 || movement.z !== 0));
   const stride = $derived(active && !reducedMotion ? player.stride : 0);
-  function update({ delta }: TypeGpuFrameContext) { controller.step(player, movement, delta, camera, forest); }
+  function update({ delta }: TypeGpuFrameContext) {
+    const x = player.x, z = player.z;
+    controller.step(player, movement, delta, camera, forest);
+    if (x !== player.x || z !== player.z) onposition?.([player.x, player.y, player.z]);
+  }
 </script>
 
-<frameTask {update} {active} />
+<frameTask {update} {active} {@attach () => { controller; }} />
 <group name="camper" position={[player.x, player.y, player.z]} rotation={[0, player.heading, 0]}>
   <mesh position={[0, 0.012, 0]} scale={[1, 0.025, 1]}>
     <sphereGeometry radius={0.43} widthSegments={16} heightSegments={4} />

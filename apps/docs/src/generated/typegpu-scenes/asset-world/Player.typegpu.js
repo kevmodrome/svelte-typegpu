@@ -12,6 +12,7 @@ import {
 } from './player-controller.js';
 
 import { idleMovement } from './player-input.js';
+import { compactLandscape } from './landscape.js';
 
 var root = $.from_tree(
 	[
@@ -105,21 +106,30 @@ export default function Player_typegpu($$anchor, $$props) {
 		camera = $.prop($$props, 'camera', 3, initialCameraDirection),
 		forest = $.prop($$props, 'forest', 3, true),
 		paused = $.prop($$props, 'paused', 3, false),
-		reducedMotion = $.prop($$props, 'reducedMotion', 3, false);
+		reducedMotion = $.prop($$props, 'reducedMotion', 3, false),
+		landscape = $.prop($$props, 'landscape', 3, compactLandscape);
 
 	const player = $.proxy(createPlayerState());
-	const controller = createPlayerController();
+	const controller = $.derived(() => createPlayerController(landscape()));
 	const active = $.derived(() => !paused() && (movement().x !== 0 || movement().z !== 0));
 	const stride = $.derived(() => $.get(active) && !reducedMotion() ? player.stride : 0);
 
 	function update({ delta }) {
-		controller.step(player, movement(), delta, camera(), forest());
+		const x = player.x, z = player.z;
+
+		$.get(controller).step(player, movement(), delta, camera(), forest());
+
+		if (x !== player.x || z !== player.z) $$props.onposition?.([player.x, player.y, player.z]);
 	}
 
 	var fragment = root_1();
 	var frameTask = $.first_child(fragment);
 
 	$.set_attribute(frameTask, 'update', update);
+
+	$.attach(frameTask, () => () => {
+		$.get(controller);
+	});
 
 	var group = $.sibling(frameTask, 2);
 	var mesh = $.child(group);

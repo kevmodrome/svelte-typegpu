@@ -40,9 +40,15 @@ import movementPad from '../src/examples/asset-world/MovementPad.svelte' with { 
 import playerController from '../src/examples/asset-world/player-controller.ts' with { type: 'text' };
 import playerInput from '../src/examples/asset-world/player-input.ts' with { type: 'text' };
 import world from '../src/examples/asset-world/world.ts' with { type: 'text' };
+import landscapeModels from '../src/examples/asset-world/Landscape.typegpu.svelte' with { type: 'text' };
+import worldCamera from '../src/examples/asset-world/WorldCamera.typegpu.svelte' with { type: 'text' };
+import landscape from '../src/examples/asset-world/landscape.ts' with { type: 'text' };
+import modelDetail from '../src/examples/asset-world/model-detail.ts' with { type: 'text' };
+import worldProfile from '../src/examples/asset-world/world-profile.ts' with { type: 'text' };
 
 export const exampleSourceTexts = {
-  'asset-world': [assetWorld, worldViewport, campsite, canoe, player, movementPad, playerController, playerInput, world],
+  'asset-world': [assetWorld, worldViewport, campsite, canoe, player, movementPad, playerController, playerInput, world,
+    landscapeModels, worldCamera, landscape, modelDetail, worldProfile],
   'native-events': [nativeEvents],
   'shared-stores': [sharedStores, storeViewport],
   'reactive-collections': [reactiveCollections, collectionViewport, collection],

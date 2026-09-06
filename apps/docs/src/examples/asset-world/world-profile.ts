@@ -1,0 +1,51 @@
+import type { TypeGpuRoot } from 'svelte-typegpu';
+
+type SceneState = Parameters<TypeGpuRoot['gpu']['setScene']>[0];
+
+export interface WorldProfile {
+  models: number; instances: number; colorDraws: number; colorTriangles: number;
+  shadowTriangles: number; renderCpuMs: number; maxRenderCpuMs: number;
+}
+export const emptyProfile: WorldProfile = { models: 0, instances: 0, colorDraws: 0,
+  colorTriangles: 0, shadowTriangles: 0, renderCpuMs: 0, maxRenderCpuMs: 0 };
+
+export function sceneWorkload(scene: SceneState) {
+  let instances = 0, colorTriangles = 0, shadowTriangles = 0;
+  const shadows = scene.lights.some(light => light.kind === 'directional' && light.castsShadow);
+  const models = new Set((scene.resourceItems ?? []).filter(item => item.node.name === 'model' && item.visible !== false).map(item => item.node));
+  for (const batch of scene.drawBatches) {
+    const triangles = (batch.geometry.indexCount ?? batch.geometry.vertexCount) / 3 * batch.instanceCount;
+    instances += batch.instanceCount; colorTriangles += triangles;
+    if (shadows && batch.castShadow) shadowTriangles += triangles;
+  }
+  return { models: models.size, instances, colorDraws: scene.drawBatches.length, colorTriangles, shadowTriangles };
+}
+
+export function profileWorld(root: TypeGpuRoot, publish: (profile: WorldProfile) => void, now = () => performance.now()) {
+  const gpu = root.gpu, renderFrame = gpu.renderFrame, setScene = gpu.setScene;
+  let latest = { ...emptyProfile }, frames = 0, cpu = 0, maxCpu = 0, disposed = false;
+  function render(timestamp?: number) {
+    const start = now();
+    try { renderFrame.call(gpu, timestamp); }
+    finally { const elapsed = now() - start; frames++; cpu += elapsed; maxCpu = Math.max(maxCpu, elapsed); }
+  }
+  function scene(value: SceneState) {
+    setScene.call(gpu, value);
+    if (value.drawBatchesChanged || value.lightsChanged) {
+      latest = { ...latest, ...sceneWorkload(value) }; publish(latest);
+    }
+  }
+  gpu.renderFrame = render; gpu.setScene = scene;
+  return {
+    sample() {
+      if (disposed) return;
+      latest = { ...latest, renderCpuMs: frames ? cpu / frames : 0, maxRenderCpuMs: maxCpu };
+      publish(latest); frames = cpu = maxCpu = 0;
+    },
+    dispose() {
+      disposed = true;
+      if (gpu.renderFrame === render) gpu.renderFrame = renderFrame;
+      if (gpu.setScene === scene) gpu.setScene = setScene;
+    }
+  };
+}

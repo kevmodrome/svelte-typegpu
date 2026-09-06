@@ -17,6 +17,26 @@ the asset loading/retry, canvas identity, picking and day/dusk checks. It closes
 its browser and leaves the docs server running. See the
 [playable-world design and measured results](../../../docs/playable-asset-world-design.md).
 
+## Large asset world and polygon density
+
+```sh
+rtk proxy env TMPDIR=/tmp pnpm --filter svelte-typegpu exec node repros/asset-world-stress.mjs
+```
+
+Uses the same server and browser environment variables. At desktop and mobile
+sizes it compares the workload counters with actual WebGPU draw/drawIndexed
+arguments for 20,000 models at 1x, 4x and 16x triangle density. It checks instancing,
+visible world/follow-camera movement, frame/callback delivery, GPU resource reuse,
+idle behavior, and retained asset downloads. Screenshots go to
+`/tmp/typegpu-asset-world-stress` by default. The compact playable probe explicitly
+selects 29 models and original density for its input/picking regression checks.
+
+The default world submits roughly 16.4 million color-pass triangles in 33 draws;
+16x density submits roughly 65.7 million. There is no distance culling or LOD.
+Software WebGPU may run very slowly at these loads; these probes do not establish
+hardware GPU throughput or a monitor's physical refresh rate. See the
+[stress-mode design](../../../docs/asset-world-stress-design.md).
+
 ## Attachment listener options
 
 ```sh

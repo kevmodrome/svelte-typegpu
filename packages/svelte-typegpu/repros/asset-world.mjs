@@ -59,6 +59,11 @@ try {
       await page.getByText('9 GLB assets loaded', { exact: true }).waitFor({ timeout: 30000 });
       await page.locator('canvas[data-typegpu-status="ready"]').waitFor({ timeout: 30000 });
       const world = page.locator('.asset-world'), canvas = world.locator('canvas');
+      await world.getByRole('combobox', { name: 'Model count', exact: true }).selectOption('29');
+      await world.getByRole('combobox', { name: 'Triangle density', exact: true }).selectOption('0');
+      await world.getByRole('button', { name: 'Campsite view', exact: true }).click();
+      await world.getByRole('checkbox', { name: 'Shadows', exact: true }).check();
+      await page.waitForFunction(() => document.querySelector('[data-metric="models"]')?.textContent === '29');
       await canvas.scrollIntoViewIfNeeded();
       const metrics = () => page.evaluate(() => structuredClone(window.metrics));
       const idle = () => page.waitForFunction(() => window.pending.size === 0, null, { polling: 50 });

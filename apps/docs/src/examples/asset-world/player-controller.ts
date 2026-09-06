@@ -1,6 +1,7 @@
 import SAT from 'sat';
 import { details, landmarks, trees, type Placement } from './world';
 import type { Movement } from './player-input';
+import { compactLandscape, type Landscape } from './landscape';
 
 export interface PlayerState { x: number; y: number; z: number; heading: number; stride: number }
 export interface CameraDirection { x: number; z: number }
@@ -23,8 +24,6 @@ function circle(item: Placement, radius: number) {
 
 // Gameplay footprints in the XZ plane, intentionally simpler than visual meshes.
 const solid = [
-  box(-10.5, 0, 1, 30), box(10.5, 0, 1, 30), box(0, -8.5, 30, 1), box(0, 8.5, 30, 1),
-  box(3.5, -6.7, 3, 6.6), box(3.5, 4.2, 3, 11.6),
   ...landmarks.filter(item => item.asset !== 'bridge').map(item => item.asset === 'tent'
     ? box(item.position[0], item.position[2], scale(item) * 0.8, scale(item) * 0.62, item.rotation?.[1])
     : circle(item, item.asset === 'firepit' ? 0.7 : 0.22)),
@@ -34,8 +33,24 @@ const solid = [
 ];
 const trunks = trees.map(item => circle(item, scale(item) * 0.12));
 
-export function createPlayerController() {
+export function createPlayerController(landscape: Landscape = compactLandscape) {
   const body = new SAT.Circle(new SAT.Vector(), playerRadius), response = new SAT.Response();
+  const { halfWidth: w, halfDepth: d } = landscape;
+  const boundary = [box(-w - 0.5, 0, 1, d * 2 + 4), box(w + 0.5, 0, 1, d * 2 + 4),
+    box(0, -d - 0.5, w * 2 + 4, 1), box(0, d + 0.5, w * 2 + 4, 1),
+    box(3.5, -(d + 3.4) / 2, 3, d - 3.4), box(3.5, (d - 1.6) / 2, 3, d + 1.6)];
+  type Shape = SAT.Circle | SAT.Polygon;
+  const cells = new Map<string, { shape: Shape; forest: boolean }[]>(), nearby: Shape[] = [];
+  const stats = { candidates: 0 };
+  function add(shape: Shape, forest: boolean) {
+    const key = `${Math.floor(shape.pos.x / 8)}:${Math.floor(shape.pos.y / 8)}`;
+    let cell = cells.get(key);
+    if (!cell) cells.set(key, cell = []);
+    cell.push({ shape, forest });
+  }
+  solid.forEach(shape => add(shape, false)); trunks.forEach(shape => add(shape, true));
+  for (const item of landscape.placements) add(circle(item, scale(item) *
+    (item.asset === 'pine' || item.asset === 'oak' ? 0.12 : 0.35)), item.asset === 'pine' || item.asset === 'oak');
   let phase = 0;
   function resolve(shapes: (SAT.Circle | SAT.Polygon)[]) {
     for (const shape of shapes) {
@@ -60,13 +75,20 @@ export function createPlayerController() {
     const distance = (input.run ? runSpeed : walkSpeed) * Math.min(delta, 0.05);
     const steps = Math.max(1, Math.ceil(distance / 0.12));
     body.pos.x = state.x; body.pos.y = state.z;
+    nearby.length = 0;
+    const cxCell = Math.floor(state.x / 8), czCell = Math.floor(state.z / 8);
+    for (let x = cxCell - 1; x <= cxCell + 1; x++) for (let z = czCell - 1; z <= czCell + 1; z++) {
+      const cell = cells.get(`${x}:${z}`);
+      if (cell) for (const item of cell) if (forest || !item.forest) nearby.push(item.shape);
+    }
+    stats.candidates = nearby.length + boundary.length;
     for (let i = 0; i < steps; i++) {
       const x = body.pos.x, z = body.pos.y;
       body.pos.x += dx * distance / steps; body.pos.y += dz * distance / steps;
       // Short substeps prevent tunnelling; repeat projection at obstacle corners.
-      for (let pass = 0; pass < 3; pass++) { resolve(solid); if (forest) resolve(trunks); }
+      for (let pass = 0; pass < 3; pass++) { resolve(boundary); resolve(nearby); }
       // Conflicting footprints must not push the camper through a neighbouring wall.
-      if (solid.some(penetrates) || (forest && trunks.some(penetrates))) { body.pos.x = x; body.pos.y = z; }
+      if (boundary.some(penetrates) || nearby.some(penetrates)) { body.pos.x = x; body.pos.y = z; }
     }
     const travelled = Math.hypot(body.pos.x - state.x, body.pos.y - state.z);
     state.x = body.pos.x; state.z = body.pos.y;
@@ -76,5 +98,5 @@ export function createPlayerController() {
     const bridge = state.z > -3.4 && state.z < -1.6 && state.x > 1.6 && state.x < 5.4;
     state.y = bridge ? 0.03 + 0.37 * Math.min(1, (state.x - 1.6) / 0.4, (5.4 - state.x) / 0.4) : 0.03;
   }
-  return { step };
+  return { step, stats };
 }

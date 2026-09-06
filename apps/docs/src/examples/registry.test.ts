@@ -43,7 +43,8 @@ describe('docs example registry', () => {
     expect(example.sourceFiles.map(file => file.filename)).toEqual([
       'AssetWorld.svelte', 'WorldViewport.typegpu.svelte', 'Campsite.typegpu.svelte',
       'Canoe.typegpu.svelte', 'Player.typegpu.svelte', 'MovementPad.svelte',
-      'player-controller.ts', 'player-input.ts', 'world.ts'
+      'player-controller.ts', 'player-input.ts', 'world.ts', 'Landscape.typegpu.svelte',
+      'WorldCamera.typegpu.svelte', 'landscape.ts', 'model-detail.ts', 'world-profile.ts'
     ]);
     for (const syntax of ['<canvas', '<model', '<frameTask', 'loadModel(', 'onclick=', 'AbortController']) {
       expect(example.code).toContain(syntax);

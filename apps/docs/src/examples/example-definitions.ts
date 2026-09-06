@@ -25,8 +25,8 @@ export const exampleDefinitions = [
     title: 'Asset World',
     category: 'worlds',
     tags: ['3d', 'GLB assets', 'components', 'interaction', 'frame tasks'],
-    description: 'A playable lakeside campsite with a walking camper, shared GLB models, shadows and a drifting canoe.',
-    notes: 'Focus the canvas and use WASD or arrow keys to walk, Shift to run, or use the movement pad. Drag to orbit. The camper and canoe use frameTask components; paused demand rendering idles. Nine local Kenney CC0 assets include loading, cancellation and retry. Ground-plane collision uses SAT.js.',
+    description: 'A playable forest with up to 50,000 shared GLB models and adjustable triangle density.',
+    notes: 'WASD or arrow keys walk, Shift runs; the movement pad supports touch. Camera modes include camp, follow and overview. Model count and 1x/4x/16x flat subdivision vary independently. All visible models are submitted without distance culling or LOD. Render CPU measures synchronous renderFrame work, not GPU time or all JavaScript. Nine local Kenney CC0 sources are shared; SAT.js collision checks nearby cells. Three.js and three-subdivide prepare geometry only; TypeGPU renders it.',
     exportName: 'AssetWorld',
     sourceUrl: new URL('./asset-world/AssetWorld.svelte', import.meta.url),
     sourceFiles: [
@@ -38,7 +38,12 @@ export const exampleDefinitions = [
       new URL('./asset-world/MovementPad.svelte', import.meta.url),
       new URL('./asset-world/player-controller.ts', import.meta.url),
       new URL('./asset-world/player-input.ts', import.meta.url),
-      new URL('./asset-world/world.ts', import.meta.url)
+      new URL('./asset-world/world.ts', import.meta.url),
+      new URL('./asset-world/Landscape.typegpu.svelte', import.meta.url),
+      new URL('./asset-world/WorldCamera.typegpu.svelte', import.meta.url),
+      new URL('./asset-world/landscape.ts', import.meta.url),
+      new URL('./asset-world/model-detail.ts', import.meta.url),
+      new URL('./asset-world/world-profile.ts', import.meta.url)
     ],
     typeGpuSourceFiles: []
   },

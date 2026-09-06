@@ -15,6 +15,10 @@ import { compileViewportSource } from './viewport-test-utils';
 import { settleComponentUpdates } from './component-test-utils';
 import * as controller from '../../../apps/docs/src/examples/asset-world/player-controller';
 import * as input from '../../../apps/docs/src/examples/asset-world/player-input';
+import * as landscape from '../../../apps/docs/src/examples/asset-world/landscape';
+import * as world from '../../../apps/docs/src/examples/asset-world/world';
+import { detailWorldAssets } from '../../../apps/docs/src/examples/asset-world/model-detail';
+import { loadGlbModel } from './glb-loader';
 import * as transforms from './transform';
 
 const captured = vi.hoisted(() => ({ bindings: [] as unknown[][], counts: [] as number[] }));
@@ -30,8 +34,14 @@ vi.mock('./typegpu-pipeline', async () => {
 });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); captured.bindings.length = 0; captured.counts.length = 0; });
 const source = readFileSync(resolve(process.cwd(), '../../apps/docs/src/examples/asset-world/Player.typegpu.svelte'), 'utf8');
+const componentSource = (name: string) => readFileSync(resolve(process.cwd(), `../../apps/docs/src/examples/asset-world/${name}.typegpu.svelte`), 'utf8');
+const assets = detailWorldAssets(Object.fromEntries(Object.entries(world.assetFiles).map(([key, name]) => {
+  const bytes = readFileSync(resolve(process.cwd(), `../../apps/docs/public/assets/asset-world/${name}`));
+  return [key, loadGlbModel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), name)];
+})) as world.WorldAssets, 1);
+const largeLandscape = landscape.createLandscape(20000);
 
-describe('compiled camper frame delivery', () => {
+describe('compiled camper frame delivery in a 20,000-model dense world', () => {
   it.each([60, 120, 144].flatMap(hz => ['Tween', 'Spring'].flatMap(kind => [
     { hz, kind, mode: 'demand' as const, first: false },
     { hz, kind, mode: 'demand' as const, first: true },
@@ -52,23 +62,28 @@ describe('compiled camper frame delivery', () => {
     const gpuRenderer = await createTypeGpuRenderer({ canvas, frameloop: mode });
     const changed = vi.spyOn(gpuRenderer, 'setScene');
     const root = createFragment(), runtime = createTypeGpuRuntimeForTest(root, canvas, gpuRenderer); root.runtime = runtime;
-    const Player = compileViewportSource(source, { ...controller, ...input });
+    const Player = compileViewportSource(source, { ...controller, ...input, ...landscape });
+    const Canoe = compileViewportSource(componentSource('Canoe'), world);
+    const Campsite = compileViewportSource(componentSource('Campsite'), { ...world, Canoe });
+    const LandscapeModels = compileViewportSource(componentSource('Landscape'));
+    const WorldCamera = compileViewportSource(componentSource('WorldCamera'));
     const Host = compileViewportSource<{ animate(): void; walk(value: boolean): void; stop(): void }>(`<script>
       import { ${kind} } from 'svelte/motion'; import { onDestroy } from 'svelte';
-      let { Player } = $props(); let walking = $state(false);
+      let { Player, Campsite, LandscapeModels, WorldCamera, assets, landscape } = $props(); let walking = $state(false);
+      let focus = $state.raw([-0.9, 0.03, 7]);
       const motion = new ${kind}(0, ${kind === 'Tween' ? '{ duration: 1800 }' : '{ stiffness: 0.02, damping: 0.7, precision: 1e-5 }'});
       export function animate() { void motion.set(10); }
       export function walk(value) { walking = value; }
       export function stop() { walking = false; void motion.set(motion.current, ${kind === 'Tween' ? '{ duration: 0 }' : '{ instant: true }'}); }
       onDestroy(stop);
-    </script><scene><perspectiveCamera position={[18, 17, 23]} />
-      {#each Array.from({ length: 1000 }, (_, i) => i) as id (id)}
-        <mesh position={[id, -2, 0]}><boxGeometry /><basicMaterial /></mesh>
-      {/each}
-      <Player movement={{ x: 0, z: walking ? -1 : 0, run: false }} camera={{ x: 0, z: 1 }} />
+    </script><scene>
+      <WorldCamera view="follow" extent={landscape.halfWidth} narrow={false} {focus} onchange={() => {}} />
+      <Campsite {assets} paused />
+      <LandscapeModels {assets} {landscape} />
+      <Player {landscape} movement={{ x: 0, z: walking ? -1 : 0, run: false }} camera={{ x: 0, z: 1 }} onposition={value => focus = value} />
       <mesh position={[motion.current, 5, 0]}><boxGeometry /><basicMaterial /></mesh>
     </scene>`, { Tween, Spring, onDestroy });
-    const instance = mount(Host, { renderer, target: root, props: { Player } });
+    const instance = mount(Host, { renderer, target: root, props: { Player, Campsite, LandscapeModels, WorldCamera, assets, landscape: largeLandscape } });
     const order: string[] = [];
     async function step() {
       now += 1000 / hz; order.length = 0;
@@ -83,6 +98,9 @@ describe('compiled camper frame delivery', () => {
       await settleComponentUpdates(); for (let i = 0; i < 4; i++) await step();
       if (mode === 'manual') gpuRenderer.renderFrame(now);
       expect(pending.size).toBe(0);
+      const scene = changed.mock.lastCall![0];
+      expect(new Set(scene.resourceItems!.filter(item => item.node.name === 'model').map(item => item.node)).size).toBe(20000);
+      expect(scene.drawBatches.length).toBeLessThan(100);
       const storage = changed.mock.lastCall![0].drawBatches.map(batch => batch.instances);
       const instanceBuffers = buffers.filter(buffer => buffer.label.endsWith('instances'));
       const beforeData = instanceBuffers.map(buffer => buffer.data.slice());
@@ -99,7 +117,7 @@ describe('compiled camper frame delivery', () => {
         expect(order).toEqual(mode === 'manual' ? ['motion'] : first ? ['render', 'motion'] : ['motion', 'render']);
         const writes = instanceBuffers.flatMap(buffer => buffer.write.mock.calls);
         if (frame > 0) {
-          // Twelve camper parts plus one external mesh; the 1,000 static objects never upload.
+          // Twelve camper parts plus one external mesh; the 20,000 models never upload.
           expect(writes.reduce((bytes, [, range]) => bytes + range!.endOffset - range!.startOffset, 0)).toBe(13 * 96);
           // The moving parent visits its 17-node spatial subtree, plus the external mesh.
           expect(reads.mock.calls.length).toBe(18);

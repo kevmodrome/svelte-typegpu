@@ -10,22 +10,13 @@ import TypeGpuViewportCanvas from "svelte-typegpu/internal/viewport-canvas";
 import * as TypeGpuCanvasBindings from 'svelte-typegpu/internal/canvas-bindings';
 import Campsite from './Campsite.typegpu.js';
 import Player from './Player.typegpu.js';
+import LandscapeModels from './Landscape.typegpu.js';
+import WorldCamera from './WorldCamera.typegpu.js';
+import { compactLandscape } from './landscape.js';
 import { createMovementInput, idleMovement } from './player-input.js';
-import { initialCameraDirection } from './player-controller.js';
+import { createPlayerState, initialCameraDirection } from './player-controller.js';
 
-var root = $.from_tree([
-	[
-		'perspectiveCamera',
-		{ active: '' },
-		[
-			'controls',
-			{ mode: 'orbit' },
-			['pointerControls', { wheel: 'zoom', touch: 'orbit-pinch' }]
-		]
-	]
-]);
-
-var root_1 = $.from_tree(
+var root = $.from_tree(
 	[
 		[
 			'mesh',
@@ -37,9 +28,9 @@ var root_1 = $.from_tree(
 	4
 );
 
-var root_2 = $.from_tree([,, ' ',,], 1);
+var root_1 = $.from_tree([,, ' ',, ' ',,], 1);
 
-var root_3 = $.from_tree([
+var root_2 = $.from_tree([
 	[
 		'scene',
 		null,,
@@ -92,6 +83,8 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 		playerVersion = $.prop($$props, 'playerVersion', 3, 0),
 		touch = $.prop($$props, 'touch', 3, idleMovement),
 		reducedMotion = $.prop($$props, 'reducedMotion', 3, false),
+		landscape = $.prop($$props, 'landscape', 3, compactLandscape),
+		view = $.prop($$props, 'view', 3, 'camp'),
 		onselect = $.prop($$props, 'onselect', 3, (_key) => {}),
 		frameloop = $.prop($$props, 'frameloop', 3, 'demand'),
 		maxDevicePixelRatio = $.prop($$props, 'maxDevicePixelRatio', 3, 1.5);
@@ -100,8 +93,23 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 	let height = $.state(0);
 	const narrow = $.derived(() => $.get(width) > 0 && $.get(height) > $.get(width) * 0.9);
 	let keys = $.state($.proxy(idleMovement));
-	let cameraView = $.state({ version: -1, direction: initialCameraDirection });
-	const camera = $.derived(() => $.get(cameraView).version === cameraVersion() ? $.get(cameraView).direction : initialCameraDirection);
+	const cameraKey = $.derived(() => `${cameraVersion()}:${view()}:${landscape().halfWidth}`);
+	const playerKey = $.derived(() => `${playerVersion()}:${landscape().placements.length}`);
+	let cameraView = $.state({ key: '', direction: initialCameraDirection });
+
+	const camera = $.derived(() => $.get(cameraView).key === $.get(cameraKey)
+		? $.get(cameraView).direction
+		: view() === 'follow'
+			? { x: 8, z: 11 }
+			: view() === 'overview' ? { x: 1.9, z: 2.5 } : initialCameraDirection);
+
+	const spawn = createPlayerState();
+	let playerView = $.state({ key: '', position: [spawn.x, spawn.y, spawn.z] });
+
+	const focus = $.derived(() => $.get(playerView).key === $.get(playerKey)
+		? $.get(playerView).position
+		: [spawn.x, spawn.y, spawn.z]);
+
 	const keyboard = createMovementInput((value) => $.set(keys, value, true));
 
 	const movement = $.derived(() => ({
@@ -111,7 +119,7 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 	}));
 
 	TypeGpuViewportCanvas($$anchor, {
-		scopeClass: 'typegpu-ccb9bff4bb',
+		scopeClass: 'typegpu-775dc5b230',
 		'aria-label': 'Pinewater campsite',
 		get frameloop() {
 			return frameloop();
@@ -123,7 +131,7 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 		tabindex: 0,
 		'aria-keyshortcuts': 'W A S D ArrowUp ArrowDown ArrowLeft ArrowRight Shift Escape',
 		[$.attachment()]: (element) => {
-			playerVersion();
+			$.get(playerKey);
 			paused();
 			keyboard.clear();
 
@@ -159,33 +167,32 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 		},
 
 		children: $.renderer_snippet($renderer, ($$anchor, $$slotProps) => {
-			var scene = root_3();
+			var scene = root_2();
 			var node = $.child(scene);
 
-			$.key(node, cameraVersion, ($$anchor) => {
-				var perspectiveCamera = root();
+			$.key(node, () => $.get(cameraKey), ($$anchor) => {
+				WorldCamera($$anchor, {
+					get view() {
+						return view();
+					},
 
-				$.set_attribute(perspectiveCamera, 'position', [17, 15, 21]);
-				$.set_attribute(perspectiveCamera, 'target', [0, 0.2, 0]);
-				$.set_attribute(perspectiveCamera, 'far', 160);
+					get narrow() {
+						return $.get(narrow);
+					},
 
-				var controls = $.child(perspectiveCamera);
+					get focus() {
+						return $.get(focus);
+					},
 
-				$.set_attribute(controls, 'minDistance', 12);
-				$.set_attribute(controls, 'maxDistance', 50);
-				$.reset(perspectiveCamera);
-				$.template_effect(() => $.set_attribute(perspectiveCamera, 'fov', $.get(narrow) ? 64 : 43));
+					get extent() {
+						return landscape().halfWidth;
+					},
 
-				$.event('camerachange', controls, (event) => {
-					const { position, target } = event.detail.camera;
-
-					$.set(cameraView, {
-						version: cameraVersion(),
+					onchange: ({ position, target }) => $.set(cameraView, {
+						key: $.get(cameraKey),
 						direction: { x: position[0] - target[0], z: position[2] - target[2] }
-					});
+					})
 				});
-
-				$.append($$anchor, perspectiveCamera);
 			});
 
 			var hemisphereLight = $.sibling(node, 2);
@@ -212,9 +219,7 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 
 			var boxGeometry = $.child(mesh);
 
-			$.set_attribute(boxGeometry, 'width', 20);
 			$.set_attribute(boxGeometry, 'height', 0.9);
-			$.set_attribute(boxGeometry, 'depth', 16);
 
 			var standardMaterial = $.sibling(boxGeometry);
 
@@ -225,30 +230,39 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 
 			var node_1 = $.sibling(mesh, 2);
 
-			$.each(node_1, 16, () => [[-4, 12], [7.5, 5]], ([x, width]) => x, ($$anchor, $$item, $$index, $$array) => {
-				var $$array_1 = $.derived(() => $.to_array($$item, 2));
-				let x = () => $.get($$array_1)[0];
-				let width = () => $.get($$array_1)[1];
-				var mesh_1 = root_1();
-				var boxGeometry_1 = $.child(mesh_1);
+			$.each(
+				node_1,
+				17,
+				() => [
+					[(2 - landscape().halfWidth) / 2, landscape().halfWidth + 2],
+					[(5 + landscape().halfWidth) / 2, landscape().halfWidth - 5]
+				],
+				$.index,
+				($$anchor, $$item, bank, $$array) => {
+					var $$array_1 = $.derived(() => $.to_array($.get($$item), 2));
+					let x = () => $.get($$array_1)[0];
+					let width = () => $.get($$array_1)[1];
+					var mesh_1 = root();
+					var boxGeometry_1 = $.child(mesh_1);
 
-				$.set_attribute(boxGeometry_1, 'height', 0.2);
-				$.set_attribute(boxGeometry_1, 'depth', 16);
+					$.set_attribute(boxGeometry_1, 'height', 0.2);
 
-				var standardMaterial_1 = $.sibling(boxGeometry_1);
+					var standardMaterial_1 = $.sibling(boxGeometry_1);
 
-				$.set_attribute(standardMaterial_1, 'color', [0.37, 0.58, 0.39]);
-				$.set_attribute(standardMaterial_1, 'roughness', 1);
-				$.set_attribute(standardMaterial_1, 'metalness', 0);
-				$.reset(mesh_1);
+					$.set_attribute(standardMaterial_1, 'color', [0.37, 0.58, 0.39]);
+					$.set_attribute(standardMaterial_1, 'roughness', 1);
+					$.set_attribute(standardMaterial_1, 'metalness', 0);
+					$.reset(mesh_1);
 
-				$.template_effect(() => {
-					$.set_attribute(mesh_1, 'position', [x(), -0.1, 0]);
-					$.set_attribute(boxGeometry_1, 'width', width());
-				});
+					$.template_effect(() => {
+						$.set_attribute(mesh_1, 'position', [x(), -0.1, 0]);
+						$.set_attribute(boxGeometry_1, 'width', width());
+						$.set_attribute(boxGeometry_1, 'depth', landscape().halfDepth * 2);
+					});
 
-				$.append($$anchor, mesh_1);
-			});
+					$.append($$anchor, mesh_1);
+				}
+			);
 
 			var mesh_2 = $.sibling(node_1, 2);
 
@@ -257,7 +271,6 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 			var planeGeometry = $.child(mesh_2);
 
 			$.set_attribute(planeGeometry, 'width', 3);
-			$.set_attribute(planeGeometry, 'height', 16);
 
 			var standardMaterial_2 = $.sibling(planeGeometry);
 
@@ -285,8 +298,8 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 
 			{
 				var consequent = ($$anchor) => {
-					var fragment_1 = root_2();
-					var node_3 = $.first_child(fragment_1);
+					var fragment_2 = root_1();
+					var node_3 = $.first_child(fragment_2);
 
 					{
 						let $0 = $.derived(() => paused() || reducedMotion());
@@ -316,7 +329,23 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 
 					var node_4 = $.sibling(node_3, 2);
 
-					$.key(node_4, playerVersion, ($$anchor) => {
+					LandscapeModels(node_4, {
+						get assets() {
+							return assets();
+						},
+
+						get landscape() {
+							return landscape();
+						},
+
+						get forest() {
+							return forest();
+						}
+					});
+
+					var node_5 = $.sibling(node_4, 2);
+
+					$.key(node_5, () => $.get(playerKey), ($$anchor) => {
 						Player($$anchor, {
 							get movement() {
 								return $.get(movement);
@@ -336,11 +365,16 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 
 							get reducedMotion() {
 								return reducedMotion();
-							}
+							},
+
+							get landscape() {
+								return landscape();
+							},
+							onposition: (position) => $.set(playerView, { key: $.get(playerKey), position })
 						});
 					});
 
-					$.append($$anchor, fragment_1);
+					$.append($$anchor, fragment_2);
 				};
 
 				$.if(node_2, ($$render) => {
@@ -359,6 +393,9 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 					$.set_attribute(directionalLight, 'intensity', dusk() ? 0.65 : 1.1);
 					$.set_attribute(directionalLight, 'castShadow', shadows());
 					$.set_attribute(pointLight, 'intensity', dusk() ? 3 : 0);
+					$.set_attribute(boxGeometry, 'width', landscape().halfWidth * 2);
+					$.set_attribute(boxGeometry, 'depth', landscape().halfDepth * 2);
+					$.set_attribute(planeGeometry, 'height', landscape().halfDepth * 2);
 					$.set_attribute(standardMaterial_2, 'color', $2);
 				},
 				[
