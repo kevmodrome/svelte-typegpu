@@ -9,11 +9,16 @@ rtk proxy env TMPDIR=/tmp pnpm --filter svelte-typegpu exec node repros/listener
 This separate installed-compiler WebGPU viewport checks picked one-time clicks,
 real Tween movement, passive native wheel cancellation, AbortController removal,
 reattachment, resource reuse, and unmount during animation at desktop/mobile sizes.
+Once consumption, abort, and reattachment must submit zero frames and perform zero
+GPU buffer writes when no visual state changes. A native wheel-driven orbit camera
+must retain identical rendered pixels after subscription cleanup.
 Use the optional browser dependency, executable, and screenshot-directory variables
 described below. The browser/server close afterward; the normal docs server and
 installed dependencies are unchanged. Software-WebGPU checks do not establish the
 physical display refresh rate. See the
 [listener contract and design](../../../docs/event-listener-options-design.md).
+The interaction-only optimization is recorded in the
+[invalidation design](../../../docs/interaction-invalidation-design.md).
 
 ## Mesh noise resources
 

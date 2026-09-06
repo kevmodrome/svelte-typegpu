@@ -533,6 +533,8 @@ propagation rules as event attributes; it does not add a separate event system.
 Options include `capture`, `once`, `passive`, and `signal`. A one-time callback is
 removed before it runs, and an AbortController can own several subscriptions at
 once. Explicit cleanup and once consumption release their abort listeners too.
+Subscription-only changes update picking without GPU uploads or new frames, and
+preserve the current orbit camera. Visual changes made by a handler still render.
 See [subscription options](scene-events-guide.md#subscription-options) for the
 passive/native-event boundary and a shared-signal attachment example.
 

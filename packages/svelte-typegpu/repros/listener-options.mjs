@@ -21,10 +21,12 @@ const source = `<script>
   import { onNodeEvent } from 'svelte-typegpu';
   let { onready } = $props();
   const x = new Tween(0, { duration: 500 });
-  let picked = $state(0), generation = $state(0), wheels = 0, prevented, active;
+  let picked = $state(0), generation = $state(0), wheels = 0, doubles = 0, prevented, active;
+  let controls = $state(false), cameraState;
   function subscribe(key) { return node => {
     const controller = new AbortController(); active = controller;
     onNodeEvent(node, 'click', () => { picked++; void x.set(picked % 2 ? 0.4 : 0); }, { once: true, signal: controller.signal });
+    onNodeEvent(node, 'dblclick', () => doubles++, { once: true, signal: controller.signal });
     onNodeEvent(node, 'wheel', event => {
       event.preventDefault(); prevented = event.defaultPrevented; wheels++;
     }, { passive: true, signal: controller.signal });
@@ -32,13 +34,19 @@ const source = `<script>
   }; }
   export function abort() { active.abort(); }
   export function rearm() { generation++; }
-  export function read() { return { picked, wheels, prevented, x: x.current }; }
+  export function enableControls() { controls = true; }
+  export function camera() { return cameraState; }
+  export function read() { return { picked, wheels, doubles, prevented, x: x.current }; }
   onDestroy(() => { void x.set(x.current, { duration: 0 }); });
 </script>
 <canvas frameloop="demand" maxDevicePixelRatio={1} {onready}
   style="display:block;width:var(--canvas-width);height:400px">
   <scene clearColor={[0.045, 0.05, 0.055, 1]}>
-    <perspectiveCamera active position={[0, 0, 7]} target={[0, 0, 0]} />
+    <perspectiveCamera active position={[0, 0, 7]} target={[0, 0, 0]}>
+      {#if controls}
+        <controls oncamerachange={event => cameraState = event.detail.camera}><pointerControls wheel="zoom" /></controls>
+      {/if}
+    </perspectiveCamera>
     <ambientLight intensity={0.8} />
     <mesh position={[x.current, 0, 0]} rotation={[0.2, 0.4, 0]} scale={2} {@attach subscribe(generation)}>
       <boxGeometry /><standardMaterial color={picked ? [1, 0.7, 0.2] : [0.2, 0.7, 0.55]} />
@@ -84,7 +92,7 @@ try {
       page.on('pageerror', error => errors.push(error.message));
       page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
       await page.addInitScript(() => {
-        window.metrics = { buffers: 0, groups: 0, pipelines: 0, submissions: 0 }; window.pending = new Set();
+        window.metrics = { buffers: 0, groups: 0, pipelines: 0, submissions: 0, writes: 0 }; window.pending = new Set();
         const raf = window.requestAnimationFrame.bind(window), cancel = window.cancelAnimationFrame.bind(window);
         window.requestAnimationFrame = callback => {
           const id = raf(time => { window.pending.delete(id); callback(time); }); window.pending.add(id); return id;
@@ -102,6 +110,8 @@ try {
             }
             const submit = device.queue.submit.bind(device.queue);
             device.queue.submit = (...args) => { window.metrics.submissions++; return submit(...args); };
+            const write = device.queue.writeBuffer.bind(device.queue);
+            device.queue.writeBuffer = (...args) => { window.metrics.writes++; return write(...args); };
             return device;
           }; return adapter;
         };
@@ -121,6 +131,12 @@ try {
       let pixels = 0;
       for (let i = 0; i < before.data.length; i += 4) if (Math.abs(before.data[i] - after.data[i]) > 20) pixels++;
       assert(pixels > 1000, `Click and Tween must visibly update the mesh: ${pixels}`);
+      const beforeOnce = await metrics();
+      await canvas.dblclick({ position: { x: bounds.width / 2, y: bounds.height / 2 } }); await idle();
+      await canvas.dblclick({ position: { x: bounds.width / 2, y: bounds.height / 2 } }); await idle();
+      assert.equal((await page.evaluate(() => window.commands.read())).doubles, 1);
+      const onceFrames = (await metrics()).submissions - beforeOnce.submissions;
+      assert.equal((await metrics()).writes, beforeOnce.writes);
       const wheel = () => page.evaluate(() => {
         const canvas = document.querySelector('canvas'), bounds = canvas.getBoundingClientRect();
         const event = new WheelEvent('wheel', { clientX: bounds.x + bounds.width / 2, clientY: bounds.y + bounds.height / 2,
@@ -128,20 +144,43 @@ try {
         canvas.dispatchEvent(event); return event.defaultPrevented;
       });
       assert.equal(await wheel(), false);
-      assert.deepEqual(await page.evaluate(() => window.commands.read()), { picked: 1, wheels: 1, prevented: false, x: 0.4 });
+      assert.deepEqual(await page.evaluate(() => window.commands.read()), { picked: 1, wheels: 1, doubles: 1, prevented: false, x: 0.4 });
+      const beforeAbort = await metrics();
       await page.evaluate(() => window.commands.abort()); await idle();
       await wheel(); await click(); await idle();
       assert.equal((await page.evaluate(() => window.commands.read())).wheels, 1);
       assert.equal((await page.evaluate(() => window.commands.read())).picked, 1);
-      await page.evaluate(() => window.commands.rearm()); await idle(); await click();
+      const abortFrames = (await metrics()).submissions - beforeAbort.submissions;
+      assert.equal((await metrics()).writes, beforeAbort.writes);
+      const beforeRearm = await metrics();
+      await page.evaluate(() => window.commands.rearm()); await idle();
+      const rearmFrames = (await metrics()).submissions - beforeRearm.submissions;
+      assert.equal((await metrics()).writes, beforeRearm.writes);
+      assert.deepEqual({ onceFrames, abortFrames, rearmFrames }, { onceFrames: 0, abortFrames: 0, rearmFrames: 0 });
+      await click();
       await page.waitForFunction(() => window.commands.read().picked === 2, null, { polling: 20 });
+      await idle();
+      await page.evaluate(() => window.commands.enableControls()); await idle();
+      await wheel(); await idle();
+      const camera = await page.evaluate(() => window.commands.camera());
+      assert(camera.position[2] > 7, 'Native wheel input must update the orbit camera');
+      const cameraPixels = PNG.sync.read(await canvas.screenshot());
+      const beforeCameraCleanup = await metrics();
+      await page.evaluate(() => window.commands.abort()); await idle();
+      const cameraCleanupFrames = (await metrics()).submissions - beforeCameraCleanup.submissions;
+      assert.equal(cameraCleanupFrames, 0);
+      assert.equal((await metrics()).writes, beforeCameraCleanup.writes);
+      const retainedCameraPixels = PNG.sync.read(await canvas.screenshot({ path: resolve(output, `${width}-camera.png`) }));
+      assert.deepEqual(retainedCameraPixels.data, cameraPixels.data, 'Subscription cleanup must not reset the rendered camera');
+      await page.evaluate(() => window.commands.rearm()); await idle(); await click();
+      await page.waitForFunction(() => window.commands.read().picked === 3, null, { polling: 20 });
       for (const key of ['buffers', 'groups', 'pipelines']) assert.equal((await metrics())[key], resources[key]);
       await page.evaluate(() => window.commands.dispose()); await idle();
       assert.equal(await canvas.count(), 0);
       const final = await metrics(); await page.waitForTimeout(200);
       assert.equal((await metrics()).submissions, final.submissions);
       assert.equal(final.gpuError, undefined); assert.deepEqual(errors, []);
-      console.log(JSON.stringify({ width, pixels, resources, final, output }));
+      console.log(JSON.stringify({ width, pixels, resources, final, onceFrames, abortFrames, rearmFrames, cameraCleanupFrames, output }));
     } finally { await context.close(); }
   }
 } finally { await browser?.close(); await server.close(); await rm(temporary, { recursive: true, force: true }); }

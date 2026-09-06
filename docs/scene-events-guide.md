@@ -275,5 +275,10 @@ uploads, shared interaction data, GPU resource reuse, and demand-mode idle.
 The same clocks exercise double-click/context-menu/wheel/over/out/cancel-driven state changes in
 demand and manual modes. A retained wheel subscription adds no per-frame scan or
 listener churn. Event dispatch without reactive or listener-membership changes does
-not request a frame. Consuming a once listener or aborting a subscription updates
-interaction eligibility through the existing coalesced scene synchronization path.
+not request a frame. Listener membership and picking-only prop changes update
+interaction eligibility through coalesced CPU synchronization, without GPU uploads
+or frame requests. This includes once consumption, abort, and reattachment. Existing
+orbit-camera state and pending camera input are preserved; wheel subscriptions,
+active drag capture, and pointer-cancellation ownership are still reconciled.
+If the same update changes a visual prop, normal rendering still occurs. See the
+[interaction invalidation design and verification](interaction-invalidation-design.md).
