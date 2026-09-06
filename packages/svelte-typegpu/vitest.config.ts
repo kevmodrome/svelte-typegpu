@@ -29,6 +29,12 @@ export default defineConfig({
         )
       },
       {
+        find: /^svelte\/reactivity$/,
+        replacement: fileURLToPath(
+          new URL('./src/reactivity/index-client.js', import.meta.resolve('svelte/package.json'))
+        )
+      },
+      {
         find: /^svelte-test\/server$/,
         replacement: fileURLToPath(
           new URL('./src/index-server.js', import.meta.resolve('svelte/package.json'))

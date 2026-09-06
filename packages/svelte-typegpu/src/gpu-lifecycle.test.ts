@@ -24,6 +24,7 @@ import { createMeshPipeline } from './typegpu-pipeline';
 import { flushSync, mount, unmount } from 'svelte';
 import { Spring, Tween } from 'svelte/motion';
 import { writable } from 'svelte/store';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import * as svelteClient from 'svelte/internal/client';
 import sceneRenderer, { createTypeGpuRuntimeForTest, type TypeGpuRoot } from './svelte-renderer';
 import { compileTypeGpuSource, settleComponentUpdates } from './component-test-utils';
@@ -89,6 +90,149 @@ afterEach(() => {
 });
 
 describe('GPU resource and frame lifecycle', () => {
+  it.each([60, 120, 144].flatMap(hz => ['Tween', 'Spring'].flatMap(kind => [
+    { hz, kind, frameloop: 'demand' as const, rendererFirst: false },
+    { hz, kind, frameloop: 'demand' as const, rendererFirst: true },
+    { hz, kind, frameloop: 'manual' as const, rendererFirst: false }
+  ])))('keeps reactive collection edits local at $hz Hz ($kind, $frameloop, renderer first: $rendererFirst)',
+    async ({ hz, kind, frameloop, rendererFirst }) => {
+    const pending = new Map<number, FrameRequestCallback>();
+    const producers = new WeakSet<FrameRequestCallback>();
+    let now = 0, id = 0;
+    const request = vi.fn((callback: FrameRequestCallback) => { pending.set(++id, callback); return id; });
+    vi.stubGlobal('requestAnimationFrame', request);
+    vi.stubGlobal('cancelAnimationFrame', (key: number) => pending.delete(key));
+    const raf = (svelteClient as unknown as {
+      raf: { now(): number; tick(callback: FrameRequestCallback): void };
+    }).raf;
+    vi.spyOn(raf, 'now').mockImplementation(() => now);
+    vi.spyOn(raf, 'tick').mockImplementation(callback => {
+      producers.add(callback);
+      requestAnimationFrame(callback);
+    });
+    const motion = kind === 'Tween' ? new Tween(0, { duration: 2000 }) :
+      new Spring(0, { stiffness: 0.01, damping: 0.5, precision: 1e-8 });
+    const stop = () => motion instanceof Tween ? motion.set(motion.current, { duration: 0 }) :
+      motion.set(motion.current, { instant: true });
+    const objects = new SvelteMap(Array.from({ length: 301 }, (_, i) => [i, { position: [i + 10, 0, 0] }]));
+    const selection = new SvelteSet<number>();
+    const Scene = compileViewportSource(`<script>
+      let { motion, objects, selection, setup } = $props();
+      $effect(() => { objects.set(300, { position: [motion.current, 0, 0] }); });
+    </script><scene>{#each objects.keys() as id (id)}
+      {@const object = objects.get(id)}
+      <mesh position={object.position} {@attach setup}>
+        <boxGeometry /><standardMaterial color={selection.has(id) ? [1, 0.8, 0.2] : [0.2, 0.7, 0.5]} />
+      </mesh>
+    {/each}</scene>`);
+    const { renderer, root: gpu, buffers, submissions } = await setupRenderer(frameloop);
+    const changed = vi.spyOn(renderer, 'setScene');
+    const root = createFragment();
+    const runtime = createTypeGpuRuntimeForTest(root, new EventTarget() as HTMLCanvasElement, renderer);
+    root.runtime = runtime;
+    const cleanup = vi.fn(), setup = vi.fn(() => cleanup);
+    const instance = mount(Scene, { renderer: sceneRenderer, target: root, props: { motion, objects, selection, setup } });
+    const order: string[] = [];
+    async function step() {
+      now += 1000 / hz;
+      order.length = 0;
+      for (const [key, callback] of [...pending]) {
+        if (!pending.delete(key)) continue;
+        order.push(producers.has(callback) ? 'motion' : 'render');
+        callback(now);
+        // Match the browser's microtask checkpoint between animation callbacks.
+        flushSync();
+        await Promise.resolve();
+      }
+    }
+    let disposed = false;
+    try {
+      await settleComponentUpdates();
+      for (let i = 0; i < 3; i++) await step();
+      if (frameloop === 'manual') renderer.renderFrame(now);
+      expect(pending.size).toBe(0);
+      const buffer = buffers.find(buffer => buffer.label.endsWith('instances'))!;
+      const storage = changed.mock.lastCall![0].drawBatches[0].instances;
+      const scene = root.children.find(node => node.name === 'scene')!;
+      const nodes = scene.children.filter(node => node.name === 'mesh');
+      gpu.createBuffer.mockClear(); gpu.createBindGroup.mockClear(); vi.mocked(createMeshPipeline).mockClear();
+      request.mockClear();
+      function expectLocalUpdate() {
+        expect(changed).toHaveBeenCalledOnce();
+        const state = changed.mock.lastCall![0];
+        expect(state.drawBatchesChanged).toBe(false);
+        expect(state.drawBatches[0].instances).toBe(storage);
+        expect(state.instanceUpdates).toHaveLength(1);
+        expect(state.instanceUpdates![0].dirtyRanges).toEqual([{ start: 300, count: 1 }]);
+        expect(buffer.write).toHaveBeenCalledOnce();
+        expect(buffer.write.mock.lastCall![1]).toEqual({ startOffset: 300 * 96, endOffset: 301 * 96 });
+      }
+      if (frameloop === 'demand' && rendererFirst) { renderer.invalidate(); renderer.invalidate(); }
+      void motion.set(10);
+      if (frameloop === 'demand' && !rendererFirst) { renderer.invalidate(); renderer.invalidate(); }
+      for (let frame = 0; frame < hz; frame++) {
+        changed.mockClear(); buffer.write.mockClear();
+        const before = submissions.length, previous = motion.current;
+        await step();
+        if (frameloop === 'manual') renderer.renderFrame(now);
+        expect(submissions.length - before).toBe(1);
+        expect(order).toEqual(frameloop === 'manual' ? ['motion'] :
+          rendererFirst ? ['render', 'motion'] : ['motion', 'render']);
+        if (motion.current !== previous) expectLocalUpdate();
+        else { expect(changed).not.toHaveBeenCalled(); expect(buffer.write).not.toHaveBeenCalled(); }
+        expect(buffer.data[300 * 24]).toBeCloseTo(motion.current);
+      }
+      if (frameloop === 'manual') expect(request.mock.calls.every(([callback]) => producers.has(callback))).toBe(true);
+      await stop();
+      for (let i = 0; i < 4; i++) await step();
+      expect(pending.size).toBe(0);
+
+      changed.mockClear(); buffer.write.mockClear(); request.mockClear();
+      const beforeSelection = submissions.length;
+      flushSync(() => selection.add(300)); await settleComponentUpdates();
+      expectLocalUpdate();
+      await step();
+      expect(submissions.length - beforeSelection).toBe(frameloop === 'manual' ? 0 : 1);
+      if (frameloop === 'manual') { expect(request).not.toHaveBeenCalled(); renderer.renderFrame(now); }
+      expect(pending.size).toBe(0);
+      changed.mockClear(); buffer.write.mockClear(); request.mockClear();
+      flushSync(() => { objects.set(300, objects.get(300)!); selection.add(300); selection.delete(-1); });
+      await settleComponentUpdates();
+      for (let i = 0; i < 4; i++) await step();
+      expect(changed).not.toHaveBeenCalled();
+      expect(buffer.write).not.toHaveBeenCalled();
+      expect(request).not.toHaveBeenCalled();
+      expect(submissions).toHaveLength(beforeSelection + 1);
+      expect(scene.children.filter(node => node.name === 'mesh')).toEqual(nodes);
+      expect(setup).toHaveBeenCalledTimes(301);
+      expect(cleanup).not.toHaveBeenCalled();
+      expect(gpu.createBuffer).not.toHaveBeenCalled();
+      expect(gpu.createBindGroup).not.toHaveBeenCalled();
+      expect(createMeshPipeline).not.toHaveBeenCalled();
+      expect(captured.counts.every(count => count === 301)).toBe(true);
+
+      void motion.set(20);
+      await step();
+      await unmount(instance); runtime.dispose(); renderer.dispose(); disposed = true;
+      const beforeDispose = submissions.length;
+      changed.mockClear(); buffer.write.mockClear();
+      expect([...pending.values()].every(callback => producers.has(callback))).toBe(true);
+      await stop();
+      flushSync(() => { objects.set(300, { position: [50, 0, 0] }); selection.clear(); });
+      await settleComponentUpdates();
+      for (let i = 0; i < 4; i++) await step();
+      expect(submissions).toHaveLength(beforeDispose);
+      expect(changed).not.toHaveBeenCalled();
+      expect(buffer.write).not.toHaveBeenCalled();
+      expect(cleanup).toHaveBeenCalledTimes(301);
+      expect(pending.size).toBe(0);
+      expect(gpu.destroy).toHaveBeenCalledOnce();
+    } finally {
+      await stop();
+      if (!disposed) { await unmount(instance); runtime.dispose(); renderer.dispose(); }
+    }
+  });
+
   it.each(['demand', 'manual'] as const)('shares native bindings and mesh events in the generated store editor (%s)', async frameloop => {
     const clock = optionClock(120);
     const native = mount(NativeRangeInput, { target: document.body });

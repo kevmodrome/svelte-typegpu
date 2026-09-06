@@ -8,6 +8,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | Reactive state, component props, `{#if}`, keyed `{#each}` | Supported and tested |
 | Deep `$state` value props | Small vectors, colors, matrices, bounds, uniforms and material descriptors update through named props and spreads; bulk resource inputs remain reference-based |
 | Store auto-subscriptions (`$store`) | Same-object vector updates, named props/spreads, writable event assignments, store replacement, shared derived producers and unsubscribe cleanup tested; real Tween/Spring-to-store cadence verified |
+| `SvelteMap` / `SvelteSet` | Keyed objects and per-key selection, collection replacement, no-op edits, explicit deep-state values and cleanup tested; real Tween/Spring-to-map cadence verified |
 | DOM `Canvas` host | Reactive scene/canvas props, native DOM events/attachments, inherited context, SSR shell, and async startup/unmount cleanup tested |
 | Dedicated `<canvas>` viewport | Experimental compiler path: native attributes/events/attachments, `bind:this`, read-only size bindings, scoped CSS, SSR/hydration, scene switching and frame cadence tested; other canvas directives are explicitly rejected |
 | `<svelte:window>`, `<svelte:document>`, `<svelte:body>` | Not supported in `.typegpu.svelte`; the pinned compiler rejects them under a custom renderer. Keep them in an ordinary DOM parent component |
@@ -135,6 +136,46 @@ contains the native editor and its dedicated GPU viewport as two ordinary consum
 files. Its sliders, selection checkbox, mesh click and canvas Escape handler all
 use the same per-instance stores. The generated example is tested in demand and
 manual modes, including exact upload ranges, resource reuse and canvas identity.
+
+## Reactive collections
+
+Use `SvelteMap` for a keyed object collection and `SvelteSet` for selection. Read
+each value inside its keyed scope so an existing-key edit can remain local:
+
+```svelte
+<script>
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+  const objects = new SvelteMap([[1, { position: [0, 1, 0] }]]);
+  const selected = new SvelteSet();
+</script>
+
+<scene>
+  {#each objects.keys() as id (id)}
+    {@const object = objects.get(id)}
+    <mesh position={object.position}
+      onclick={() => selected.has(id) ? selected.delete(id) : selected.add(id)}>
+      <boxGeometry />
+      <standardMaterial color={selected.has(id) ? [1, 0.8, 0.2] : [0.2, 0.7, 0.5]} />
+    </mesh>
+  {/each}
+</scene>
+```
+
+Map values are not automatically deeply reactive. Replace a plain record with
+`objects.set(id, nextObject)`, or create the record with `$state` before adding it
+to the map. Collection keys are ordinary application data, not renderer IDs.
+Scope mutable collections to the app/component instance, not global server state.
+Removing an object does not automatically remove its key from a separate selection
+set; consumer commands own that policy.
+
+Existing-key edits preserve mesh/attachment identity and instance storage, including
+through child components. Same-value `set`, duplicate selection and absent-key
+deletion do not dirty the scene. Structural add/delete/clear updates use normal
+keyed Svelte reconciliation. Replacing the collection releases old subscriptions.
+Real Tween/Spring updates through map entries are tested at 60/120/144 Hz in both
+callback orders, with exact instance upload ranges, resource reuse, demand settling,
+manual scheduling and disposal checks. No collection-specific renderer API or
+animation loop is needed.
 
 ## Dynamic primitives
 
