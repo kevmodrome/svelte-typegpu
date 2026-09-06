@@ -2,13 +2,17 @@ import { Dirty, mergeDirty } from './dirty';
 import {
   captureOption,
   type TypeGpuEventListenerOptions,
-  type TypeGpuNodeEventHandler
+  type TypeGpuNodeEventHandler,
+  type TypeGpuNodeEventListener,
+  type TypeGpuNodeEventRegistration,
+  type TypeGpuNodeEventRegistry
 } from './node-events';
 export {
   dispatchNodeEvent,
   type TypeGpuEventListenerOptions,
   type TypeGpuNodeEvent,
   type TypeGpuNodeEventHandler,
+  type TypeGpuNodeEventListener,
   type TypeGpuNodeEventInit
 } from './node-events';
 import {
@@ -36,8 +40,8 @@ export interface TypeGpuNode {
   nextSibling: TypeGpuNode | null;
   children: TypeGpuNode[];
   attributes: Record<string, unknown>;
-  listeners: Map<string, Set<TypeGpuNodeEventHandler>>;
-  captureListeners?: Map<string, Set<TypeGpuNodeEventHandler>>;
+  listeners: TypeGpuNodeEventRegistry;
+  captureListeners?: TypeGpuNodeEventRegistry;
   runtime?: TypeGpuRuntime;
   value?: string;
 }
@@ -184,38 +188,68 @@ export function getNextSibling(node: TypeGpuNode): TypeGpuNode | null {
 }
 
 export function addEventListener(
+  node: TypeGpuNode, type: string, handler: TypeGpuNodeEventHandler, options?: TypeGpuEventListenerOptions
+): void;
+export function addEventListener(
+  node: TypeGpuNode, type: string, handler: TypeGpuNodeEventListener | null, options?: TypeGpuEventListenerOptions
+): void;
+export function addEventListener(
   node: TypeGpuNode,
   type: string,
-  handler: TypeGpuNodeEventHandler,
+  handler: TypeGpuNodeEventListener | null,
   options?: TypeGpuEventListenerOptions
 ): void {
-  const registry = captureOption(options)
+  const capture = captureOption(options);
+  const { once = false, passive = false, signal } = typeof options === 'object' ? options : {};
+  if (!handler || signal?.aborted) return;
+  const registry = capture
     ? (node.captureListeners ??= new Map())
     : node.listeners;
-  const listeners = registry.get(type) ?? new Set();
+  const listeners = registry.get(type) ?? new Map();
   if (listeners.has(handler)) return;
 
-  listeners.add(handler);
+  const registration: TypeGpuNodeEventRegistration = {
+    listener: handler, once, passive, removed: false,
+    remove: () => removeEventListener(node, type, handler, capture)
+  };
+  listeners.set(handler, registration);
   registry.set(type, listeners);
+  if (signal) {
+    // A synthetic 'abort' event does not abort its signal or consume this subscription.
+    const abort = () => { if (signal.aborted) registration.remove(); };
+    registration.detachSignal = () => signal.removeEventListener('abort', abort);
+    try {
+      signal.addEventListener('abort', abort);
+    } catch (error) {
+      registration.remove();
+      throw error;
+    }
+  }
+  if (registration.removed) return;
   invalidateFrom(node, dirtyForEventListener(node.name, type));
 }
 
 export function removeEventListener(
   node: TypeGpuNode,
   type: string,
-  handler: TypeGpuNodeEventHandler,
+  handler: TypeGpuNodeEventListener | null,
   options?: TypeGpuEventListenerOptions
 ): void {
+  if (!handler) return;
   const capture = captureOption(options);
   const registry = capture ? node.captureListeners : node.listeners;
   const listeners = registry?.get(type);
-  if (!listeners?.has(handler)) return;
+  const registration = listeners?.get(handler);
+  if (!registration) return;
 
-  listeners.delete(handler);
-  if (listeners.size === 0) {
+  registration.removed = true;
+  listeners!.delete(handler);
+  if (listeners!.size === 0) {
     registry!.delete(type);
     if (capture && registry!.size === 0) delete node.captureListeners;
   }
+  registration.detachSignal?.();
+  registration.detachSignal = undefined;
   invalidateFrom(node, dirtyForEventListener(node.name, type));
 }
 
@@ -251,10 +285,10 @@ class HostNode implements TypeGpuNode {
   previousSibling: TypeGpuNode | null = null;
   nextSibling: TypeGpuNode | null = null;
   attributes: Record<string, unknown> = {};
-  listeners = new Map<string, Set<TypeGpuNodeEventHandler>>();
+  listeners: TypeGpuNodeEventRegistry = new Map();
   declare name?: string;
   declare originalName?: string;
-  declare captureListeners?: Map<string, Set<TypeGpuNodeEventHandler>>;
+  declare captureListeners?: TypeGpuNodeEventRegistry;
   declare runtime?: TypeGpuRuntime;
   declare value?: string;
 

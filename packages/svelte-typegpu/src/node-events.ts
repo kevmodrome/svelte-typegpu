@@ -21,8 +21,20 @@ export const POINTER_NODE_EVENTS = new Set([
   'pointerleave'
 ]);
 
-export type TypeGpuEventListenerOptions = boolean | { capture?: boolean };
+export type TypeGpuEventListenerOptions = boolean | AddEventListenerOptions;
 export type TypeGpuNodeEventHandler = (this: TypeGpuNode, event: TypeGpuNodeEvent) => void;
+export type TypeGpuNodeEventListener = TypeGpuNodeEventHandler | { handleEvent(event: TypeGpuNodeEvent): void };
+
+/** Renderer-owned registration; snapshots must distinguish remove/re-add of one callback. */
+export interface TypeGpuNodeEventRegistration {
+  listener: TypeGpuNodeEventListener;
+  once: boolean;
+  passive: boolean;
+  removed: boolean;
+  remove(): void;
+  detachSignal?: () => void;
+}
+export type TypeGpuNodeEventRegistry = Map<string, Map<TypeGpuNodeEventListener, TypeGpuNodeEventRegistration>>;
 
 export function captureOption(options: TypeGpuEventListenerOptions = false): boolean {
   return typeof options === 'boolean' ? options : options.capture === true;
@@ -65,6 +77,7 @@ class NodeEvent implements TypeGpuNodeEvent {
   propagationStopped = false;
   immediatePropagationStopped = false;
   #defaultPrevented = false;
+  #passive = false;
 
   constructor(node: TypeGpuNode, type: string, init: TypeGpuNodeEventInit) {
     // Preserve extra payload fields used by low-level custom event dispatchers.
@@ -88,7 +101,7 @@ class NodeEvent implements TypeGpuNodeEvent {
     this.immediatePropagationStopped = true;
   }
   preventDefault(): void {
-    if (!this.cancelable) return;
+    if (!this.cancelable || this.#passive) return;
     this.#defaultPrevented = true;
     this.originalEvent?.preventDefault();
   }
@@ -98,9 +111,17 @@ class NodeEvent implements TypeGpuNodeEvent {
     if (!listeners?.size) return;
     this.currentTarget = current;
     this.eventPhase = current === this.target ? 2 : capture ? 1 : 3;
-    for (const handler of [...listeners]) {
-      if (!listeners.has(handler)) continue;
-      handler.call(current, this);
+    for (const registration of [...listeners.values()]) {
+      if (registration.removed) continue;
+      if (registration.once) registration.remove();
+      this.#passive = registration.passive;
+      try {
+        const handler = registration.listener;
+        if (typeof handler === 'function') handler.call(current, this);
+        else handler.handleEvent(this);
+      } finally {
+        this.#passive = false;
+      }
       if (this.immediatePropagationStopped) break;
     }
   }

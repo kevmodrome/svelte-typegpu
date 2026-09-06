@@ -3,7 +3,7 @@ import {
   removeEventListener,
   type TypeGpuNode,
   type TypeGpuNodeEvent,
-  type TypeGpuNodeEventHandler
+  type TypeGpuNodeEventListener
 } from './core';
 import { captureOption, type TypeGpuEventListenerOptions } from './node-events';
 
@@ -14,12 +14,15 @@ export type TypeGpuAttachment = (node: TypeGpuNode) => void | (() => void);
 export function onNodeEvent(
   node: TypeGpuNode,
   type: string,
-  handler: TypeGpuNodeEventHandler,
+  handler: TypeGpuNodeEventListener,
   options?: TypeGpuEventListenerOptions
 ): () => void {
   // Each subscription owns its registration, even when callbacks are shared.
-  const listener = (event: TypeGpuNodeEvent) => handler.call(node, event);
+  const listener = (event: TypeGpuNodeEvent) => {
+    if (typeof handler === 'function') handler.call(node, event);
+    else handler.handleEvent(event);
+  };
   const capture = captureOption(options);
-  addEventListener(node, type, listener, capture);
+  addEventListener(node, type, listener, options);
   return () => removeEventListener(node, type, listener, capture);
 }

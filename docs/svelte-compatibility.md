@@ -26,6 +26,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | `svelte/reactivity/window` | Native resize/scroll/online signals, shared consumers, server fallbacks and teardown tested; screen-position polling and module-owned DPR tracking retain upstream lifetimes |
 | `Tween.of` / `Spring.of` | Reactive window targets tested at 60/120/144 Hz in both RAF orders; consumer-owned cancellation and no-op target policy remain important |
 | `{@attach}` | Supported on scene nodes, including reactive replacement and component prop spreads |
+| Attachment event subscriptions | `onNodeEvent` supports capture, once, passive, AbortSignal and handler objects; one-time/abort cleanup and real motion cadence tested |
 | Scene node references in `$state` | Identity preserved for attachment/event targets, including nested state objects and arrays; node internals remain renderer-owned |
 | `use:` | Rejected by the shared TypeGPU compiler with a source diagnostic; use attachments |
 | `class:` and `style:` | Rejected in TypeGPU host markup; use material/transform props for scenes, and ordinary class/style attributes on the native canvas |
@@ -529,6 +530,11 @@ routes click, pointer down/up/move/enter/leave, and drag start/move/end events f
 canvas picking. These are `TypeGpuNodeEvent` values, not DOM events; the original
 browser event is available as `originalEvent`. The helper uses the same scene
 propagation rules as event attributes; it does not add a separate event system.
+Options include `capture`, `once`, `passive`, and `signal`. A one-time callback is
+removed before it runs, and an AbortController can own several subscriptions at
+once. Explicit cleanup and once consumption release their abort listeners too.
+See [subscription options](scene-events-guide.md#subscription-options) for the
+passive/native-event boundary and a shared-signal attachment example.
 
 Svelte runs attachment cleanup on reactive replacement or unmount. Keyed moves
 preserve the attachment; `visible={false}` does not unmount it. Return cleanup for

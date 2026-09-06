@@ -95,7 +95,44 @@ non-bubbling events such as `pointerenter`; unlike a normal group enter handler,
 the same as [Svelte's capture event attributes](https://svelte.dev/docs/svelte/v5-migration-guide#Event-changes-Event-modifiers).
 For an attachment subscription, pass `{ capture: true }` as the fourth argument
 to `onNodeEvent`. Its unsubscribe function retains the original capture flag.
-Only `capture` is supported in listener options, not DOM once/passive/signal options.
+
+## Subscription options
+
+Ordinary `onclick={handler}` remains the default for scene interactions. For a
+reusable attachment with subscription ownership, `onNodeEvent` also supports
+`once`, `passive`, and `signal`:
+
+```ts
+const inspect: TypeGpuAttachment = node => {
+  const controller = new AbortController();
+  onNodeEvent(node, 'pointermove', observe, {
+    passive: true, signal: controller.signal
+  });
+  onNodeEvent(node, 'click', select, {
+    once: true, signal: controller.signal
+  });
+  return () => controller.abort();
+};
+```
+
+Import `onNodeEvent` and `TypeGpuAttachment` from `svelte-typegpu`; `observe` and
+`select` are application callbacks. Once listeners are removed before calling the
+handler, including nested dispatch. Aborting releases every subscription using
+that signal; an already-aborted signal registers nothing. Explicit unsubscribe
+and one-time consumption also detach their abort subscriptions.
+
+Options are read at registration; changing their object afterward does not update
+the listener. The unsubscribe function preserves capture and remains idempotent.
+Separate `onNodeEvent` calls retain independent ownership even with one shared
+callback. The renderer hook also accepts objects with a `handleEvent(event)` method;
+`TypeGpuNodeEventListener` types either form.
+
+Scene subscriptions default to non-passive. During a passive callback,
+`event.preventDefault()` is a no-op; non-passive siblings can still cancel the input.
+This is a scene-event contract, not a promise about browser scroll optimizations:
+scene handlers share native canvas subscriptions, and `originalEvent` is still
+the directly accessible browser event. No `onclick|once` modifier syntax or legacy
+action support is introduced.
 
 ## Interrupted presses
 
@@ -237,4 +274,6 @@ runs at synthetic 60/120/144 Hz with both callback orders, asserting targeted
 uploads, shared interaction data, GPU resource reuse, and demand-mode idle.
 The same clocks exercise double-click/context-menu/wheel/over/out/cancel-driven state changes in
 demand and manual modes. A retained wheel subscription adds no per-frame scan or
-listener churn. Event dispatch without reactive changes does not request a frame.
+listener churn. Event dispatch without reactive or listener-membership changes does
+not request a frame. Consuming a once listener or aborting a subscription updates
+interaction eligibility through the existing coalesced scene synchronization path.

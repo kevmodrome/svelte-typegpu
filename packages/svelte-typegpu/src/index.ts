@@ -6,7 +6,8 @@ export type {
   TypeGpuEventListenerOptions,
   TypeGpuNode,
   TypeGpuNodeEvent,
-  TypeGpuNodeEventHandler
+  TypeGpuNodeEventHandler,
+  TypeGpuNodeEventListener
 } from './core';
 export type { TypeGpuFrameContext, TypeGpuFrameCallback } from './frame-tasks';
 export {

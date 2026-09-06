@@ -27,7 +27,7 @@ import {
   setAttribute,
   setText,
   walk,
-  type TypeGpuNodeEventHandler,
+  type TypeGpuNodeEventListener,
   type TypeGpuNode,
   type TypeGpuRuntime
 } from './core';
@@ -122,26 +122,26 @@ const renderer = createRenderer({
   addEventListener(
     target: TypeGpuNode | EventTarget,
     type: string,
-    handler: TypeGpuNodeEventHandler | EventListenerOrEventListenerObject,
+    handler: TypeGpuNodeEventListener | EventListenerOrEventListenerObject,
     options?: boolean | AddEventListenerOptions
   ) {
     // Svelte routes native subscriptions (including MediaQuery) through the active renderer.
     if ('addEventListener' in target) {
       target.addEventListener(type, handler as EventListenerOrEventListenerObject, options);
     } else {
-      addEventListener(target, type, handler as TypeGpuNodeEventHandler, options);
+      addEventListener(target, type, handler as TypeGpuNodeEventListener, options);
     }
   },
   removeEventListener(
     target: TypeGpuNode | EventTarget,
     type: string,
-    handler: TypeGpuNodeEventHandler | EventListenerOrEventListenerObject,
+    handler: TypeGpuNodeEventListener | EventListenerOrEventListenerObject,
     options?: boolean | EventListenerOptions
   ) {
     if ('removeEventListener' in target) {
       target.removeEventListener(type, handler as EventListenerOrEventListenerObject, options);
     } else {
-      removeEventListener(target, type, handler as TypeGpuNodeEventHandler, options);
+      removeEventListener(target, type, handler as TypeGpuNodeEventListener, options);
     }
   }
 });
