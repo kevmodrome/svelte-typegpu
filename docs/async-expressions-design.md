@@ -104,3 +104,60 @@ errors in the renderer. App compiler flags and the dependency are unchanged.
 Decision pending: carry an explicit tested pnpm patch, or wait for an upstream
 fix. Until resolved, async expressions stay gated. Ordinary `{#await}` support
 and its resource/cadence coverage are unchanged.
+
+## Isolated teardown candidate
+
+Before deciding whether to carry a dependency patch, test a copy of the pinned
+package. This is a high-risk runtime investigation, not a rollout. The installed
+dependency, lockfile, application compiler flags, and normal compatibility canary
+remain unchanged.
+
+```text
++ repros/vitest.svelte-probe.config.ts: opt-in aliases to one isolated Svelte copy
++ repros/probe-async-boundary.mjs: temporary-copy runner and cleanup
++ repros/tsconfig.json: separate type-check for opt-in probe sources
++ repros/probes/async-boundary-lifecycle.test.ts: DOM/scene lifecycle parity
++ repros/probes/async-boundary-destroyed.patch: candidate source change only
++ repros/probes/.gitattributes: preserve literal unified-diff context whitespace
+~ repros/README.md: repeatable baseline/candidate commands and measured results
+```
+
+All Svelte runtime and compiler entrypoints must resolve to the copy; mixing
+installed and copied runtime state would invalidate the experiment. The test
+adapter mounts the same boundary structures with native DOM and TypeGPU hosts.
+It owns test roots, deferred promises, attachment spies, and explicit unmounting;
+Svelte still owns counters, effects, and scheduling.
+
+Candidate control flow:
+
+```text
+pending count reaches zero -> existing boundary resolution and count propagation
+                         -> insert fragment only if owning effect is not destroyed
+                         -> release fragment reference in either case
+```
+
+The alternative of returning immediately on destruction is not equivalent: pending
+counts must still drain, including those propagated to live ancestor boundaries.
+No scene-node DOM emulation, extra RAF, swallowed rejection, or renderer-specific
+boundary implementation is introduced.
+
+Investigation slices: (1) confirm original resolve/reject reproducers against the
+copy with and without the guard; (2) test nested counters, partial completion,
+keyed replacement, and independent live siblings with DOM parity; (3) record the
+candidate and limitations. The opt-in suite must report unhandled errors normally.
+Full async GPU/motion cadence and live checks remain mandatory before enabling
+async authoring; lifecycle-only evidence cannot satisfy those gates. Rollback of
+the experiment is simply removing the temporary copy; no application state or
+dependency installation changes. Carrying a production patch remains a user
+decision.
+
+Broader probe result: the insertion guard alone does not establish safe async
+composition. In both native DOM and TypeGPU, an attachment inside a nested boundary
+without its own pending snippet runs before its ancestor pending snippet clears.
+The nearest boundary has `is_pending === false`, so
+`reactivity/batch.js:Batch.schedule` does not defer the attachment effect to the
+pending ancestor. The probe asserts that it must not run, and remains deliberately
+red for this case rather than declaring the behavior supported. The parent's
+pending count does drain after removal and settlement; keyed replacement and
+partial-unmount tests pass with the guard. Any scheduler fix needs its own design
+and high-refresh verification, not an expansion of this fragment-insertion patch.

@@ -1,0 +1,2 @@
+# Patch context prefixes are not source indentation or trailing whitespace.
+*.patch -whitespace
