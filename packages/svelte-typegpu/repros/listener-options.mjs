@@ -44,7 +44,7 @@ const source = `<script>
 <canvas frameloop="demand" maxDevicePixelRatio={1} {onready}
   style="display:block;width:var(--canvas-width);height:400px">
   <scene clearColor={[0.045, 0.05, 0.055, 1]}>
-    <perspectiveCamera active position={[0, 0, 7]} target={[0, 0, 0]}>
+    <perspectiveCamera active position={[0, 0, 7]} target={[0, 0, 0]} fov={45 + x.current * 10}>
       {#if controls}
         <controls oncamerachange={event => cameraState = event.detail.camera}><pointerControls wheel="zoom" /></controls>
       {/if}
@@ -71,7 +71,10 @@ const server = await createServer({
     load(id) {
       if (id === viewport) return source;
       if (id === entry) return `import { mount, unmount, flushSync } from 'svelte';
+        import { SceneTransformCache } from ${JSON.stringify(resolve(workspace, 'packages/svelte-typegpu/src/scene-transform-cache.ts'))};
         import Viewport from './__ListenerProbe.typegpu.svelte';
+        const reset = SceneTransformCache.prototype.reset;
+        SceneTransformCache.prototype.reset = function (...args) { window.metrics.sceneResets++; return reset.apply(this, args); };
         const instance = mount(Viewport, { target: document.body, props: { onready: () => window.ready = true } });
         window.commands = { ...instance, dispose: () => unmount(instance),
           rearm: () => flushSync(() => instance.rearm()) };`;
@@ -99,7 +102,7 @@ try {
       page.on('pageerror', error => errors.push(error.message));
       page.on('console', message => { if (message.type() === 'error') errors.push(message.text()); });
       await page.addInitScript(() => {
-        window.metrics = { buffers: 0, groups: 0, pipelines: 0, submissions: 0, writes: 0 }; window.pending = new Set();
+        window.metrics = { buffers: 0, groups: 0, pipelines: 0, submissions: 0, writes: 0, sceneResets: 0 }; window.pending = new Set();
         const raf = window.requestAnimationFrame.bind(window), cancel = window.cancelAnimationFrame.bind(window);
         window.requestAnimationFrame = callback => {
           const id = raf(time => { window.pending.delete(id); callback(time); }); window.pending.add(id); return id;
@@ -131,9 +134,12 @@ try {
       const click = () => canvas.click({ position: { x: bounds.width / 2, y: bounds.height / 2 } });
       const metrics = () => page.evaluate(() => window.metrics);
       const resources = await metrics();
+      assert(resources.sceneResets > 0, 'The scene-reset counter must observe actual renderer initialization');
       const before = PNG.sync.read(await canvas.screenshot());
       await click(); await idle(); await click(); await idle();
       assert.equal((await page.evaluate(() => window.commands.read())).picked, 1);
+      const animationSceneResets = (await metrics()).sceneResets - resources.sceneResets;
+      assert.equal(animationSceneResets, 0, 'Camera and mesh motion must remain incremental');
       const after = PNG.sync.read(await canvas.screenshot({ path: resolve(output, `${width}-selected.png`) }));
       let pixels = 0;
       for (let i = 0; i < before.data.length; i += 4) if (Math.abs(before.data[i] - after.data[i]) > 20) pixels++;
@@ -194,7 +200,7 @@ try {
       const final = await metrics(); await page.waitForTimeout(200);
       assert.equal((await metrics()).submissions, final.submissions);
       assert.equal(final.gpuError, undefined); assert.deepEqual(errors, []);
-      console.log(JSON.stringify({ width, pixels, resources, final, onceFrames, abortFrames, rearmFrames, cameraCleanupFrames, cameraResetPixels, output }));
+      console.log(JSON.stringify({ width, pixels, resources, final, onceFrames, abortFrames, rearmFrames, cameraCleanupFrames, cameraResetPixels, animationSceneResets, output }));
     } finally { await context.close(); }
   }
 } finally { await browser?.close(); await server.close(); await rm(temporary, { recursive: true, force: true }); }

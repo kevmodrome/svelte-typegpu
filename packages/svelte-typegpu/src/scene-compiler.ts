@@ -1,7 +1,6 @@
 import { numberArg } from './attributes';
 import { POINTER_NODE_EVENTS } from './node-events';
 import { transformBounds } from './bounds';
-import { readCameraState } from './camera';
 import { SceneCameraCache } from './scene-camera-cache';
 import type { TypeGpuNode } from './core';
 import { Dirty, hasDirty } from './dirty';
@@ -140,7 +139,7 @@ export function createSceneState(
       : null;
   if (incremental) return (cache.lastState = incremental);
   const sceneSettings = readRenderSettings(root, cache.renderDefaults);
-  const camera = readCameraState(root, sceneSettings.activeCamera);
+  const camera = cache.cameras.read(root, sceneSettings.activeCamera);
   const recomputeLights = options.reuseLights === true ? false : hasDirty(dirty, Dirty.Lights);
   const recomputeShaderPasses = shouldRecomputeShaderPasses(dirty);
   const recomputeDrawBatches =
@@ -220,7 +219,7 @@ function updateSceneValuesAndTransforms(
   dirty: Dirty,
   nodes?: ReadonlyMap<TypeGpuNode, Dirty>
 ): TypeGpuSceneState | null {
-  const allowed = Dirty.Transform | Dirty.Lights | Dirty.MaterialUniform;
+  const allowed = Dirty.Transform | Dirty.Lights | Dirty.MaterialUniform | Dirty.Camera | Dirty.Interaction;
   if (
     !cache.lastState ||
     !nodes?.size ||
@@ -233,7 +232,7 @@ function updateSceneValuesAndTransforms(
   for (const [node, mask] of nodes) {
     if ((mask & ~allowed) !== 0) return null;
     if (hasDirty(mask, Dirty.MaterialUniform)) valueNodes.push(node);
-    const transformMask = mask & ~Dirty.MaterialUniform;
+    const transformMask = mask & (Dirty.Transform | Dirty.Lights);
     if (transformMask) transformNodes.set(node, transformMask);
   }
   if (
@@ -243,13 +242,20 @@ function updateSceneValuesAndTransforms(
     return null;
   const prepared = cache.values.prepare(valueNodes);
   if (!prepared) return null;
+  const camera = hasDirty(dirty, Dirty.Camera)
+    ? cache.cameras.read(root, readRenderSettings(root, cache.renderDefaults).activeCamera)
+    : null;
   const changed = cache.transforms.update(transformNodes, cache.revisions);
   const values = cache.values.apply(prepared, cache.revisions);
   cache.drawBatchCache.updateMaterials(values.materialItems);
   const { batches, updates } = cache.drawBatchCache.updateInstances([
     ...new Set([...changed.items, ...values.instances])
   ]);
-  return {
+  if (hasDirty(dirty, Dirty.Interaction)) {
+    cache.cleanInteraction = createInteractionIndex(createInteractionTargets(cache.resourceItems));
+    cache.transforms.attachInteraction(cache.cleanInteraction.targets);
+  }
+  const next = {
     ...cache.lastState,
     dirty,
     drawBatches: batches,
@@ -258,8 +264,16 @@ function updateSceneValuesAndTransforms(
     materialUpdates: values.materials,
     lightsChanged: false,
     shaderPassesChanged: false,
-    interactionChanged: changed.interactionChanged
+    interaction: cache.cleanInteraction,
+    interactionChanged: hasDirty(dirty, Dirty.Interaction) || changed.interactionChanged
   };
+  if (camera) {
+    next.camera = cache.cameras.resolve(root, camera, cache.lastState);
+    next.cameraNode = camera.node;
+    next.cameraControllerNode = camera.controllerNode;
+    next.cameraController = camera.controller;
+  }
+  return next;
 }
 
 function collectMeshDrawItems(root: TypeGpuNode, cache: TypeGpuSceneCache): TypeGpuMeshDrawItem[] {

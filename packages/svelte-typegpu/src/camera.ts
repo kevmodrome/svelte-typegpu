@@ -1,5 +1,5 @@
 import { clampedNumberArg, numberArg, vectorTuple } from './attributes';
-import { findFirst, type TypeGpuNode } from './core';
+import type { TypeGpuNode } from './core';
 import { readKeyboardControls, readLegacyPerspectiveCameraControllerState } from './legacy-camera';
 import {
   add3,
@@ -37,8 +37,28 @@ const DEFAULT_MIN_DISTANCE = 1;
 const DEFAULT_MAX_DISTANCE = 100;
 
 export function readCameraState(root: TypeGpuNode, activeCameraId?: string | null): TypeGpuCameraState {
-  const camera = findActiveCamera(root, activeCameraId);
-  const orbitControllerNode = findFirst(root, (node) => node.name === 'orbitControls');
+  return readCameraStateFromCandidates(collectCameraCandidates(root), activeCameraId);
+}
+
+export interface TypeGpuCameraCandidates {
+  cameras: TypeGpuNode[];
+  orbitControllerNode: TypeGpuNode | null;
+}
+
+export function collectCameraCandidates(root: TypeGpuNode): TypeGpuCameraCandidates {
+  const candidates: TypeGpuCameraCandidates = { cameras: [], orbitControllerNode: null };
+  walk(root, node => {
+    if (node.name === 'perspectiveCamera' || node.name === 'orthographicCamera') candidates.cameras.push(node);
+    if (node.name === 'orbitControls') candidates.orbitControllerNode ??= node;
+  });
+  return candidates;
+}
+
+export function readCameraStateFromCandidates(
+  candidates: TypeGpuCameraCandidates, activeCameraId?: string | null
+): TypeGpuCameraState {
+  const camera = findActiveCamera(candidates.cameras, activeCameraId);
+  const orbitControllerNode = candidates.orbitControllerNode;
   const legacyState =
     camera?.name === 'perspectiveCamera'
       ? readLegacyPerspectiveCameraControllerState(camera)
@@ -150,14 +170,12 @@ export function normalizeCameraSettings(
   };
 }
 
-function findActiveCamera(root: TypeGpuNode, activeCameraId?: string | null): TypeGpuNode | null {
+function findActiveCamera(cameras: readonly TypeGpuNode[], activeCameraId?: string | null): TypeGpuNode | null {
   let firstCamera: TypeGpuNode | null = null;
   let activeCamera: TypeGpuNode | null = null;
   let namedCamera: TypeGpuNode | null = null;
 
-  walk(root, (node) => {
-    if (node.name !== 'perspectiveCamera' && node.name !== 'orthographicCamera') return;
-
+  for (const node of cameras) {
     firstCamera ??= node;
     if (activeCameraId && node.attributes.id === activeCameraId) {
       namedCamera ??= node;
@@ -165,7 +183,7 @@ function findActiveCamera(root: TypeGpuNode, activeCameraId?: string | null): Ty
     if (node.attributes.active === true) {
       activeCamera ??= node;
     }
-  });
+  }
 
   return namedCamera ?? activeCamera ?? firstCamera;
 }

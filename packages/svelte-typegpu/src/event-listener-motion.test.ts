@@ -12,6 +12,7 @@ import { createMeshPipeline } from './typegpu-pipeline';
 import { createFakeGpuRoot } from './gpu-test-utils';
 import { compileViewportSource } from './viewport-test-utils';
 import { settleComponentUpdates } from './component-test-utils';
+import * as transforms from './transform';
 
 const captured = vi.hoisted(() => ({ bindings: [] as unknown[][], counts: [] as number[] }));
 vi.mock('typegpu', async importOriginal => {
@@ -36,8 +37,9 @@ describe('attachment listener lifecycle during real Svelte motion', () => {
     { hz, kind, frameloop: 'demand' as const, rendererFirst: false },
     { hz, kind, frameloop: 'demand' as const, rendererFirst: true },
     { hz, kind, frameloop: 'manual' as const, rendererFirst: false }
-  ])))('delivers $kind at $hz Hz ($frameloop, renderer first: $rendererFirst)',
-    async ({ hz, kind, frameloop, rendererFirst }) => {
+  ])).flatMap(test => [false, true].map(lens => ({ ...test, lens }))))(
+    'delivers $kind at $hz Hz ($frameloop, renderer first: $rendererFirst, lens: $lens)',
+    async ({ hz, kind, frameloop, rendererFirst, lens }) => {
     let now = 0, id = 0;
     const pending = new Map<number, FrameRequestCallback>(), producers = new WeakSet<FrameRequestCallback>();
     const request = vi.fn((callback: FrameRequestCallback) => { pending.set(++id, callback); return id; });
@@ -75,7 +77,7 @@ describe('attachment listener lifecycle during real Svelte motion', () => {
       export function read() { return { moves, presses }; }
       onDestroy(() => { void motion.set(motion.current, ${kind === 'Tween' ? '{ duration: 0 }' : '{ instant: true }'}); });
     </script><scene>
-      <perspectiveCamera position={[0, 0, 10]} target={[0, 0, 0]}>
+      <perspectiveCamera position={[0, 0, 10]} target={[0, 0, 0]} ${lens ? 'fov={45 + motion.current}' : ''}>
         <controls><pointerControls wheel="zoom" /></controls>
       </perspectiveCamera>
       {#each Array.from({ length: 100 }, (_, i) => i) as id (id)}
@@ -116,11 +118,12 @@ describe('attachment listener lifecycle during real Svelte motion', () => {
       let registration = [...node.listeners.get('pointermove')!.values()][0];
       gpu.createBuffer.mockClear(); gpu.createBindGroup.mockClear(); vi.mocked(createMeshPipeline).mockClear();
       request.mockClear();
+      const transformReads = vi.spyOn(transforms, 'readLocalTransform');
       if (frameloop === 'demand' && rendererFirst) { gpuRenderer.invalidate(); gpuRenderer.invalidate(); }
       instance.go(10); await settleComponentUpdates();
       if (frameloop === 'demand' && !rendererFirst) { gpuRenderer.invalidate(); gpuRenderer.invalidate(); }
       for (let frame = 0; frame < hz; frame++) {
-        buffer.write.mockClear(); changed.mockClear();
+        buffer.write.mockClear(); changed.mockClear(); transformReads.mockClear();
         if (frame === 4) instance.abort();
         if (frame === 6) flushSync(() => instance.renew());
         if ([2, 3, 5, 7].includes(frame)) flushSync(() => dispatchNodeEvent(node, 'click'));
@@ -135,11 +138,15 @@ describe('attachment listener lifecycle during real Svelte motion', () => {
         expect(order).toEqual(frameloop === 'manual' ? ['motion'] :
           rendererFirst ? ['render', 'motion'] : ['motion', 'render']);
         expect(buffer.write).toHaveBeenCalledTimes(frame === 2 ? 2 : 1);
+        expect(transformReads.mock.calls.length).toBe(1);
         for (const [, range] of buffer.write.mock.calls) expect(range).toEqual({ startOffset: 100 * 96, endOffset: 101 * 96 });
         for (const [state] of changed.mock.calls) {
           expect(state.drawBatches[0].instances).toBe(storage);
-          expect(state.camera).toBe(view);
+          if (!lens) expect(state.camera).toBe(view);
+          expect(state.camera.position === view.position).toBe(true);
+          expect(state.camera.target === view.target).toBe(true);
         }
+        if (lens) expect(changed.mock.lastCall![0].camera.fov).toBeCloseTo(45 + instance.current());
         expect(buffer.data[100 * 24]).toBeCloseTo(instance.current());
         if (frame === 6) registration = [...node.listeners.get('pointermove')!.values()][0];
         if (frame === 4 || frame === 5) expect(node.listeners.size).toBe(0);
