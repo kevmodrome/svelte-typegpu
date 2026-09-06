@@ -28,19 +28,20 @@ function compileSource<Exports extends Record<string, unknown>>(
     filename: 'Viewport.typegpu.svelte', generate: 'client', runes: true, dev, experimental: { async }
   });
   const name = compiled.js.code.match(/export default function (\w+)/)![1];
-  const code = compiled.js.code.replace(/^import .*;\n/gm, '')
-    .replace(`export default function ${name}`, `function ${name}`);
+  let code = compiled.js.code;
   const imports = { ...dependencies };
   const modules: Record<string, unknown> = {
     'svelte-typegpu/internal/viewport-canvas': ViewportCanvas,
     'svelte-typegpu/internal/canvas-bindings': canvasBindings,
     'svelte-typegpu/internal/attribute-values': attributeValues
   };
-  for (const statement of parse(compiled.js.code, { ecmaVersion: 'latest', sourceType: 'module' }).body) {
+  for (const statement of parse(compiled.js.code, { ecmaVersion: 'latest', sourceType: 'module' }).body.reverse()) {
     if (statement.type !== 'ImportDeclaration') continue;
+    code = code.slice(0, statement.start) + code.slice(statement.end);
     const value = modules[String(statement.source.value)];
     if (value) for (const specifier of statement.specifiers) imports[specifier.local.name] = value;
   }
+  code = code.replace(`export default function ${name}`, `function ${name}`);
   return new Function('$', '$renderer', ...Object.keys(imports), `${code}\nreturn ${name};`)(
     client, renderer, ...Object.values(imports)
   );
