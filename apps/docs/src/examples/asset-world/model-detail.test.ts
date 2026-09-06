@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { loadGlbModel } from '../../../../../packages/svelte-typegpu/src/glb-loader';
-import type { TypeGpuGeometryData } from 'svelte-typegpu';
+import type { TypeGpuLoadedModel } from 'svelte-typegpu';
 import { assetFiles, type WorldAssets } from './world';
 import { detailWorldAssets, refineGeometry } from './model-detail';
 
@@ -36,7 +36,7 @@ describe('shared model triangle density', () => {
     }
   });
   it('interpolates UV, RGB and alpha while preserving winding and source data', () => {
-    const source: TypeGpuGeometryData = { key: 'triangle', vertexCount: 3, vertexFloats: 12,
+    const source: TypeGpuLoadedModel['meshes'][number]['geometry'] = { key: 'triangle', vertexCount: 3, vertexFloats: 12,
       indexData: new Uint16Array([0, 1, 2]), indexCount: 3,
       vertexData: new Float32Array([
         0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0,

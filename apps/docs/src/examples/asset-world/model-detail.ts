@@ -1,14 +1,15 @@
 import { BufferAttribute, BufferGeometry } from 'three';
 import { LoopSubdivision } from 'three-subdivide';
-import type { TypeGpuGeometryData } from 'svelte-typegpu';
+import type { TypeGpuLoadedModel } from 'svelte-typegpu';
 import type { WorldAssets } from './world';
 
+type GeometryData = TypeGpuLoadedModel['meshes'][number]['geometry'];
 const variants = new WeakMap<WorldAssets, Map<number, WorldAssets>>();
 const attributes = [
   ['position', 0, 3], ['normal', 3, 3], ['uv', 6, 2], ['color', 8, 3], ['alpha', 11, 1]
 ] as const;
 
-export function refineGeometry(source: TypeGpuGeometryData, level: number): TypeGpuGeometryData {
+export function refineGeometry(source: GeometryData, level: number): GeometryData {
   if (![0, 1, 2].includes(level)) throw new RangeError('Detail must be 0, 1 or 2');
   if (!level) return source;
   if (source.vertexFloats !== 12 || source.vertexData.length !== source.vertexCount * 12) throw new Error('Unexpected model vertex layout');
