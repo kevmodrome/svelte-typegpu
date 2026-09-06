@@ -1,9 +1,18 @@
 import { defineConfig } from 'vitest/config';
 import { fileURLToPath } from 'node:url';
+import { isBuiltin } from 'node:module';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 
 export default defineConfig({
   plugins: [
+    {
+      name: 'test-node-builtins',
+      enforce: 'pre',
+      resolveId(id) {
+        // happy-dom still runs in Node; production browser externalization loses the builtin's name.
+        if (isBuiltin(id)) return { id, external: true };
+      }
+    },
     svelte({
       configFile: false,
       hot: false,

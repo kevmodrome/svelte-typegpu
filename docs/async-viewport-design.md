@@ -100,10 +100,11 @@ cases pass. The motion probe now runs 72 scene/viewport cases, with an awaited
 native canvas attribute updating during Tween/Spring motion, both RAF orders,
 60/120/144 Hz and manual mode. One frame per measured step, targeted uploads,
 resource reuse, idle settlement, and host-owned disposal hold in the candidate
-runtime. The full mixed-runtime regression suite passes 1,189 tests with no
-unhandled errors. Probe TypeScript checks pass. These are controlled-clock and
-fake-GPU results; the live check was unavailable because the Mac remained locked.
-Genuinely async SSR/hydration and the upstream patch decision remain open.
+runtime. The expanded mixed-runtime regression suite passes 1,231 development and
+1,211 production tests with the third isolated candidate described below. Probe
+TypeScript checks pass. These are controlled-clock and fake-GPU results; the live
+check was unavailable because the Mac remained locked. The upstream patch decision
+and browser/live-GPU verification remain open.
 
 ## Async server/hydration investigation
 
@@ -148,6 +149,6 @@ regression result is 1,225 passing, four failing, and no unhandled errors.
 
 The separate [derived-error investigation](async-derived-errors-design.md) now
 tests a third isolated candidate. It fixes those failures and preserves the existing
-boundary reset behavior; all 41 hydration/error-cache cases and 1,230 mixed-runtime
-regression tests pass with that candidate. No dependency patch is active. Broad
-runtime review, production-runtime coverage and live verification still gate rollout.
+boundary reset behavior. All behavior categories pass in development and production
+runtime profiles, including hydration and high-refresh cadence. No dependency patch
+is active. Broad runtime review, patch approval and live verification still gate rollout.

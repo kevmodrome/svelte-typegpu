@@ -7,6 +7,7 @@ import { compileAsyncViewportSource } from '../../src/viewport-test-utils';
 import { settleComponentUpdates } from '../../src/component-test-utils';
 import { createFragment, walk, type TypeGpuNode } from '../../src/core';
 import { createTypeGpuRoot, type TypeGpuRoot } from '../../src/svelte-renderer';
+import { compilerModes } from '../compiler-modes';
 
 vi.mock('../../src/svelte-renderer', async (original) => ({
   ...await original<typeof import('../../src/svelte-renderer')>(), createTypeGpuRoot: vi.fn()
@@ -90,7 +91,7 @@ async function fixture(mode: 'attribute' | 'derived', dev: boolean) {
 }
 
 describe.each(['attribute', 'derived'] as const)('async native canvas %s', (mode) => {
-  it.each([false, true])('retains its canvas/root across async prop updates (dev %s)', async (dev) => {
+  it.each(compilerModes)('retains its canvas/root across async prop updates (dev %s)', async (dev) => {
     const view = await fixture(mode, dev);
     view.request.resolve('first');
     await settleComponentUpdates(); await settleComponentUpdates();

@@ -111,7 +111,7 @@ rtk proxy env SVELTE_PROBE_SUITE=regression pnpm --filter svelte-typegpu exec no
 
 This enables the async runtime before each isolated test module and runs the entire
 normal renderer package suite plus the focused probes. The three-patch
-`derived-errors` candidate passes all 1,230 tests, with no unhandled errors,
+`derived-errors` candidate passes all 1,231 tests, with no unhandled errors,
 including 345 existing GPU lifecycle cases and 72 async motion cases. The earlier
 `nested-effects` candidate fails the four hydration rejection cases described below.
 Compiled fixtures keep their current compiler settings: this tests
@@ -205,14 +205,40 @@ cache and recover after invalidation. A throw-only version was rejected because 
 broke an existing boundary reset test during `is_dirty`; the refined candidate
 passes that test without changing its assertions.
 
-The candidate passes all 147 focused probes, including 41 hydration/error-cache
-cases and 72 cadence cases, and all 1,230 mixed-runtime regression tests. Normal
+The development regression run includes 41 hydration/error-cache cases and 72
+cadence cases and passes all 1,231 tests. Normal
 workspace tests still pass all 1,174 cases against the untouched dependency. Probe
 TypeScript checks pass. This is not an active patch or a general Svelte runtime
 correctness claim; see the [error propagation design](../../../docs/async-derived-errors-design.md).
 
-Both compiler `dev` settings are exercised. A separate `NODE_ENV=production` run
-could not load the tests because the Vite/Vitest harness externalized their Node
-built-ins; that attempt provides no production-runtime verification. Upstream error
-handling tests, production-runtime coverage, patch approval, global async compiler
-rollout, and live GPU verification remain separate gates.
+## Production runtime
+
+```sh
+rtk proxy env NODE_ENV=production pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs derived-errors
+rtk proxy env NODE_ENV=production SVELTE_PROBE_SUITE=regression pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs derived-errors
+rtk proxy env NODE_ENV=production pnpm --filter svelte-typegpu exec vitest run
+```
+
+| Run | Tests passing | Dependency |
+| --- | --- | --- |
+| Development mixed-runtime regression | 1,231 | Isolated three-patch candidate |
+| Production mixed-runtime regression | 1,211 | Isolated three-patch candidate |
+| Production focused probes | 128 | Isolated three-patch candidate |
+| Production normal renderer suite | 1,085 | Untouched installed preview |
+
+All runs exit zero with no unhandled errors. The runtime-mode canary checks the
+actual `esm-env` DEV flag. Production retains every behavior category, including
+the full 72-case cadence matrix, but does not pair dev-instrumented SSR output with
+the production runtime: that runtime intentionally omits the metadata it reads.
+Development still exercises both compiler `dev` settings. The 20-case difference
+is those redundant compiler-mode variants, not disabled behavior assertions.
+
+The shared Vitest config preserves Node builtin imports before Vite's production
+browser resolver discards their names. Happy-dom tests and the spawned compatibility
+canary still execute in Node; neither gets a mock or polyfill for those builtins.
+The compatibility canary continues to prove the original teardown failure against
+the untouched dependency in its own process, including in production mode.
+
+Upstream error-handling review, patch approval, global async compiler rollout, and
+live GPU verification remain separate gates. These runtime checks do not establish
+a production browser bundle's throughput or the monitor's physical refresh rate.

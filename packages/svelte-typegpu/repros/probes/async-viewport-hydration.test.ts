@@ -16,6 +16,7 @@ import { settleComponentUpdates } from '../../src/component-test-utils';
 import { createFragment, walk, type TypeGpuNode } from '../../src/core';
 import { createTypeGpuRoot, type TypeGpuRoot } from '../../src/svelte-renderer';
 import * as canvasBindings from '../../src/canvas-bindings';
+import { compilerModes } from '../compiler-modes';
 
 vi.mock('../../src/svelte-renderer', async (original) => ({
   ...await original<typeof import('../../src/svelte-renderer')>(), createTypeGpuRoot: vi.fn()
@@ -159,7 +160,7 @@ async function components(mode: 'attribute' | 'derived', dev: boolean) {
 }
 
 describe.each(['attribute', 'derived'] as const)('async canvas hydration (%s)', (mode) => {
-  it.each((['viewport', 'native', 'component'] as const).flatMap(host => [false, true].flatMap(dev =>
+  it.each((['viewport', 'native', 'component'] as const).flatMap(host => compilerModes.flatMap(dev =>
     ['resolve', 'reject'].map(outcome => ({ host, dev, outcome })))))
     ('hydrates a server pending boundary before $outcome ($host, dev $dev)', async ({ host, dev, outcome }) => {
     const viewport = await components(mode, dev);
@@ -231,7 +232,7 @@ describe.each(['attribute', 'derived'] as const)('async canvas hydration (%s)', 
     expect(root.dispose).toHaveBeenCalledTimes(host === 'viewport' ? 1 : 0);
   });
 
-  it.each([false, true].flatMap(dev => ['resolve', 'reject'].map(outcome => ({ dev, outcome }))))
+  it.each(compilerModes.flatMap(dev => ['resolve', 'reject'].map(outcome => ({ dev, outcome }))))
     ('ignores a late hydration value after unmount (dev $dev, $outcome)', async ({ dev, outcome }) => {
     const { Server, Client, initialize } = await components(mode, dev);
     const sceneWork = vi.fn(() => Promise.resolve('scene'));
@@ -316,7 +317,7 @@ describe.each(['attribute', 'derived'] as const)('async canvas hydration (%s)', 
     expect(setup).not.toHaveBeenCalled();
   });
 
-  it.each([false, true])('hydrates the awaited server canvas without evaluating server scene work (dev %s)', async (dev) => {
+  it.each(compilerModes)('hydrates the awaited server canvas without evaluating server scene work (dev %s)', async (dev) => {
     const { Server, Client, initialize } = await components(mode, dev);
     const initial = deferred(), clientInitial = deferred(), scene = deferred();
     const sceneWork = vi.fn(() => scene.promise);

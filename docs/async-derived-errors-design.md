@@ -89,10 +89,18 @@ evaluate deriveds before entering `update_effect`'s handler. This verified regre
 requires restoring reader-or-owner error context in `execute_derived`; it must not
 be hidden with a test exception or a broad scheduler catch.
 
-The refined isolated candidate passes all 41 hydration/error-cache cases, all 147
-focused probes, and the 1,230-case mixed-runtime regression suite with no unhandled
-errors. This includes 72 scene/viewport Tween/Spring cadence cases at 60/120/144 Hz.
-The normal workspace remains green at 1,174 tests against the untouched dependency;
-probe TypeScript checks pass. Compiler dev/prod output is tested, but a separate
-`NODE_ENV=production` runtime run failed during Vite/Vitest module loading, before
-any tests ran. Production-runtime verification and upstream review remain open.
+The refined isolated candidate passes the mixed-runtime regression suite in both
+development (1,231 tests) and production (1,211 tests), with no unhandled errors.
+Both include the full 72 scene/viewport Tween/Spring cadence cases at 60/120/144 Hz.
+Development tests both compiler dev settings, including 41 hydration/error-cache
+cases; production runs each behavior with production compilation only. The normal
+workspace remains green at 1,174 tests; its renderer package also passes all 1,085
+tests in production mode against the untouched dependency. Probe TypeScript passes.
+
+`vitest.config.ts` now explicitly externalizes Node builtins before Vite's browser
+resolver loses their names under NODE_ENV=production. This is test-only: happy-dom
+still runs in Node, as does the spawned compatibility canary. The probe's
+`compiler-modes.ts` prevents invalid dev-SSR/production-runtime pairings, and
+`runtime-mode.test.ts` asserts the real DEV flag. No runtime logic is mocked.
+Upstream review, production browser/live-GPU verification, and approval to carry
+the candidate patches remain open.
