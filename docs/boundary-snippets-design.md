@@ -34,11 +34,16 @@ duplication, async declaration placement and the existing boundary runtime.
 + repros/boundary-snippets/*.test.ts          native/scene comparisons and cadence
 ~ repros/tsconfig.json                       include the new probes
 ~ repros/README.md, docs/svelte-compatibility.md  evidence and deployment gate
++ repros/boundary-snippets/patch-commonjs.mjs  hash-checked temporary bundle correction
++ repros/boundary-snippets/compiler-commonjs.mjs  explicit CJS interop for probes
++ repros/boundary-snippets/compiler-parity.test.ts  output/diagnostic parity
++ repros/boundary-snippets/browser.mjs        isolated Vite and live WebGPU probe
 ```
 
 ```text
 temporary package copy -> apply compiler patch -> alias Svelte -> compiled tests
   -> delete temporary package; installed preview remains unchanged
+  -> optional CommonJS compiler selection or live Vite browser probe
 ```
 
 ## 4. Contracts and invariants
@@ -62,6 +67,15 @@ remain intact. Async pending support is a separate runtime gate.
    probe results and commit the candidate separately from installed dependency
    policy. Actual app support requires an approved patch or upstream update and
    live verification of that deployed compiler.
+3. Complete for the isolated candidate: verify the packaged CommonJS compiler as well as ESM. Apply the
+   equivalent minified lookup correction to the temporary copy only, guarded by
+   the exact original bundle hash and unique expression. Compare client/server,
+   dev/production and async compiler outputs and diagnostics; run the same
+   lifecycle/motion suite with explicit CommonJS interop.
+4. Complete for the isolated candidate: use Node's module-resolution hooks in an isolated probe process to
+   point the real Vite plugin at the candidate compiler. Run desktop/mobile
+   browser checks for failure, reactive fallback, clicked reset, motion, pixels,
+   resource reuse, idle and disposal. No app watcher or dependency files change.
 
 ## 6. Risks and unresolved decisions
 
@@ -72,20 +86,29 @@ on those compiler responsibilities and change diagnostics/scope. Reject both
 alternatives rather than silently narrowing the supported syntax.
 
 The correction targets the pinned visitor shape, not arbitrary future Svelte.
-Deployment must cover both ESM source and the CommonJS compiler build; this probe
-initially exercises the ESM compiler used by our integration. The pending async
+Deployment must cover both ESM source and the CommonJS compiler build; the probe
+now exercises both without changing installed Svelte. The pending async
 runtime patches remain separate. No public support claim or rollback is needed
 until an installed dependency change is approved.
+
+The packaged bundle is a single minified line. A generated full-line patch would
+duplicate that bundle in the repository before deployment is approved. Instead,
+the isolated runner performs a narrowly hash-guarded mechanical edit; activation
+must still generate an explicit package-manager patch covering both compiler
+files. Hash mismatch fails closed and requires re-inspection of a new preview.
+The browser probe has optional external Playwright/pngjs paths and uses a separate
+ephemeral Vite server; software GPU checks cannot prove monitor refresh rate.
 
 ## Verified results
 
 - The unmodified ESM compiler fails the synchronous custom-renderer cases with
   `TypeError: Cannot read properties of undefined (reading 'body')`. Native
-  comparison cases pass. The candidate passes 56 development and 51 production
-  tests. The difference is dev-instrumented runtime variants; compile-only cases
+  comparison cases pass. Both candidate compiler entries pass 58 development and
+  53 production tests. The difference is dev-instrumented runtime variants; compile-only cases
   cover both compiler modes in each run.
-- Native JavaScript output is byte-identical to the untouched CommonJS compiler
-  for the comparison fixture. Failed, pending and helper snippets keep their
+- ESM and CommonJS output artifacts and diagnostics match across 112 combinations
+  of client/server, dev/production, sync/async compilation and DOM/GPU markup.
+  Native output also matches the untouched installed compiler. Failed, pending and helper snippets keep their
   renderer tags and reject execution in a foreign renderer scope. Compilation
   of pending snippets does not imply safe async runtime teardown.
 - Native and scene tests agree on boundary-local reactive constants, failure
@@ -102,8 +125,28 @@ until an installed dependency change is approved.
   pipelines are retained. Natural settling idles; unmount during motion cancels
   renderer work and drains the consumer producer without late submissions.
 - All 1,300 normal workspace tests and probe TypeScript checks pass against the
-  unchanged installed preview. No docs build or live deployed-compiler check was
-  run; this slice changes only the isolated probe path.
+  unchanged installed preview. Guard tests reject installed, symlinked and
+  mismatched CommonJS targets without modifying them. The installed bundle's
+  SHA-256 remains `d765a1335ed4135713cf281de7e538c2f5007cd88505d9aa3b2562bf6b868da0`.
+- The real Vite plugin with each isolated compiler passes desktop (1440-wide,
+  700x400 canvas) and mobile (390-wide, 300x400 canvas) browser checks. Motion
+  changes 1,363 pixels; failure changes 2,198 pixels. Clicking the failure mesh
+  resets the boundary and restores identical ready pixels. Fallback labels react
+  to boundary-local constants; 37 sibling node identities and canvas identity
+  survive. ESM/CommonJS screenshots have identical pixel data and were inspected
+  for framing. There are no page or console errors.
+- Live resources stay at 8 buffers, 5 bind groups and 1 render pipeline. Unmount
+  during motion removes scene nodes/canvas and stops submissions. Seven buffers
+  receive explicit destruction; the remaining 12-byte guarded-compute size
+  uniform is internal to TypeGPU and released by the single device destruction.
+  TypeGPU's `createGuardedComputePipeline` and owned-root `destroy` implementations
+  establish this ownership. [Device destruction releases its resources](https://developer.mozilla.org/en-US/docs/Web/API/GPUDevice/destroy);
+  counting only individual buffer calls would incorrectly report a leak.
+- Browser runs use Google SwiftShader, not a physical-monitor timing measurement.
+  Each temporary browser/server closes and the candidate copy is removed. The
+  normal docs watcher, installed package, lockfile and async options are unchanged.
+  An approved explicit package patch, normal-app integration and physical refresh
+  verification remain separate deployment gates; no docs build was run.
 
 The consumer syntax follows [Svelte's boundary contract](https://svelte.dev/docs/svelte/svelte-boundary).
 The correction and its tests are research artifacts pending dependency policy,

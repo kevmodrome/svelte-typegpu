@@ -3,9 +3,11 @@ import { cp, mkdtemp, realpath, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { patchCommonJsCompiler } from './boundary-snippets/patch-commonjs.mjs';
 
 const mode = process.argv[2];
 const suite = process.env.SVELTE_PROBE_SUITE ?? (mode === 'boundary-snippets' ? 'boundary-snippets' : 'focused');
+const browser = process.argv[3] === '--browser';
 const candidates = {
   baseline: [],
   candidate: ['async-boundary-destroyed.patch'],
@@ -16,6 +18,7 @@ const candidates = {
 if (!Object.hasOwn(candidates, mode)) {
   throw new Error('Usage: node repros/probe-async-boundary.mjs baseline|candidate|nested-effects|derived-errors|boundary-snippets [vitest filters]');
 }
+if (browser && mode !== 'boundary-snippets') throw new Error('The browser probe currently targets boundary-snippets only.');
 
 const directory = fileURLToPath(new URL('..', import.meta.url));
 const source = dirname(await realpath(fileURLToPath(import.meta.resolve('svelte/package.json'))));
@@ -33,11 +36,13 @@ try {
     if (result.error) throw result.error;
     if (result.status !== 0) throw new Error(`Candidate no longer applies:\n${result.stderr}`);
   }
-  const result = spawnSync(process.execPath, [
+  if (mode === 'boundary-snippets') await patchCommonJsCompiler(copy);
+  const command = browser ? [fileURLToPath(new URL('./boundary-snippets/browser.mjs', import.meta.url))] : [
     cli, 'run', '--config', 'repros/vitest.svelte-probe.config.ts', ...process.argv.slice(3)
-  ], {
+  ];
+  const result = spawnSync(process.execPath, command, {
     cwd: directory, env: { ...process.env, SVELTE_PROBE_DIR: copy, SVELTE_PROBE_SUITE: suite }, stdio: 'inherit',
-    timeout: suite === 'regression' ? 120000 : 30000
+    timeout: browser ? 180000 : suite === 'regression' ? 120000 : 30000
   });
   if (result.error) throw result.error;
   process.exitCode = result.status ?? 1;

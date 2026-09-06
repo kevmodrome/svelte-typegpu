@@ -411,7 +411,8 @@ returns to idle after settlement; manual mode still requires an explicit draw.
 Declare a boundary failure snippet outside the boundary and pass `{failed}`:
 the equivalent nested declaration currently crashes the pinned upstream compiler.
 An [isolated compiler correction](boundary-snippets-design.md) preserves inline
-snippet scope and passes lifecycle/high-refresh tests, but is not installed.
+snippet scope and passes ESM/CommonJS lifecycle/high-refresh and live WebGPU
+checks, but is not installed.
 Boundaries catch Svelte rendering/effect errors, not arbitrary event-handler,
 fetch, or GPU validation errors. Use `{#await ... :catch}` for loader failures.
 

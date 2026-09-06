@@ -7,6 +7,8 @@ const directory = process.env.SVELTE_PROBE_DIR;
 if (!directory) throw new Error('Set SVELTE_PROBE_DIR to an isolated copy of the pinned Svelte package.');
 const suite = process.env.SVELTE_PROBE_SUITE ?? 'focused';
 if (!['focused', 'regression', 'boundary-snippets'].includes(suite)) throw new Error(`Unknown Svelte probe suite: ${suite}`);
+const compiler = process.env.SVELTE_PROBE_COMPILER ?? 'esm';
+if (!['esm', 'cjs'].includes(compiler)) throw new Error(`Unknown Svelte probe compiler: ${compiler}`);
 const { exports } = JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8'));
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const alias = Object.entries(exports).flatMap(([name, entry]) => {
@@ -15,6 +17,10 @@ const alias = Object.entries(exports).flatMap(([name, entry]) => {
     (entry as { default?: string }).default;
   if (!path) return [];
   const specifier = name === '.' ? 'svelte' : `svelte${name.slice(1)}`;
+  if (name === './compiler' && compiler === 'cjs') return [{
+    find: /^svelte\/compiler$/,
+    replacement: resolve('repros/boundary-snippets/compiler-commonjs.mjs')
+  }];
   return [{ find: new RegExp(`^${escapeRegex(specifier)}$`), replacement: resolve(directory, path) }];
 });
 alias.push({

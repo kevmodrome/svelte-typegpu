@@ -2,29 +2,57 @@
 
 ## Inline boundary snippets (compiler-only)
 
-The independent `boundary-snippets` mode applies only
-`probes/boundary-snippets.patch` to a temporary Svelte copy. It selects its own
+The independent `boundary-snippets` mode applies the ESM
+`probes/boundary-snippets.patch` and its hash-checked CommonJS equivalent to a
+temporary Svelte copy. It selects its own
 synchronous suite by default and does not apply any async runtime patch:
 
 ```sh
 rtk proxy env TMPDIR=/tmp pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs boundary-snippets
 rtk proxy env TMPDIR=/tmp NODE_ENV=production pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs boundary-snippets
+rtk proxy env TMPDIR=/tmp SVELTE_PROBE_COMPILER=cjs pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs boundary-snippets
+rtk proxy env TMPDIR=/tmp NODE_ENV=production SVELTE_PROBE_COMPILER=cjs pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs boundary-snippets
 rtk proxy env TMPDIR=/tmp SVELTE_PROBE_SUITE=boundary-snippets pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs baseline repros/boundary-snippets/lifecycle.test.ts
 ```
 
 The baseline command intentionally fails the scene cases with a compiler TypeError;
-native scope/error comparisons pass. The candidate passes 56 development and 51
-production tests, including 36 real Tween/Spring cadence cases across scene and
+native scope/error comparisons pass. Each compiler entry passes 58 development
+and 53 production tests, including 36 real Tween/Spring cadence cases across scene and
 viewport entries at 60/120/144 Hz. It preserves renderer guards, boundary-local
 constant scope, failure/reset cleanup, native compiler output, targeted writes,
 resource reuse, settled idling and manual/disposal behavior.
 
 This fixes the client boundary visitor's lookup of the function inside a
 renderer-tagged snippet. It neither hoists consumer source nor adds a component
-wrapper. The ESM compiler source is patched in isolation; the CommonJS compiler
-bundle remains the untouched native-output comparison. CommonJS parity, an
-approved installed patch or upstream update, and live deployed-compiler checking
-remain gates. Inline boundary snippets are not yet supported in the running apps.
+wrapper. The one-line CommonJS bundle is mechanically edited only inside the
+temporary copy; its full hash and the unique target expression must match the
+pinned preview. Installed, mismatched and symlinked targets are rejected. An
+explicit interop module selects the real CommonJS compiler for the same tests.
+The installed compiler stays the native-output baseline. A separate test compares
+112 ESM/CommonJS compilation combinations, including expected diagnostics.
+
+The optional live probe requires Node 24 (module-resolution hooks), Playwright,
+pngjs and a downloaded Chromium executable. By default the probe resolves browser
+dependencies normally; `SVELTE_PROBE_BROWSER_DEPENDENCIES` may point to an existing
+node_modules directory containing them. `SVELTE_PROBE_CHROMIUM` may override the
+executable, and `SVELTE_PROBE_OUTPUT` selects the screenshot directory:
+
+```sh
+rtk proxy env TMPDIR=/tmp SVELTE_PROBE_COMPILER=esm pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs boundary-snippets --browser
+rtk proxy env TMPDIR=/tmp SVELTE_PROBE_COMPILER=cjs pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs boundary-snippets --browser
+```
+
+Both live entry points pass desktop/mobile motion, failure, reactive fallback
+labels, clicked reset, identical recovery pixels, sibling/canvas retention, idle
+and unmount-during-motion checks with software WebGPU. Buffers/bind groups/pipelines
+remain stable; teardown verifies renderer-managed buffer destruction and device
+destruction for TypeGPU-owned internal resources. It prints metrics and saves
+ready/failed PNGs, then closes the separate browser/server. It never changes the
+normal docs server. Physical display cadence is not inferred from these runs.
+
+An approved explicit package-manager patch covering both compiler files (or an
+upstream update), followed by normal-app verification, remains a deployment gate.
+Inline boundary snippets are not yet supported in the running apps.
 See the [design and results](../../../docs/boundary-snippets-design.md).
 
 ## Async teardown baseline
