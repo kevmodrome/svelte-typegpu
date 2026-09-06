@@ -54,7 +54,7 @@ projection depth and orthographic picking from OpenGL [-1,1] to WebGPU [0,1].
 
 ## 4. Contracts and invariants
 
-- `BatchVisibility`: retained world bounds, hierarchy and revision; batch-cache
+- `BatchBounds`: retained world bounds, hierarchy and revision; batch-cache
   owned. Invalid/missing geometry bounds are unbounded, never falsely rejected.
 - `Frustum`: six planes extracted from the actual column-major WebGPU view
   projection (near clip z=0, far z=w), conservative tolerance at boundaries.

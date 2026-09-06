@@ -5,14 +5,16 @@ type SceneState = Parameters<TypeGpuRoot['gpu']['setScene']>[0];
 export interface WorldProfile {
   models: number; instances: number; colorDraws: number; colorTriangles: number;
   shadowTriangles: number; renderCpuMs: number; maxRenderCpuMs: number;
+  culledInstances: number; cullingCpuMs: number; rangeFallbacks: number;
 }
 export const emptyProfile: WorldProfile = { models: 0, instances: 0, colorDraws: 0,
-  colorTriangles: 0, shadowTriangles: 0, renderCpuMs: 0, maxRenderCpuMs: 0 };
+  colorTriangles: 0, shadowTriangles: 0, renderCpuMs: 0, maxRenderCpuMs: 0,
+  culledInstances: 0, cullingCpuMs: 0, rangeFallbacks: 0 };
 
 export function sceneWorkload(scene: SceneState) {
   let instances = 0, colorTriangles = 0, shadowTriangles = 0;
   const shadows = scene.lights.some(light => light.kind === 'directional' && light.castsShadow);
-  const models = new Set((scene.resourceItems ?? []).filter(item => item.node.name === 'model' && item.visible !== false).map(item => item.node));
+  const models = new Set((scene.resourceItems ?? []).filter(item => item.node.name === 'model').map(item => item.node));
   for (const batch of scene.drawBatches) {
     const triangles = (batch.geometry.indexCount ?? batch.geometry.vertexCount) / 3 * batch.instanceCount;
     instances += batch.instanceCount; colorTriangles += triangles;
@@ -39,6 +41,10 @@ export function profileWorld(root: TypeGpuRoot, publish: (profile: WorldProfile)
   return {
     sample() {
       if (disposed) return;
+      const stats = gpu.getRenderStats?.();
+      if (stats) latest = { ...latest, instances: stats.submittedInstances, colorDraws: stats.colorDraws,
+        colorTriangles: stats.colorTriangles, shadowTriangles: stats.shadowTriangles,
+        culledInstances: stats.culledInstances, cullingCpuMs: stats.cullingCpuMs, rangeFallbacks: stats.rangeFallbacks };
       latest = { ...latest, renderCpuMs: frames ? cpu / frames : 0, maxRenderCpuMs: maxCpu };
       publish(latest); frames = cpu = maxCpu = 0;
     },

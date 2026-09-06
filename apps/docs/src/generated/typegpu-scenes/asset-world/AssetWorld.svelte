@@ -16,6 +16,7 @@
   let assets = $state.raw<Awaited<ReturnType<typeof loadWorldAssets>> | null>(null);
   let loaded = $state(0), failure = $state(''), selected = $state('');
   let paused = $state(false), forest = $state(true), dusk = $state(false), shadows = $state(false);
+  let frustumCulling = $state(false);
   let count = $state(20000), detail = $state(1), preparing = $state(false);
   let view = $state<'camp' | 'follow' | 'overview'>('overview');
   let landscape = $state.raw(compactLandscape), profile = $state.raw(emptyProfile);
@@ -62,7 +63,7 @@
 
 <div class="asset-world" class:dusk>
   <div class="world-stage">
-    <WorldViewport {assets} {landscape} {view} {forest} {dusk} {shadows} {selected} {cameraVersion} {playerVersion} {touch} {paused}
+    <WorldViewport {assets} {landscape} {view} {forest} {dusk} {shadows} {frustumCulling} {selected} {cameraVersion} {playerVersion} {touch} {paused}
       reducedMotion={prefersReducedMotion.current}
       onselect={(key: string) => selected = key}
       {frameloop} {maxDevicePixelRatio} onready={ready} onfps={fps} {onrenderererror} />
@@ -90,6 +91,7 @@
     <label>Triangles <select aria-label="Triangle density" bind:value={detail} onchange={rebuild}>
       <option value={0}>1x / original</option><option value={1}>4x / dense</option><option value={2}>16x / very dense</option>
     </select></label>
+    <label><input type="checkbox" bind:checked={frustumCulling} /> Frustum culling</label>
     <div class="view-modes" role="group" aria-label="Camera view">
       {#each [{ key: 'camp', label: 'Campsite view', icon: Tent }, { key: 'follow', label: 'Follow camper', icon: UserRound }, { key: 'overview', label: 'World overview', icon: Map }] as mode}
         <button type="button" aria-label={mode.label} title={mode.label} aria-pressed={view === mode.key}
@@ -98,13 +100,16 @@
     </div>
   </div>
   <dl class="world-metrics" aria-label="Renderer workload">
-    <div><dt>Models drawn</dt><dd data-metric="models">{profile.models.toLocaleString('en-US')}</dd></div>
-    <div><dt>Instances</dt><dd data-metric="instances">{profile.instances.toLocaleString('en-US')}</dd></div>
+    <div><dt>Models in scene</dt><dd data-metric="models">{profile.models.toLocaleString('en-US')}</dd></div>
+    <div><dt>Instances drawn</dt><dd data-metric="instances">{profile.instances.toLocaleString('en-US')}</dd></div>
+    <div><dt>Frustum rejected</dt><dd data-metric="culled">{profile.culledInstances.toLocaleString('en-US')}</dd></div>
     <div><dt>Color draws</dt><dd data-metric="draws">{profile.colorDraws}</dd></div>
     <div><dt>Color triangles</dt><dd data-metric="triangles">{profile.colorTriangles.toLocaleString('en-US')}</dd></div>
     <div><dt>Shadow triangles</dt><dd>{profile.shadowTriangles.toLocaleString('en-US')}</dd></div>
     <div><dt>Render CPU</dt><dd data-metric="cpu">{profile.renderCpuMs.toFixed(2)} ms</dd></div>
     <div><dt>CPU max</dt><dd>{profile.maxRenderCpuMs.toFixed(2)} ms</dd></div>
+    <div><dt>Cull CPU</dt><dd data-metric="cull-cpu">{profile.cullingCpuMs.toFixed(2)} ms</dd></div>
+    <div><dt>Range fallbacks</dt><dd data-metric="fallbacks">{profile.rangeFallbacks}</dd></div>
   </dl>
   <div class="world-toolbar" role="group" aria-label="World controls">
     <label><input type="checkbox" bind:checked={dusk} /> Dusk</label>
@@ -156,6 +161,7 @@
   footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 8px 16px; border-top: 1px solid #344139; color: #b1c2b7; font-size: 11px; }
   footer a { color: inherit; }
   @media (max-width: 700px) {
+    .asset-world { height: auto; grid-template-rows: 400px auto auto auto auto; }
     .world-toolbar { gap: 8px 14px; padding: 10px 12px; }
     .selection { margin-left: 0; flex: 1; }
     .world-title { top: 16px; right: 14px; }

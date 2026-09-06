@@ -6,17 +6,21 @@ import { resolve } from 'node:path';
 const require = process.env.SVELTE_PROBE_BROWSER_DEPENDENCIES
   ? createRequire(resolve(process.env.SVELTE_PROBE_BROWSER_DEPENDENCIES, 'package.json')) : createRequire(import.meta.url);
 const { chromium } = require('playwright');
+const { PNG } = require('pngjs');
+const cullingSweep = process.env.SVELTE_PROBE_CULLING === '1';
+const width = Number(process.env.SVELTE_PROBE_WIDTH ?? 1440);
 const output = process.env.SVELTE_PROBE_OUTPUT ?? '/tmp/typegpu-asset-world-gpu';
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true, executablePath: process.env.SVELTE_PROBE_CHROMIUM,
   args: ['--enable-unsafe-webgpu', '--use-angle=metal'] });
 const results = [];
 try {
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  const page = await browser.newPage({ viewport: { width, height: 1000 } });
   page.setDefaultTimeout(120000);
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => {
-    const state = window.gpuProfile = { adapter: null, frames: [], callbacks: [], gpu: [], errors: [], tinyScissor: false, lastDraws: null };
+    const state = window.gpuProfile = { adapter: null, frames: [], callbacks: [], gpu: [], errors: [], tinyScissor: false, lastDraws: null,
+      resources: { buffers: 0, groups: 0, pipelines: 0 } };
     const raf = requestAnimationFrame.bind(window);
     window.requestAnimationFrame = callback => raf(timestamp => {
       const start = performance.now(); callback(timestamp);
@@ -32,6 +36,10 @@ try {
       const requestDevice = adapter.requestDevice.bind(adapter);
       adapter.requestDevice = async (descriptor = {}) => {
         const device = await requestDevice({ ...descriptor, requiredFeatures: [...new Set([...(descriptor.requiredFeatures ?? []), 'timestamp-query'])] });
+        for (const [method, metric] of [['createBuffer', 'buffers'], ['createBindGroup', 'groups'], ['createRenderPipeline', 'pipelines']]) {
+          const original = device[method].bind(device);
+          device[method] = (...args) => { state.resources[metric]++; return original(...args); };
+        }
         device.addEventListener('uncapturederror', event => state.errors.push(event.error.message));
         const slots = Array.from({ length: 4 }, () => ({
           query: device.createQuerySet({ type: 'timestamp', count: 2 }),
@@ -48,11 +56,11 @@ try {
             if (slot) { slot.status = 'encoding'; slot.timestamp = performance.now(); }
             const pass = begin(slot ? { ...descriptor, timestampWrites: { querySet: slot.query, beginningOfPassWriteIndex: 0, endOfPassWriteIndex: 1 } } : descriptor);
             if (state.tinyScissor) pass.setScissorRect(0, 0, 1, 1);
-            const workload = { triangles: 0, nonindexedVertices: 0, indexedElements: 0, draws: 0 };
+            const workload = { triangles: 0, nonindexedVertices: 0, indexedElements: 0, draws: 0, instances: 0 };
             for (const method of ['draw', 'drawIndexed']) {
               const draw = pass[method].bind(pass);
               pass[method] = (vertices, instances = 1, ...args) => {
-                workload.triangles += vertices * instances / 3; workload.draws++;
+                workload.triangles += vertices * instances / 3; workload.draws++; workload.instances += instances;
                 workload[method === 'draw' ? 'nonindexedVertices' : 'indexedElements'] += vertices * instances;
                 return draw(vertices, instances, ...args);
               };
@@ -93,10 +101,18 @@ try {
   await canvas.scrollIntoViewIfNeeded();
   await world.getByRole('combobox', { name: 'Model count' }).selectOption('50000');
   await page.waitForFunction(() => document.querySelector('[data-metric="models"]')?.textContent === '50,000');
-  for (const [detail, tinyScissor] of [[0, false], [1, false], [2, false], [2, true]]) {
+  const cases = cullingSweep
+    ? ['World overview', 'Follow camper'].flatMap(view => [0, 2].flatMap(detail => [false, true].map(culling => ({ view, detail, culling, tinyScissor: false }))))
+    : [[0, false], [1, false], [2, false], [2, true]].map(([detail, tinyScissor]) => ({ view: 'World overview', detail, tinyScissor, culling: false }));
+  for (const { detail, tinyScissor, view, culling } of cases) {
     await world.getByRole('combobox', { name: 'Triangle density' }).selectOption(String(detail));
+    if (cullingSweep) {
+      await world.getByRole('button', { name: view, exact: true }).click();
+      await world.getByRole('checkbox', { name: 'Frustum culling', exact: true }).setChecked(culling);
+    }
     await page.evaluate(tiny => window.gpuProfile.tinyScissor = tiny, tinyScissor);
     await page.waitForTimeout(2000);
+    const resources = await page.evaluate(() => ({ ...window.gpuProfile.resources }));
     const start = await page.evaluate(() => performance.now());
     await page.waitForTimeout(4000);
     const result = await page.evaluate(start => {
@@ -109,10 +125,47 @@ try {
         fps: frames.length * 1000 / (end - start), gpuMs: average(gpu.map(s => s.ms)), gpuMaxMs: Math.max(...gpu.map(s => s.ms)),
         callbackCpuMs: average(callbacks.map(s => s.cpu)), callbackMaxCpuMs: Math.max(...callbacks.map(s => s.cpu)),
         canvas: { width: document.querySelector('.asset-world canvas').width, height: document.querySelector('.asset-world canvas').height },
-        workload: p.lastDraws, errors: p.errors };
+        workload: p.lastDraws, resources: p.resources,
+        metrics: Object.fromEntries([...document.querySelectorAll('[data-metric]')].map(element => [element.dataset.metric, element.textContent])), errors: p.errors };
     }, start);
     assert(result.samples > 5); assert.deepEqual(result.errors, []);
-    results.push({ detail, tinyScissor, ...result }); console.log(JSON.stringify(results.at(-1)));
+    assert.deepEqual(result.resources, resources, 'Steady frames reuse GPU resources');
+    assert(Math.abs(result.frames - result.callbacks) <= 2, 'Renderer delivers browser callbacks without alternate-frame skips');
+    if (cullingSweep) {
+      assert.equal(Number(result.metrics.triangles.replaceAll(',', '')), result.workload.triangles);
+      assert.equal(Number(result.metrics.instances.replaceAll(',', '')), result.workload.instances);
+      assert.equal(Number(result.metrics.draws), result.workload.draws);
+    }
+    results.push({ detail, tinyScissor, view, culling, ...result }); console.log(JSON.stringify(results.at(-1)));
+    if (cullingSweep) await world.screenshot({ path: resolve(output, `${width}-${view.replaceAll(' ', '-')}-${detail}-${culling ? 'culled' : 'raw'}.png`) });
+  }
+  if (cullingSweep) {
+    for (const detail of [0, 2]) {
+      const raw = results.find(r => r.view === 'Follow camper' && r.detail === detail && !r.culling);
+      const culled = results.find(r => r.view === 'Follow camper' && r.detail === detail && r.culling);
+      assert(culled.workload.triangles < raw.workload.triangles * 0.5, 'Follow view removes most out-of-view geometry');
+    }
+    await world.getByRole('checkbox', { name: 'Pause motion' }).check();
+    await world.getByRole('combobox', { name: 'Triangle density' }).selectOption('0');
+    for (const view of ['World overview', 'Follow camper']) {
+      await world.getByRole('button', { name: view, exact: true }).click();
+      const images = [];
+      for (const culling of [false, true]) {
+        await world.getByRole('checkbox', { name: 'Frustum culling', exact: true }).setChecked(culling);
+        await page.waitForTimeout(700);
+        images.push(PNG.sync.read(await canvas.screenshot({ path: resolve(output, `${width}-${view.replaceAll(' ', '-')}-frozen-${culling}.png`) })));
+      }
+      const [raw, culled] = images; assert.equal(raw.data.length, culled.data.length);
+      let changed = 0, colored = 0;
+      for (let i = 0; i < raw.data.length; i += 4) {
+        if (Math.max(...[0, 1, 2].map(c => Math.abs(raw.data[i + c] - culled.data[i + c]))) > 10) changed++;
+        if (Math.abs(raw.data[i] - raw.data[i + 1]) > 20) colored++;
+      }
+      const changedFraction = changed / (raw.width * raw.height);
+      console.log(JSON.stringify({ view, width, changedFraction, coloredPixels: colored }));
+      assert(colored > 100, 'Canvas contains rendered scene pixels');
+      assert(changedFraction < 0.005, 'Culling preserves the rendered view');
+    }
   }
   assert.deepEqual(errors, []);
   await world.getByRole('checkbox', { name: 'Pause motion' }).check();

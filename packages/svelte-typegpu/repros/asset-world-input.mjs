@@ -15,10 +15,14 @@ try {
   page.setDefaultTimeout(120000);
   const errors = []; page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => {
-    window.inputProfile = { view: [], frames: 0, pending: new Set(), buffers: 0, groups: 0, pipelines: 0, gpuErrors: [] };
+    window.inputProfile = { view: [], frames: 0, pending: new Set(), buffers: 0, groups: 0, pipelines: 0,
+      instanceBytes: 0, callbackCpu: [], gpuErrors: [] };
     const p = window.inputProfile, raf = requestAnimationFrame.bind(window), cancel = cancelAnimationFrame.bind(window);
     window.requestAnimationFrame = callback => {
-      const id = raf(time => { p.pending.delete(id); callback(time); }); p.pending.add(id); return id;
+      const id = raf(time => {
+        p.pending.delete(id); const start = performance.now(); callback(time);
+        p.callbackCpu.push(performance.now() - start); if (p.callbackCpu.length > 2000) p.callbackCpu.shift();
+      }); p.pending.add(id); return id;
     };
     window.cancelAnimationFrame = id => { p.pending.delete(id); cancel(id); };
     const requestAdapter = navigator.gpu.requestAdapter.bind(navigator.gpu);
@@ -33,6 +37,10 @@ try {
         }
         const write = device.queue.writeBuffer.bind(device.queue);
         device.queue.writeBuffer = (buffer, offset, data, ...args) => {
+          if (buffer.label.endsWith('instances')) {
+            const bytesPerElement = data.BYTES_PER_ELEMENT ?? 1;
+            p.instanceBytes += args[1] === undefined ? data.byteLength - (args[0] ?? 0) * bytesPerElement : args[1] * bytesPerElement;
+          }
           if (buffer.label === 'TypeGPU scene uniforms') {
             p.view = [...new Float32Array(ArrayBuffer.isView(data) ? data.buffer : data, ArrayBuffer.isView(data) ? data.byteOffset : 0, 16)]; p.frames++;
           }
@@ -49,6 +57,7 @@ try {
   await world.getByRole('combobox', { name: 'Triangle density' }).selectOption('0');
   await world.getByRole('combobox', { name: 'Model count' }).selectOption('50000');
   await world.getByRole('button', { name: 'Follow camper' }).click();
+  if (process.env.SVELTE_PROBE_CULLING === '1') await world.getByRole('checkbox', { name: 'Frustum culling', exact: true }).check();
   await page.waitForFunction(() => document.querySelector('[data-metric="models"]')?.textContent === '50,000');
   await idle(); await canvas.scrollIntoViewIfNeeded(); await canvas.focus();
   await page.emulateMedia({ reducedMotion: 'no-preference' });
@@ -84,7 +93,9 @@ try {
   const distance = (a, b, indices) => indices.reduce((sum, i) => sum + Math.abs(a[i] - b[i]), 0);
   const orientation = [0, 1, 2, 4, 5, 6, 8, 9, 10];
   const result = { timings, firstRotation: distance(initial, first, orientation), secondRotation: distance(first, second, orientation),
-    translation: distance(initial, second, [12, 13, 14]), frames: after.frames - before.frames };
+    translation: distance(initial, second, [12, 13, 14]), frames: after.frames - before.frames,
+    instanceBytes: after.instanceBytes - before.instanceBytes,
+    callbackCpuMean: after.callbackCpu.reduce((sum, ms) => sum + ms, 0) / after.callbackCpu.length };
   await world.screenshot({ path: resolve(output, 'move-and-orbit.png') });
   console.log(JSON.stringify(result)); await writeFile(resolve(output, 'results.json'), JSON.stringify(result, null, 2));
   if (!process.env.SVELTE_PROBE_EXPECT_BROKEN) {
@@ -94,6 +105,7 @@ try {
     assert(timings.every(value => value.ms < 100), 'Movement toggles do not rebuild the large scene');
   }
   for (const resource of ['buffers', 'groups', 'pipelines']) assert.equal(after[resource], before[resource]);
+  assert(result.instanceBytes < (result.frames + 50) * 13 * 96, 'Movement uploads only camper/canoe instances, not the forest');
   await page.waitForTimeout(200); assert.equal((await metrics()).frames, after.frames);
   assert.deepEqual(errors, []); assert.deepEqual(after.gpuErrors, []);
 } finally { await browser.close(); }

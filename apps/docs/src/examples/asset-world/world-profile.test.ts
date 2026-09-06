@@ -13,11 +13,25 @@ function scene(): SceneState {
     ], drawBatchesChanged: true, lightsChanged: true } as unknown as SceneState;
 }
 describe('example workload sampling', () => {
-  it('counts visible model nodes once, and submitted indexed/nonindexed triangles by pass', () => {
+  it('counts retained model nodes once, and candidate indexed/nonindexed triangles by pass', () => {
     const value = scene();
-    expect(sceneWorkload(value)).toEqual({ models: 1, instances: 23, colorDraws: 2, colorTriangles: 86, shadowTriangles: 80 });
+    expect(sceneWorkload(value)).toEqual({ models: 2, instances: 23, colorDraws: 2, colorTriangles: 86, shadowTriangles: 80 });
     value.lights = [];
     expect(sceneWorkload(value).shadowTriangles).toBe(0);
+  });
+  it('samples actual camera submissions without scanning or publishing on each frame', () => {
+    const publish = vi.fn(), getRenderStats = vi.fn(() => ({ submittedInstances: 2, culledInstances: 21,
+      colorDraws: 1, colorTriangles: 8, shadowTriangles: 80, cullingCpuMs: 0.12, rangeFallbacks: 0 }));
+    const root = { gpu: { renderFrame() {}, setScene() {}, getRenderStats } } as unknown as TypeGpuRoot;
+    const profiler = profileWorld(root, publish);
+    root.gpu.setScene(scene());
+    for (let i = 0; i < 144; i++) root.gpu.renderFrame(i);
+    expect(getRenderStats).not.toHaveBeenCalled(); expect(publish).toHaveBeenCalledOnce();
+    profiler.sample();
+    expect(getRenderStats).toHaveBeenCalledOnce();
+    expect(publish.mock.lastCall![0]).toMatchObject({ models: 2, instances: 2, culledInstances: 21,
+      colorDraws: 1, colorTriangles: 8, shadowTriangles: 80, cullingCpuMs: 0.12, rangeFallbacks: 0 });
+    profiler.dispose();
   });
   it('does not rescan batches on transform-only frames and restores wrapped methods', () => {
     let time = 0;

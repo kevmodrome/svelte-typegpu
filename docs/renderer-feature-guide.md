@@ -495,6 +495,28 @@ wake an idle demand scene: use `always` or an active continuous frame task.
 
 ## 9. Performance rules for consumers
 
+Scenes now enable conservative camera-frustum culling automatically. Use
+`<scene frustumCulling={false}>` for raw workload comparisons. The asset-world
+example keeps that raw default and provides a Frustum culling checkbox.
+`root.gpu.getRenderStats?.()` reports retained/candidate/submitted instances,
+rejected instances, actual color draws/triangles, shadow triangles, culling CPU
+time, bounds tests and range-budget fallbacks from the last rendered frame.
+
+Culling retains component state, attachments, simulation, picking and resources.
+It selects color-pass instance ranges from existing buffers; it does not stop
+frame tasks or remove shadow casters. Large opaque batches are spatially ordered
+on structural compilation and culled conservatively in clusters. Transparent
+and depth-disabled draws retain authored order. Moving an object refits only
+affected bounds; moving a camera never repacks instances. Missing/invalid bounds
+remain visible. `bufferGeometry` bounds must enclose the actual geometry.
+Custom vertex displacement also needs bounds enclosing its full motion, or
+scene-level frustum culling must be disabled.
+
+This is frustum culling, not occlusion culling or LOD. Cluster edges can submit
+some off-screen instances. Highly fragmented selections fall back to a full
+batch rather than unbounded draw calls. An overview containing the entire world
+still processes the entire world; distant visible geometry needs LOD next.
+
 1. Animate position/rotation/scale, colors and existing uniform values. Avoid
    rebuilding geometry, replacing shader functions or changing material types
    each frame. Scaling a box is different from rebuilding its dimensions.
@@ -542,7 +564,7 @@ inventing a second reactive system.
 
 - **Asset reliability:** explicit supported-format diagnostics, visible loading/
   errors/retry, richer materials, animation clips/skinning and compressed assets.
-- **World scale:** no built-in frustum/occlusion culling, LOD, world streaming,
+- **World scale:** no built-in occlusion culling, LOD, world streaming,
   terrain system or spatially accelerated/triangle-accurate picking.
 - **Visual rendering:** no environment lighting/HDR pipeline, built-in fog,
   cascaded/multiple shadow lights, full post-processing or built-in MSAA controls.

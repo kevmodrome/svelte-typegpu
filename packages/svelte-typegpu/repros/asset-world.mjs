@@ -65,6 +65,7 @@ try {
       await world.getByRole('checkbox', { name: 'Shadows', exact: true }).check();
       await page.waitForFunction(() => document.querySelector('[data-metric="models"]')?.textContent === '29');
       await canvas.scrollIntoViewIfNeeded();
+      assert((await canvas.boundingBox()).height >= 400, 'Diagnostics leave a usable gameplay viewport');
       const metrics = () => page.evaluate(() => structuredClone(window.metrics));
       const idle = () => page.waitForFunction(() => window.pending.size === 0, null, { polling: 50 });
       await page.waitForFunction(() => window.metrics.callbacks > 15, null, { polling: 50 });
@@ -89,7 +90,7 @@ try {
       // Reduced motion stops the canoe/gait, but deliberate player movement still works.
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await world.getByRole('checkbox', { name: 'Pause motion', exact: true }).uncheck(); await idle();
-      const origin = camperPosition(PNG.sync.read(await canvas.screenshot()));
+      const origin = camperPosition(PNG.sync.read(await canvas.screenshot({ path: resolve(output, `${width}-play-start.png`) })));
       await canvas.focus();
       const walkBefore = await metrics();
       await page.keyboard.down('w'); await page.waitForTimeout(650); await page.keyboard.up('w'); await idle();

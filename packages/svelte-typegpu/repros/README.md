@@ -19,6 +19,26 @@ its browser and leaves the docs server running. See the
 
 ## Large asset world and polygon density
 
+For hardware frustum-culling comparisons, run:
+
+```sh
+rtk proxy env TMPDIR=/tmp SVELTE_PROBE_CULLING=1 pnpm --filter svelte-typegpu exec node repros/asset-world-gpu-profile.mjs
+rtk proxy env TMPDIR=/tmp SVELTE_PROBE_CULLING=1 SVELTE_PROBE_WIDTH=390 pnpm --filter svelte-typegpu exec node repros/asset-world-gpu-profile.mjs
+rtk proxy env TMPDIR=/tmp SVELTE_PROBE_CULLING=1 pnpm --filter svelte-typegpu exec node repros/asset-world-input.mjs
+```
+
+The GPU sweep requires a non-fallback Apple adapter and timestamp queries. It
+compares raw and culled 50k-model overview/follow views at 1x/16x, checks actual
+draw arguments against the UI counters, checks resource reuse and frame/callback
+delivery, and compares frozen canvas pixels. The input probe also covers held
+orbit gestures while walking, stop/start latency and demand idle. Set
+`SVELTE_PROBE_OUTPUT` to keep independent result sets. These measurements are
+browser/adapter observations, not guarantees about physical display refresh.
+
+The example deliberately defaults to raw mode (`frustumCulling={false}`);
+ordinary scenes enable conservative frustum culling by default. This does not
+implement occlusion culling or LOD.
+
 ```sh
 rtk proxy env TMPDIR=/tmp pnpm --filter svelte-typegpu exec node repros/asset-world-stress.mjs
 ```
