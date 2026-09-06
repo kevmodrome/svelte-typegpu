@@ -21,18 +21,19 @@ import {
 import { createSceneState, createTypeGpuSceneCache } from './scene-compiler';
 import { createMaterialDescriptor } from './material-descriptors';
 import { createMeshPipeline } from './typegpu-pipeline';
-import { flushSync, mount, tick, unmount } from 'svelte';
+import { flushSync, mount, unmount } from 'svelte';
 import { Spring, Tween } from 'svelte/motion';
 import { writable } from 'svelte/store';
 import * as svelteClient from 'svelte/internal/client';
 import sceneRenderer, { createTypeGpuRuntimeForTest, type TypeGpuRoot } from './svelte-renderer';
-import { compileTypeGpuSource } from './component-test-utils';
+import { compileTypeGpuSource, settleComponentUpdates } from './component-test-utils';
 import { compileViewportSource } from './viewport-test-utils';
 import type { TypeGpuAttachment } from './attachments';
 import { loadModel } from './model-loader';
 import type { TypeGpuLoadedModel } from './types';
 import SceneHost from './SceneHost.typegpu.svelte';
 import CanvasMotionHost from './test-fixtures/CanvasMotionHost.svelte';
+import NativeRangeInput from './test-fixtures/NativeRangeInput.svelte';
 import NativeEvents from '../../../apps/docs/src/generated/typegpu-scenes/native-events/NativeEvents.typegpu.js';
 import SharedStores from '../../../apps/docs/src/generated/typegpu-scenes/shared-stores/SharedStores.svelte';
 import { createViewProjectionMatrix, readCameraState } from './camera';
@@ -90,6 +91,20 @@ afterEach(() => {
 describe('GPU resource and frame lifecycle', () => {
   it.each(['demand', 'manual'] as const)('shares native bindings and mesh events in the generated store editor (%s)', async frameloop => {
     const clock = optionClock(120);
+    const native = mount(NativeRangeInput, { target: document.body });
+    try {
+      await settleComponentUpdates();
+      const input = document.querySelector('input')!;
+      for (const value of ['2', '-1', '1']) {
+        input.value = value;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        await settleComponentUpdates();
+        clock.step();
+      }
+    } finally { await unmount(native); }
+    const nativeRequests = clock.request.mock.calls.length;
+    expect(clock.pending.size).toBe(0);
+    clock.request.mockClear();
     const { root: gpu, buffers, submissions } = fakeRoot();
     vi.mocked(tgpu.init).mockResolvedValue(gpu as never);
     vi.stubGlobal('navigator', { gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
@@ -100,8 +115,8 @@ describe('GPU resource and frame lifecycle', () => {
       target: document.body, props: { frameloop, onready, onrenderererror: error }
     });
     async function settle() {
-      flushSync(); await tick(); await tick();
-      for (let i = 0; i < 3; i++) { clock.step(); flushSync(); await tick(); }
+      await settleComponentUpdates(); await settleComponentUpdates();
+      for (let i = 0; i < 3; i++) { clock.step(); await settleComponentUpdates(); }
     }
     try {
       await settle();
@@ -163,7 +178,7 @@ describe('GPU resource and frame lifecycle', () => {
       expect(gpu.createBindGroup).not.toHaveBeenCalled();
       expect(createMeshPipeline).not.toHaveBeenCalled();
       expect(clock.pending.size).toBe(0);
-      if (frameloop === 'manual') expect(clock.request).not.toHaveBeenCalled();
+      if (frameloop === 'manual') expect(clock.request).toHaveBeenCalledTimes(nativeRequests);
     } finally { await unmount(instance); document.body.replaceChildren(); }
     expect(clock.pending.size).toBe(0);
     expect(gpu.destroy).toHaveBeenCalledOnce();
@@ -240,7 +255,7 @@ describe('GPU resource and frame lifecycle', () => {
     }
     let disposed = false;
     try {
-      flushSync(); await tick();
+      await settleComponentUpdates();
       for (let i = 0; i < 3; i++) await step();
       if (frameloop === 'manual') renderer.renderFrame(now);
       expect(pending.size).toBe(0);
@@ -267,7 +282,7 @@ describe('GPU resource and frame lifecycle', () => {
         if (frame === Math.floor(hz / 3) || frame === Math.floor(2 * hz / 3)) {
           const old = setup.mock.lastCall![0];
           flushSync(() => instance.reset());
-          await tick();
+          await settleComponentUpdates();
           resets += 1;
           expect(setup).toHaveBeenCalledTimes(resets + 1);
           expect(cleanup).toHaveBeenCalledTimes(resets);
@@ -750,7 +765,7 @@ describe('GPU resource and frame lifecycle', () => {
         }
       }
       try {
-        flushSync(); const root = await ready; await tick();
+        flushSync(); const root = await ready; await settleComponentUpdates();
         for (let index = 0; index < 3; index++) await step();
         expect(pending.size).toBe(0);
         const canvas = root.canvas, node = setup.mock.calls[0][0];
@@ -864,7 +879,7 @@ describe('GPU resource and frame lifecycle', () => {
     `);
     const instance = mount(Viewport, { target: document.body, props: { onready: (value: TypeGpuRoot) => root = value, onerror } });
     async function settle() {
-      await tick();
+      await settleComponentUpdates();
       for (let i = 0; i < 4; i++) {
         now += 1000 / hz;
         for (const [id, callback] of [...pending]) { pending.delete(id); callback(now); }
@@ -964,7 +979,7 @@ describe('GPU resource and frame lifecycle', () => {
       }
       try {
         flushSync();
-        await tick();
+        await settleComponentUpdates();
         for (let i = 0; i < 4; i++) await step();
         expect(root).toBeDefined();
         expect(pending.size).toBe(0);
@@ -1063,13 +1078,13 @@ describe('GPU resource and frame lifecycle', () => {
       }
     });
     async function settle() {
-      await tick();
+      await settleComponentUpdates();
       for (let i = 0; i < 4; i++) {
         now += 1000 / 120;
         for (const [id, callback] of [...pending]) {
           if (pending.delete(id)) callback(now);
         }
-        await tick();
+        await settleComponentUpdates();
       }
       expect(pending.size).toBe(0);
     }
@@ -1295,7 +1310,7 @@ describe('GPU resource and frame lifecycle', () => {
       try {
         flushSync();
         const root = await ready;
-        await tick();
+        await settleComponentUpdates();
         for (let i = 0; i < 3; i++) await step();
         if (frameloop === 'manual') root.gpu.renderFrame(now);
         expect(pending.size).toBe(0);
@@ -1362,7 +1377,7 @@ describe('GPU resource and frame lifecycle', () => {
           buffer.write.mockClear();
           Object.defineProperty(canvas, 'clientHeight', { configurable: true, value: 360 });
           CanvasSizeObserver.resize(canvas);
-          await tick();
+          await settleComponentUpdates();
           if (frameloop === 'manual') root.gpu.renderFrame(now);
           for (let i = 0; i < 4; i++) await step();
           expect(canvas.dataset.size).toBe('320x360');
@@ -1380,7 +1395,7 @@ describe('GPU resource and frame lifecycle', () => {
         const count = submissions.length;
         const frames = vi.mocked(requestAnimationFrame).mock.calls.length;
         flushSync(() => instance.rename('Idle scene'));
-        await tick();
+        await settleComponentUpdates();
         expect(canvas.getAttribute('aria-label')).toBe('Idle scene');
         expect(submissions).toHaveLength(count);
         expect(requestAnimationFrame).toHaveBeenCalledTimes(frames);
@@ -1442,7 +1457,7 @@ describe('GPU resource and frame lifecycle', () => {
       }
     }
     try {
-      await tick();
+      await settleComponentUpdates();
       step(); step();
       expect(pending.size).toBe(0);
       const staticInstances = buffers.find(buffer => buffer.label.endsWith('instances'))!;
@@ -1450,7 +1465,7 @@ describe('GPU resource and frame lifecycle', () => {
       submissions.length = 0;
       const asset = await loadModel(new TextEncoder().encode('v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3').buffer);
       resolve(asset);
-      await tick();
+      await settleComponentUpdates();
       expect(submissions).toHaveLength(0);
       expect(pending.size).toBe(frameloop === 'demand' ? 1 : 0);
       if (frameloop === 'manual') renderer.renderFrame(now);
@@ -1469,14 +1484,14 @@ describe('GPU resource and frame lifecycle', () => {
       vi.mocked(createMeshPipeline).mockClear();
       instances.write.mockClear();
       flushSync(() => instance.tint());
-      await tick();
+      await settleComponentUpdates();
       expect(instances.write).toHaveBeenCalledOnce();
       expect(instances.write.mock.calls[0][1]).toEqual({ startOffset: 96, endOffset: 192 });
       expect(gpuRoot.createBuffer).not.toHaveBeenCalled();
       expect(gpuRoot.createBindGroup).not.toHaveBeenCalled();
       expect(createMeshPipeline).not.toHaveBeenCalled();
       flushSync(() => instance.hide());
-      await tick();
+      await settleComponentUpdates();
       expect(vertices[0].destroy).toHaveBeenCalledOnce();
       expect(instances.destroy).toHaveBeenCalledOnce();
       expect(staticInstances.destroy).not.toHaveBeenCalled();

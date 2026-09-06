@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compile } from 'svelte/compiler';
 import { render } from 'svelte/server';
+import * as svelte from 'svelte-test/server';
 import { expect, it, vi } from 'vitest';
 
 it('server-renders the canvas shell without initializing WebGPU or mounting a scene', async () => {
@@ -11,11 +12,6 @@ it('server-renders the canvas shell without initializing WebGPU or mounting a sc
     'utf8'
   );
   const compiled = compile(source, { filename: 'Canvas.svelte', generate: 'server', runes: true });
-  const serverEntry = join(
-    dirname(fileURLToPath(import.meta.resolve('svelte/package.json'))),
-    'src/index-server.js'
-  );
-  const svelte = await vi.importActual<Record<string, unknown>>(serverEntry);
   const server = await vi.importActual<Record<string, unknown>>('svelte/internal/server');
   const initialize = vi.fn();
   const scene = vi.fn();

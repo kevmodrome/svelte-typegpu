@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 import { compile } from 'svelte/compiler';
-import { flushSync, mount, tick, unmount, type Component } from 'svelte';
+import { flushSync, mount, unmount, type Component } from 'svelte';
 import * as client from 'svelte/internal/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { compileViewportSource } from './viewport-test-utils';
+import { settleComponentUpdates } from './component-test-utils';
 import { createTypeGpuRoot, type TypeGpuRoot } from './svelte-renderer';
 import { createFragment } from './core';
 
@@ -86,7 +87,7 @@ describe('native canvas size bindings', () => {
     const measure = vi.fn((canvas: HTMLCanvasElement) => dimensions(canvas, 320, 180));
     const instance = mount(Component, { target: document.body, props: { measure, recordHeight } });
     mounted.push(instance);
-    await tick(); await tick();
+    await settleComponentUpdates(); await settleComponentUpdates();
     const canvas = document.querySelector('canvas')!;
     expect(instance.read()).toMatchObject({ width: 320, clientHeight: 180, metrics: { width: 322 } });
     expect(instance.read().rect).toBeUndefined();
@@ -102,7 +103,7 @@ describe('native canvas size bindings', () => {
     expect(canvas.clientWidth).toBe(320); // Read-only: consumer writes never change layout.
     dimensions(canvas, 640, 360);
     const entry = Observer.deliver(canvas, 640, 360);
-    await tick();
+    await settleComponentUpdates();
     expect(instance.read()).toMatchObject({ width: 640, clientHeight: 360, metrics: { width: 642 } });
     expect(previous.width).toBe(322);
     expect(instance.read().rect).toBe(entry.contentRect);
@@ -134,12 +135,12 @@ describe('native canvas size bindings', () => {
     const first = vi.fn(), second = vi.fn();
     const instance = mount(Component, { target: document.body, props: { first, second } });
     mounted.push(instance);
-    await tick(); await tick();
+    await settleComponentUpdates(); await settleComponentUpdates();
     flushSync(() => instance.switchSetter());
     const canvas = document.querySelector('canvas')!;
     dimensions(canvas, 500, 300);
     Observer.deliver(canvas, 500, 300);
-    await tick();
+    await settleComponentUpdates();
     expect(instance.count()).toBe(1);
     expect(first).toHaveBeenLastCalledWith(500);
     expect(second).not.toHaveBeenCalled();
@@ -152,7 +153,7 @@ describe('native canvas size bindings', () => {
     const a = mount(Component, { target: document.body, props: { size: first } });
     const b = mount(Component, { target: document.body, props: { size: second } });
     mounted.push(a, b);
-    await tick(); await tick();
+    await settleComponentUpdates(); await settleComponentUpdates();
     const [left, right] = document.querySelectorAll('canvas');
     const observers = Observer.instances.filter((observer) => observer.targets.has(left));
     expect(observers).toHaveLength(1);

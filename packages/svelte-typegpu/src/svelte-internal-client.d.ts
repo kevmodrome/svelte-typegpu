@@ -5,3 +5,7 @@ declare module 'svelte/internal/client' {
 }
 
 declare module 'svelte/internal/flags/async';
+
+declare module 'svelte-test/server' {
+  export * from 'svelte';
+}

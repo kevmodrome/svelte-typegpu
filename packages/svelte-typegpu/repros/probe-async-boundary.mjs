@@ -33,7 +33,8 @@ try {
   const result = spawnSync(process.execPath, [
     cli, 'run', '--config', 'repros/vitest.svelte-probe.config.ts', ...process.argv.slice(3)
   ], {
-    cwd: directory, env: { ...process.env, SVELTE_PROBE_DIR: copy }, stdio: 'inherit', timeout: 30000
+    cwd: directory, env: { ...process.env, SVELTE_PROBE_DIR: copy }, stdio: 'inherit',
+    timeout: process.env.SVELTE_PROBE_SUITE === 'regression' ? 120000 : 30000
   });
   if (result.error) throw result.error;
   process.exitCode = result.status ?? 1;

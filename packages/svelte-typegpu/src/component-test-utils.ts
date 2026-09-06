@@ -1,8 +1,14 @@
 import { compile } from 'svelte/compiler';
-import type { Component } from 'svelte';
+import { flushSync, type Component } from 'svelte';
 import * as svelteClient from 'svelte/internal/client';
 import renderer from './svelte-renderer';
 import { typeGpuRendererPath } from './test-paths';
+
+export async function settleComponentUpdates() {
+  // Async tick() schedules RAF. Drain microtasks without adding a measured callback.
+  flushSync();
+  await new Promise<void>(resolve => setTimeout(resolve, 0));
+}
 
 export function compileTypeGpuSource<
   Exports extends Record<string, unknown> = Record<string, never>

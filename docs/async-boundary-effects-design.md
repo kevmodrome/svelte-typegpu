@@ -127,3 +127,49 @@ checkpoint as the existing motion suite within frames. This keeps test-generated
 callbacks out of renderer/manual-mode assertions. These checks do not establish
 physical refresh rate or GPU throughput, and full async-mode regression/live
 validation remain open.
+
+## Mixed-compilation regression pass
+
+Add `SVELTE_PROBE_SUITE=regression` to the existing temporary-copy runner. The
+probe config includes the normal package tests plus focused async tests and loads
+`svelte/internal/flags/async` as a setup module in every isolated test graph.
+The normal compiled fixtures retain their existing compiler settings: this tests
+coexistence after one async component enables the shared runtime, not a global
+compiler migration. It also exercises the unchanged renderer and caches against
+the candidate's shared scheduler. No normal test is skipped or assertion relaxed.
+
+Affected files are `repros/vitest.svelte-probe.config.ts`, the runner, a new
+`repros/enable-async.ts` setup module, and the probe README. A bounded longer child
+timeout applies only to the explicit regression suite. Both suites use the same
+copied package aliases and cleanup path; default tests and app flags are retained.
+Record the initial failures before changing fixtures. Browser-only async `tick()`
+and its extra RAF must be distinguished from renderer scheduling, without mocking
+away Svelte behavior in the probe. A broad green runtime pass still does not prove
+global async compiler opt-in, SSR/hydration, live rendering, or physical refresh.
+
+Initial result: 981 tests passed, 148 failed, and one six-test module did not load.
+The failures expose harness assumptions: async `tick()` needs browser RAF and adds
+callbacks to measured queues; SSR helpers resolving the installed server entry by
+absolute path split its context state from the copied server renderer. Three client
+mounting test files now explicitly use happy-dom. Node-only infrastructure tests
+keep their original environment. Both test configs provide a `svelte-test/server`
+alias, imported statically by SSR fixtures, so server context and render functions
+belong to the same graph. Dynamic absolute imports did not work reliably through
+Vitest's browser-environment module URLs.
+
+`component-test-utils.ts:settleComponentUpdates` supplies the existing task-boundary
+flush for frame-count tests and the focused motion probe, without calling async
+`tick()`. GPU lifecycle and viewport-binding tests retain their frame/upload/resource
+assertions. The shared-store example's native range bindings legitimately call
+Svelte's `tick()` internally; its manual-mode test now compares RAF requests against
+a real compiled `NativeRangeInput.svelte` baseline with the same three input events,
+while still asserting zero implicit GPU submissions. This separates native DOM
+callbacks from renderer work rather than allowing an arbitrary request tolerance.
+
+The revised regression suite passes all 1,135 tests, including the 345 existing GPU
+lifecycle tests, the 60 focused async probes (two overlap the normal suite), and
+the existing synchronous canvas SSR/hydration fixtures under the async runtime flag.
+Normal tests still pass all 1,166 workspace cases. Production code, the installed
+dependency, app compiler options and the lockfile remain unchanged. Global async
+compiler opt-in and live GPU validation remain open; the desktop was rechecked and
+is still locked.

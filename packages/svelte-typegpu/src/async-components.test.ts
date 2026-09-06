@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { flushSync, getAbortSignal, getContext, mount, setContext, tick, unmount } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import { createFragment, walk, type TypeGpuNode } from './core';

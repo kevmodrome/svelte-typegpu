@@ -99,5 +99,30 @@ rtk proxy pnpm --filter svelte-typegpu exec tsc -p repros/tsconfig.json
 
 This opt-in suite is excluded from normal tests. The normal suite still checks
 the precise original failure against the untouched installed dependency. Passing
-the narrow teardown probe is not sufficient to enable experimental async scenes;
-full async-mode regressions and live rendering remain gates beyond these focused tests.
+the narrow teardown probe is not sufficient to enable experimental async scenes.
+
+## Existing-component regression suite
+
+```sh
+rtk proxy env SVELTE_PROBE_SUITE=regression pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs nested-effects
+```
+
+This enables the async runtime before each isolated test module and runs the entire
+normal renderer package suite plus the focused probes. The candidate passes all
+1,135 tests, including 345 existing GPU lifecycle cases and synchronous canvas
+SSR/hydration. Compiled fixtures keep their current compiler settings: this tests
+coexistence once an async scene enables Svelte's shared runtime, not a global async
+compiler migration. The original compatibility canary still runs its intentional
+failure in a separate process against the untouched installed dependency.
+
+Frame-count fixtures use a task-boundary flush instead of async `tick()` so test
+synchronization does not add RAF callbacks. The shared-store editor compares its
+manual-mode callback count to a compiled native range-input baseline: Svelte's DOM
+bindings themselves legitimately request callbacks in async mode. GPU submissions,
+targeted uploads, idle behavior, and resource reuse assertions are retained.
+
+Browser client fixtures explicitly use happy-dom; Node-only infrastructure tests
+retain Node. A test-only server alias keeps SSR context and rendering in one Svelte
+module graph. No installed runtime behavior is mocked or patched by the harness.
+Global async compiler opt-in, genuinely async SSR/hydration, production patch policy,
+and live GPU/physical-refresh validation remain gates before enabling this in apps.

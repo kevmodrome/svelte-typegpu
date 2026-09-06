@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compile } from 'svelte/compiler';
 import { render } from 'svelte/server';
+import * as svelteServer from 'svelte-test/server';
 import { flushSync, getContext, hydrate, mount, tick, unmount } from 'svelte';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createTypeGpuRoot, type TypeGpuRoot } from './svelte-renderer';
@@ -223,8 +224,6 @@ describe('declarative canvas', () => {
   });
 
   it('hydrates the actual server host and retains its canvas identity', async () => {
-    const serverPath = join(dirname(fileURLToPath(import.meta.resolve('svelte/package.json'))), 'src/index-server.js');
-    const svelte = await vi.importActual<Record<string, unknown>>(serverPath);
     const server = await vi.importActual<Record<string, unknown>>('svelte/internal/server');
     function evaluate(code: string, dependencies: Record<string, unknown>) {
       const name = code.match(/export default function (\w+)/)![1];
@@ -234,7 +233,7 @@ describe('declarative canvas', () => {
     const initialize = vi.fn();
     const hostSource = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'ViewportCanvas.svelte'), 'utf8');
     const Host = evaluate(compile(hostSource, { filename: 'ViewportCanvas.svelte', generate: 'server', runes: true }).js.code,
-      { getAllContexts: svelte.getAllContexts, onMount: svelte.onMount, startCanvasScene: initialize });
+      { getAllContexts: svelteServer.getAllContexts, onMount: svelteServer.onMount, startCanvasScene: initialize });
     const ServerViewport = evaluate(compileTypeGpu(source, { filename: 'Viewport.typegpu.svelte', generate: 'server', runes: true }).js.code,
       { TypeGpuViewportCanvas: Host, TypeGpuCanvasBindings: canvasBindings });
     const measure = vi.fn();

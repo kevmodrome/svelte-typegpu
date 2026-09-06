@@ -18,6 +18,12 @@ export default defineConfig({
         replacement: fileURLToPath(
           new URL('./src/index-client.js', import.meta.resolve('svelte/package.json'))
         )
+      },
+      {
+        find: /^svelte-test\/server$/,
+        replacement: fileURLToPath(
+          new URL('./src/index-server.js', import.meta.resolve('svelte/package.json'))
+        )
       }
     ],
     environment: 'node',

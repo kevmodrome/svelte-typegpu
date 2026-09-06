@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { flushSync, mount, unmount } from 'svelte';
 import * as svelteClient from 'svelte/internal/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';

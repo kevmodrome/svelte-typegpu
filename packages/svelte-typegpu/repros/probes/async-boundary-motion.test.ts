@@ -4,7 +4,7 @@ import { flushSync, mount, unmount } from 'svelte';
 import { Spring, Tween } from 'svelte/motion';
 import * as client from 'svelte/internal/client';
 import { afterEach, expect, it, vi } from 'vitest';
-import { compileAsyncTypeGpuSource } from '../../src/component-test-utils';
+import { compileAsyncTypeGpuSource, settleComponentUpdates } from '../../src/component-test-utils';
 import { createFragment } from '../../src/core';
 import { createFakeGpuRoot } from '../../src/gpu-test-utils';
 import { createTypeGpuRenderer } from '../../src/gpu-renderer';
@@ -39,12 +39,6 @@ function deferred() {
   let reject!: (error: Error) => void;
   const promise = new Promise<string>((yes, no) => { resolve = yes; reject = no; });
   return { promise, resolve, reject };
-}
-
-async function settleUpdates() {
-  // Async tick() schedules RAF. Drain microtasks without adding a measured callback.
-  flushSync();
-  await new Promise<void>(resolve => setTimeout(resolve, 0));
 }
 
 it.each([60, 120, 144].flatMap(hz => ['Tween', 'Spring'].flatMap(kind => [
@@ -125,7 +119,7 @@ it.each([60, 120, 144].flatMap(hz => ['Tween', 'Spring'].flatMap(kind => [
     }
     let disposed = false;
     try {
-      await settleUpdates();
+      await settleComponentUpdates();
       for (let i = 0; i < 3; i++) await step();
       if (frameloop === 'manual') draw.renderFrame(now);
       expect(setup.mock.calls.length).toBe(0);
@@ -143,11 +137,11 @@ it.each([60, 120, 144].flatMap(hz => ['Tween', 'Spring'].flatMap(kind => [
       for (let frame = 0; frame < hz; frame++) {
         instances.write.mockClear();
         if (frame === revealFrame) {
-          first.resolve('ready'); await settleUpdates();
+          first.resolve('ready'); await settleComponentUpdates();
           expect(setup).toHaveBeenCalledOnce();
         }
         if (frame === hideFrame) {
-          flushSync(() => instance.hide()); await settleUpdates();
+          flushSync(() => instance.hide()); await settleComponentUpdates();
           expect(cleanup).toHaveBeenCalledOnce();
         }
         const before = submissions.length;
@@ -176,7 +170,7 @@ it.each([60, 120, 144].flatMap(hz => ['Tween', 'Spring'].flatMap(kind => [
       await stop();
       for (let i = 0; i < 4; i++) await step();
       expect(pending.size).toBe(0);
-      flushSync(() => instance.show(late.promise)); await settleUpdates();
+      flushSync(() => instance.show(late.promise)); await settleComponentUpdates();
       for (let i = 0; i < 3; i++) await step();
       expect(pending.size).toBe(0);
       expect(setup).toHaveBeenCalledOnce();
@@ -188,7 +182,7 @@ it.each([60, 120, 144].flatMap(hz => ['Tween', 'Spring'].flatMap(kind => [
       instances.write.mockClear();
       if (outcome === 'resolve') late.resolve('obsolete');
       else late.reject(new Error('obsolete'));
-      await settleUpdates();
+      await settleComponentUpdates();
       expect([...pending.values()].every(callback => producers.has(callback))).toBe(true);
       await stop();
       for (let i = 0; i < 4; i++) await step();

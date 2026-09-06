@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { flushSync, mount, tick, unmount } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import { compileTypeGpuSource } from './component-test-utils';
