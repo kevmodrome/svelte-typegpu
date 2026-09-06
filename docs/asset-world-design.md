@@ -68,3 +68,37 @@ format support. GLB textures may resolve after CPU geometry; avoid declaring
 texture completion from the loader. Bounding-box picking is approximate.
 Existing uncommitted renderer optimization changes are outside this slice and
 must not be accidentally committed. Generated outputs stay generator-owned.
+
+Implementation evidence: generated DOM examples importing a `.ts` helper lost its
+types because the generator emitted JavaScript alone. Emit a portable `.d.ts`
+re-export of each helper's original TypeScript source; the existing targeted
+Svelte check now includes the asset-world controls. Reject transpilation syntax
+errors instead of silently emitting recovery output. Runtime compilation is unchanged.
+
+## Verification results
+
+- Nine unmodified GLBs: 122,884 bytes total, every source primitive imported,
+  finite bounds, no external textures. Three importer/loader tests.
+- 18 real compiled Campsite/Canoe cases at 60/120/144 Hz with real Tween/Spring
+  external producers, both RAF orders and manual mode. Steady frames write only
+  the canoe's two primitive instances and the external producer's one mesh:
+  three 96-byte ranges, no new buffers/bind groups/pipelines. Static instances
+  retain storage/data. Pause settles and disposal cancels pending work.
+- Full workspace: 1,427 tests passed (1,329 renderer, 59 docs, 34 example, 5 root).
+  Renderer TypeScript and targeted generated-DOM Svelte checks passed.
+- Browser probe `packages/svelte-typegpu/repros/asset-world.mjs`: desktop 1440
+  and mobile 390, nonblank canvas pixel checks, day/dusk screenshots, direct
+  canoe picking, scenery toggles/reset, HTTP failure/retry retaining the native
+  canvas, reduced-motion pause. No page or GPU validation errors.
+- Steady resources: 52 buffers, 4 bind groups, 2 mesh pipelines. Nine model fetches,
+  with no refetch on scene controls. Sampled delivered frames/callbacks: 49/49
+  desktop and 126/126 mobile. Each frame has a shadow and color submission;
+  submission count is not FPS. These SwiftShader samples do not establish
+  physical monitor refresh or hardware GPU throughput.
+- Broad raw-source docs `svelte-check` still encounters existing custom-renderer
+  typing/configuration limitations; the supported targeted check is clean.
+
+Run the browser probe against a running docs server using the same browser
+dependency environment variables as `repros/listener-options.mjs`, plus optional
+`SVELTE_PROBE_URL` (default `http://127.0.0.1:3335/examples/asset-world`) and
+`SVELTE_PROBE_OUTPUT` (default `/tmp/typegpu-asset-world`).

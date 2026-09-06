@@ -52,7 +52,7 @@
     paused: false
   });
   let motionControls = $state({ x: 0, z: 0, lift: 0, visible: true, appearance: 0, count: 2000 });
-  const hasRenderSettings = $derived(slug === 'svelte-motion' || slug === 'native-events' || slug === 'shared-stores' || slug === 'reactive-collections');
+  const hasRenderSettings = $derived(slug === 'asset-world' || slug === 'svelte-motion' || slug === 'native-events' || slug === 'shared-stores' || slug === 'reactive-collections');
 
   const hasControls = $derived(
       slug === 'svelte-motion' ||
@@ -94,7 +94,7 @@
   });
 
   $effect(() => {
-    frameloop = slug === 'gravity' || slug === 'svelte-motion' || slug === 'native-events' || slug === 'shared-stores' || slug === 'reactive-collections' ? 'demand' : 'always';
+    frameloop = slug === 'asset-world' || slug === 'gravity' || slug === 'svelte-motion' || slug === 'native-events' || slug === 'shared-stores' || slug === 'reactive-collections' ? 'demand' : 'always';
     maxDevicePixelRatio = 1.5;
     error = null;
     ready = false;
@@ -235,9 +235,9 @@
 {/if}
 
 <div class:preview-with-controls={hasControls}>
-  <section class="preview-panel" class:preview-with-store-controls={slug === 'shared-stores'} class:preview-with-collection-controls={slug === 'reactive-collections'} aria-label={`${label} live preview`}>
+  <section class="preview-panel" class:preview-asset-world={slug === 'asset-world'} class:preview-with-store-controls={slug === 'shared-stores'} class:preview-with-collection-controls={slug === 'reactive-collections'} aria-label={`${label} live preview`}>
     {#key slug}
-      {#if slug === 'native-events' || slug === 'shared-stores' || slug === 'reactive-collections'}
+      {#if slug === 'asset-world' || slug === 'native-events' || slug === 'shared-stores' || slug === 'reactive-collections'}
         {@const Viewport = sceneComponents[slug]}
         <Viewport {frameloop} {maxDevicePixelRatio} onfps={(value: number) => fps = value} onready={handleReady} onrenderererror={handleError} />
       {:else}

@@ -773,6 +773,14 @@ textarea {
   height: 480px;
 }
 
+.preview-panel.preview-asset-world { aspect-ratio: auto; height: 660px; }
+.preview-panel.preview-asset-world::before,
+.preview-panel.preview-asset-world::after { display: none; }
+.preview-asset-world .preview-status { inset: 64px 14px auto; }
+@media (max-width: 700px) {
+  .preview-panel.preview-asset-world { height: 600px; }
+}
+
 .preview-panel.preview-with-collection-controls {
   aspect-ratio: auto;
   height: 520px;

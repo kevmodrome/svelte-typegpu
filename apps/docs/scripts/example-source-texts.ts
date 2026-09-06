@@ -31,8 +31,14 @@ import storeViewport from '../src/examples/shared-stores/StoreViewport.typegpu.s
 import reactiveCollections from '../src/examples/reactive-collections/ReactiveCollections.svelte' with { type: 'text' };
 import collectionViewport from '../src/examples/reactive-collections/CollectionViewport.typegpu.svelte' with { type: 'text' };
 import collection from '../src/examples/reactive-collections/collection.ts' with { type: 'text' };
+import assetWorld from '../src/examples/asset-world/AssetWorld.svelte' with { type: 'text' };
+import worldViewport from '../src/examples/asset-world/WorldViewport.typegpu.svelte' with { type: 'text' };
+import campsite from '../src/examples/asset-world/Campsite.typegpu.svelte' with { type: 'text' };
+import canoe from '../src/examples/asset-world/Canoe.typegpu.svelte' with { type: 'text' };
+import world from '../src/examples/asset-world/world.ts' with { type: 'text' };
 
 export const exampleSourceTexts = {
+  'asset-world': [assetWorld, worldViewport, campsite, canoe, world],
   'native-events': [nativeEvents],
   'shared-stores': [sharedStores, storeViewport],
   'reactive-collections': [reactiveCollections, collectionViewport, collection],

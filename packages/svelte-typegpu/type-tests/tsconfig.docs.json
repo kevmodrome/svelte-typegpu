@@ -1,6 +1,7 @@
 {
   "extends": "../tsconfig.json",
   "include": [
-    "../../../apps/docs/src/generated/typegpu-scenes/shared-stores/SharedStores.svelte"
+    "../../../apps/docs/src/generated/typegpu-scenes/shared-stores/SharedStores.svelte",
+    "../../../apps/docs/src/generated/typegpu-scenes/asset-world/AssetWorld.svelte"
   ]
 }

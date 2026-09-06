@@ -24,6 +24,7 @@ describe('docs example registry', () => {
   it('contains the curated TypeGPU adaptations in display order', () => {
     expect(examples.map((example) => example.slug)).toEqual([
       'two-boxes',
+      'asset-world',
       'svelte-motion',
       'native-events',
       'shared-stores',
@@ -35,6 +36,19 @@ describe('docs example registry', () => {
       'multiple-smoky-triangles',
       'gravity'
     ]);
+  });
+
+  it('publishes the asset world with reusable components and local GLB loading', () => {
+    const example = getExampleBySlug('asset-world');
+    expect(example.sourceFiles.map(file => file.filename)).toEqual([
+      'AssetWorld.svelte', 'WorldViewport.typegpu.svelte', 'Campsite.typegpu.svelte',
+      'Canoe.typegpu.svelte', 'world.ts'
+    ]);
+    for (const syntax of ['<canvas', '<model', '<frameTask', 'loadModel(', 'onclick=', 'AbortController']) {
+      expect(example.code).toContain(syntax);
+    }
+    expect(example.code).not.toContain('requestAnimationFrame');
+    expect(example.code).not.toContain('sceneProps');
   });
 
   it('keeps metadata complete for every example', () => {
@@ -240,6 +254,19 @@ describe('docs example registry', () => {
         );
 
         expect(shaderHelper?.source).toMatch(/tgpu\s*\.\s*fragmentFn/);
+      }
+    }
+  });
+
+  it('retains portable TypeScript declarations for generated example helpers', () => {
+    for (const definition of exampleDefinitions) {
+      for (const source of definition.sourceFiles.filter(url => url.pathname.endsWith('.ts'))) {
+        const filename = source.pathname.split('/').at(-1)!.replace(/\.ts$/, '.d.ts');
+        const declaration = new URL(`../generated/typegpu-scenes/${definition.slug}/${filename}`, import.meta.url);
+        const text = readFileSync(declaration, 'utf8');
+        const specifier = text.match(/export \* from "([^"]+)"/)![1];
+        expect(specifier.startsWith('../')).toBe(true);
+        expect(new URL(`${specifier}.ts`, declaration).href).toBe(source.href);
       }
     }
   });

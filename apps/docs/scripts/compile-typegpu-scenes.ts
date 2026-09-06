@@ -204,14 +204,23 @@ function writeGeneratedSourceFile(
 
   if (sourceFile.label.endsWith('.ts')) {
     const transpiled = ts.transpileModule(sourceFile.source, {
+      reportDiagnostics: true,
       compilerOptions: {
         module: ts.ModuleKind.ESNext,
         target: ts.ScriptTarget.ES2022,
         verbatimModuleSyntax: true
       }
     });
+    const errors = transpiled.diagnostics?.filter(diagnostic => diagnostic.category === ts.DiagnosticCategory.Error) ?? [];
+    if (errors.length) {
+      throw new Error(`${sourceFile.path}: ${errors.map(error => ts.flattenDiagnosticMessageText(error.messageText, '\n')).join('\n')}`);
+    }
 
     writeFileSync(outPath, `${header(sourceFile.path)}\n${transpiled.outputText}`);
+    // DOM examples import these helpers too; retain the original TypeScript contract.
+    const declarationSource = path.relative(sceneDirectory, sourceFile.path).replaceAll(path.sep, '/').replace(/\.ts$/, '');
+    writeFileSync(outPath.replace(/\.js$/, '.d.ts'),
+      `${header(sourceFile.path)}\nexport * from ${JSON.stringify(declarationSource)};\n`);
     return;
   }
 

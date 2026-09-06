@@ -21,6 +21,24 @@ export const exampleDefinitions = [
     typeGpuSourceFiles: [{ path: 'index.ts', loc: 417 }]
   },
   {
+    slug: 'asset-world',
+    title: 'Asset World',
+    category: 'worlds',
+    tags: ['3d', 'GLB assets', 'components', 'interaction', 'frame tasks'],
+    description: 'A lakeside campsite with shared GLB models, orbit controls, shadows and a drifting canoe.',
+    notes: 'Nine locally bundled CC0 models from Kenney Nature Kit, composed with ordinary Svelte components, keyed lists and direct model events. The canoe uses a frameTask; pause it to let demand rendering idle. Asset loading includes progress, cancellation and retry.',
+    exportName: 'AssetWorld',
+    sourceUrl: new URL('./asset-world/AssetWorld.svelte', import.meta.url),
+    sourceFiles: [
+      new URL('./asset-world/AssetWorld.svelte', import.meta.url),
+      new URL('./asset-world/WorldViewport.typegpu.svelte', import.meta.url),
+      new URL('./asset-world/Campsite.typegpu.svelte', import.meta.url),
+      new URL('./asset-world/Canoe.typegpu.svelte', import.meta.url),
+      new URL('./asset-world/world.ts', import.meta.url)
+    ],
+    typeGpuSourceFiles: []
+  },
+  {
     slug: 'svelte-motion',
     title: 'Svelte Motion',
     category: 'animation',
