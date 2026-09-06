@@ -96,10 +96,12 @@ export function createCameraInteractionController({
     eventOrbit: Pick<TypeGpuOrbitState, 'radius' | 'yaw' | 'pitch'>,
     event: Event | undefined
   ) => {
-    if (!activeScene?.cameraControllerNode) return;
+    const scene = activeScene;
+    if (!scene?.cameraControllerNode) return;
+    const controlsNode = scene.cameraControllerNode;
 
-    const controlsNode = activeScene.cameraControllerNode;
-
+    // Publish before notifying callbacks, which may switch cameras or dispose.
+    scene.camera = camera;
     renderer.setCamera(camera);
     dispatchNodeEvent(controlsNode, 'camerachange', {
       detail: {
@@ -108,7 +110,6 @@ export function createCameraInteractionController({
       },
       originalEvent: event
     });
-    activeScene.camera = camera;
   };
 
   const queueCameraUpdate = (event: Event) => {
@@ -607,10 +608,10 @@ export function createCameraInteractionController({
         activeControls !== null &&
         (activeControls.pointer !== null || activeControls.keyboard !== null)
       ) {
-        const sameCameraState =
-          activeScene !== null && hasSameInteractiveCameraState(activeScene, nextScene);
+        const sameInputState =
+          activeScene !== null && hasSameCameraInputState(activeScene, nextScene);
 
-        if (activeScene !== null && !sameCameraState) {
+        if (activeScene !== null && !sameInputState) {
           cancelPendingCameraUpdate();
           resetGestureState();
           resetKeyboardState();
@@ -619,7 +620,7 @@ export function createCameraInteractionController({
         activeScene = nextScene;
         activePointerControls = activeControls.pointer;
         activeKeyboardControls = activeControls.keyboard;
-        if (!sameCameraState || !framePending) {
+        if (!sameInputState || !framePending) {
           orbit = deriveOrbitState(nextScene.camera, {
             minDistance: cameraController.minDistance,
             maxDistance: cameraController.maxDistance
@@ -673,14 +674,14 @@ function buttonMask(button: TypeGpuPointerDragButton): number {
   }
 }
 
-function hasSameInteractiveCameraState(
+function hasSameCameraInputState(
   previous: TypeGpuSceneState,
   next: TypeGpuSceneState
 ): boolean {
   return (
     previous.cameraNode === next.cameraNode &&
     previous.cameraControllerNode === next.cameraControllerNode &&
-    cameraSettingsEqual(previous.camera, next.camera) &&
+    cameraPoseEqual(previous.camera, next.camera) &&
     cameraControllersEqual(previous.cameraController, next.cameraController)
   );
 }
@@ -768,16 +769,14 @@ function cameraControllersEqual(
   return false;
 }
 
-function cameraSettingsEqual(
+function cameraPoseEqual(
   previous: TypeGpuCameraSettings,
   next: TypeGpuCameraSettings
 ): boolean {
   return (
     vectorEqual(previous.position, next.position) &&
     vectorEqual(previous.target, next.target) &&
-    previous.fov === next.fov &&
-    previous.near === next.near &&
-    previous.far === next.far
+    (previous.projection ?? 'perspective') === (next.projection ?? 'perspective')
   );
 }
 

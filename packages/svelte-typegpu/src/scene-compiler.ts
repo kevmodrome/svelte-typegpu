@@ -2,6 +2,7 @@ import { numberArg } from './attributes';
 import { POINTER_NODE_EVENTS } from './node-events';
 import { transformBounds } from './bounds';
 import { readCameraState } from './camera';
+import { SceneCameraCache } from './scene-camera-cache';
 import type { TypeGpuNode } from './core';
 import { Dirty, hasDirty } from './dirty';
 import { createDrawBatchCache, type TypeGpuDrawBatchCache } from './draw-batch-cache';
@@ -46,6 +47,7 @@ import type {
 } from './types';
 
 export interface TypeGpuSceneCache {
+  cameras: SceneCameraCache;
   drawBatchCache: TypeGpuDrawBatchCache;
   modelCache: TypeGpuModelCache;
   revisions: SceneRevisionCache;
@@ -84,6 +86,7 @@ export function createTypeGpuSceneCache(
   options: CreateTypeGpuSceneCacheOptions = {}
 ): TypeGpuSceneCache {
   return {
+    cameras: new SceneCameraCache(),
     drawBatchCache: createDrawBatchCache(),
     revisions: new SceneRevisionCache(),
     transforms: new SceneTransformCache(),
@@ -188,10 +191,11 @@ export function createSceneState(
   }
   if (drawItems || recomputeInteraction) cache.transforms.attachInteraction(interaction.targets);
   if (recomputeDrawBatches) cache.transforms.commit();
+  const cameraSettings = cache.cameras.resolve(root, camera, cache.lastState);
 
   return (cache.lastState = {
     dirty,
-    camera: camera.settings,
+    camera: cameraSettings,
     cameraNode: camera.node,
     cameraControllerNode: camera.controllerNode,
     cameraController: camera.controller,

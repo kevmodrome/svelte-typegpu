@@ -340,6 +340,37 @@ cleanup and bounded demand frames; manual mode never requests RAF.
 Dynamic tags do not bypass the host-binding, transition, or editor limitations
 listed above.
 
+## Camera continuity
+
+An interactive camera's live view belongs to its host node. Updating a keyed list,
+conditional object, material, or other scene content does not restore the camera's
+initial markup values. Switching back to a retained camera node restores that
+node's live view; the renderer does not require IDs for this ownership.
+
+Camera props remain reactive, with field-level ownership. Changing `fov`, `zoom`,
+`near`, or `far` updates the lens without discarding the current position/target or
+canceling pending orbit input. Changing `position` or `target` overrides that field
+and cancels stale input. Unchanged effective declarations, including fresh equal
+tuples, do not overwrite user-controlled values. A `camerachange` callback is
+optional; applications do not need to feed every gesture back into props to keep
+the view stable.
+
+To reset a camera deliberately, recreate its node with `{#key}` inside the scene:
+
+```svelte
+{#key cameraVersion}
+  <perspectiveCamera position={[0, 0, 8]} {fov}>
+    <controls><pointerControls /></controls>
+  </perspectiveCamera>
+{/key}
+```
+
+Incrementing `cameraVersion` resets the view to the currently declared props;
+reactive state outside the key block, such as `fov`, is retained. A removed prop
+uses its normalized default when that changes the effective declaration. Controls
+publish the new live view before notifying callbacks, so a callback can switch
+cameras or unmount safely. See the [ownership design and verification](camera-continuity-design.md).
+
 ## Resetting scene state
 
 Use `{#key}` when a change should recreate a subtree, including the local state of

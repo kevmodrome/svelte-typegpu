@@ -275,6 +275,76 @@ function fakeFrameScheduler(): {
 }
 
 describe('TypeGPU camera interaction controller', () => {
+  it.each(['switch', 'dispose', 'throw'] as const)('commits camera state before a callback can %s', operation => {
+    const canvas = fakeCanvas(), frames = fakeFrameScheduler(), renderer = fakeRenderer();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement, renderer,
+      windowTarget: new FakeEventTarget() as unknown as Window,
+      requestFrame: frames.requestFrame, cancelFrame: frames.cancelFrame
+    });
+    const scene = sceneState(), replacement = sceneState({ cameraSettings: { ...camera, position: [3, 4, 12] } });
+    const replacementView = replacement.camera;
+    let observed: TypeGpuCameraSettings | undefined;
+    addEventListener(scene.cameraControllerNode!, 'camerachange', () => {
+      observed = scene.camera;
+      if (operation === 'switch') controller.reconcile(replacement);
+      if (operation === 'dispose') controller.dispose();
+      if (operation === 'throw') throw new Error('camera callback');
+    });
+    controller.reconcile(scene);
+    canvas.dispatch<WheelEvent>('wheel', { deltaY: -2, deltaMode: 0 });
+    if (operation === 'throw') expect(() => frames.runFrame()).toThrow('camera callback');
+    else expect(() => frames.runFrame()).not.toThrow();
+    expect(scene.camera).toBe(renderer.setCamera.mock.lastCall![0]);
+    expect(observed).toBe(scene.camera);
+    expect(replacement.camera).toBe(replacementView);
+    controller.dispose();
+  });
+
+  it.each(['position', 'target', 'projection'] as const)('cancels stale orbit input after an explicit %s change', field => {
+    const canvas = fakeCanvas(), frames = fakeFrameScheduler(), renderer = fakeRenderer();
+    const controller = createCameraInteractionController({
+      canvas: canvas as unknown as HTMLCanvasElement, renderer,
+      windowTarget: new FakeEventTarget() as unknown as Window,
+      requestFrame: frames.requestFrame, cancelFrame: frames.cancelFrame
+    });
+    const scene = sceneState();
+    controller.reconcile(scene);
+    canvas.dispatch<WheelEvent>('wheel', { deltaY: -2, deltaMode: 0 });
+    const next: TypeGpuCameraSettings = field === 'projection'
+      ? { projection: 'orthographic', position: scene.camera.position, target: scene.camera.target,
+          near: 0.1, far: 100, zoom: 1 }
+      : { ...scene.camera, [field]: [2, 1, 8] };
+    controller.reconcile({ ...scene, camera: next });
+    expect(frames.cancelFrame).toHaveBeenCalledExactlyOnceWith(42);
+    expect(frames.pendingCount()).toBe(0);
+    frames.runFrame();
+    expect(renderer.setCamera).not.toHaveBeenCalled();
+    controller.dispose();
+  });
+
+  it.each([['fov', 60], ['near', 0.2], ['far', 300]] as const)(
+    'keeps pending orbit input through a %s update and uses the new lens', (attribute, value) => {
+      const canvas = fakeCanvas(), frames = fakeFrameScheduler(), renderer = fakeRenderer();
+      const controller = createCameraInteractionController({
+        canvas: canvas as unknown as HTMLCanvasElement, renderer,
+        windowTarget: new FakeEventTarget() as unknown as Window,
+        requestFrame: frames.requestFrame, cancelFrame: frames.cancelFrame
+      });
+      const scene = sceneState();
+      controller.reconcile(scene);
+      canvas.dispatch<WheelEvent>('wheel', { deltaY: -2, deltaMode: 0 });
+      controller.reconcile({ ...scene, camera: { ...scene.camera, [attribute]: value } });
+      expect(frames.cancelFrame).not.toHaveBeenCalled();
+      expect(frames.pendingCount()).toBe(1);
+      frames.runFrame();
+      expect(renderer.setCamera).toHaveBeenCalledOnce();
+      expect(renderer.setCamera.mock.lastCall![0]).toMatchObject({ [attribute]: value });
+      expect(renderer.setCamera.mock.lastCall![0].position[2]).toBeLessThan(scene.camera.position[2]);
+      controller.dispose();
+    }
+  );
+
   it('attaches pointer listeners only for active pointer controls', () => {
     const inactiveCanvas = new FakeEventTarget();
     const inactiveWindow = new FakeEventTarget();

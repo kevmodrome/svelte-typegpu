@@ -690,6 +690,7 @@ function createRuntime(
       dirtyNodes.clear();
       sceneCache.transforms.reset(root);
       sceneCache.values.reset();
+      sceneCache.cameras.clear();
       sceneCache.lastState = undefined;
       sceneCache.resourceItems = [];
       sceneCache.cleanDrawBatches = [];
