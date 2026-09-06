@@ -75,6 +75,9 @@ describe('attachment listener lifecycle during real Svelte motion', () => {
       export function read() { return { moves, presses }; }
       onDestroy(() => { void motion.set(motion.current, ${kind === 'Tween' ? '{ duration: 0 }' : '{ instant: true }'}); });
     </script><scene>
+      <perspectiveCamera position={[0, 0, 10]} target={[0, 0, 0]}>
+        <controls><pointerControls wheel="zoom" /></controls>
+      </perspectiveCamera>
       {#each Array.from({ length: 100 }, (_, i) => i) as id (id)}
         <mesh position={[id + 10, 0, 0]}><boxGeometry /><standardMaterial /></mesh>
       {/each}
@@ -100,8 +103,12 @@ describe('attachment listener lifecycle during real Svelte motion', () => {
     try {
       await settleComponentUpdates();
       for (let i = 0; i < 3; i++) await step();
+      canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: -2, cancelable: true }));
+      for (let i = 0; i < 4; i++) await step();
       if (frameloop === 'manual') gpuRenderer.renderFrame(now);
       expect(pending.size).toBe(0);
+      const view = changed.mock.lastCall![0].camera;
+      expect(view.position[2]).toBeLessThan(10);
       const node = setup.mock.calls[0][0];
       const buffer = buffers.find(buffer => buffer.label.endsWith('instances'))!;
       const storage = changed.mock.lastCall![0].drawBatches[0].instances;
@@ -129,7 +136,10 @@ describe('attachment listener lifecycle during real Svelte motion', () => {
           rendererFirst ? ['render', 'motion'] : ['motion', 'render']);
         expect(buffer.write).toHaveBeenCalledTimes(frame === 2 ? 2 : 1);
         for (const [, range] of buffer.write.mock.calls) expect(range).toEqual({ startOffset: 100 * 96, endOffset: 101 * 96 });
-        for (const [state] of changed.mock.calls) expect(state.drawBatches[0].instances).toBe(storage);
+        for (const [state] of changed.mock.calls) {
+          expect(state.drawBatches[0].instances).toBe(storage);
+          expect(state.camera).toBe(view);
+        }
         expect(buffer.data[100 * 24]).toBeCloseTo(instance.current());
         if (frame === 6) registration = [...node.listeners.get('pointermove')!.values()][0];
         if (frame === 4 || frame === 5) expect(node.listeners.size).toBe(0);

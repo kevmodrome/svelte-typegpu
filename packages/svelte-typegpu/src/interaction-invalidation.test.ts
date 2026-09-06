@@ -47,10 +47,12 @@ async function setup(hz: number, frameloop: 'demand' | 'manual' | 'always', cont
   root.runtime = runtime;
   const calls = vi.fn();
   const Scene = compileTypeGpuSource<{
-    abort(): void; renew(): void; configure(options: { pointerEvents?: string; x?: number }): void
+    abort(): void; renew(): void; configure(options: { pointerEvents?: string; x?: number }): void;
+    selectCamera(alternate: boolean): void; resetCamera(): void; lens(fov: number): void;
   }>(`<script>
     let { onNodeEvent, calls, controls } = $props();
     let generation = $state(0), pointerEvents = $state('auto'), x = $state(0), active;
+    let alternate = $state(false), cameraKey = $state(0), fov = $state(45);
     function listen(key) { return node => {
       const controller = new AbortController(); active = controller;
       for (const type of ['click', 'wheel', 'pointercancel', 'dragstart', 'dragend']) {
@@ -62,12 +64,20 @@ async function setup(hz: number, frameloop: 'demand' | 'manual' | 'always', cont
     }; }
     export function abort() { active.abort(); }
     export function renew() { generation++; }
+    export function selectCamera(next) { alternate = next; }
+    export function resetCamera() { cameraKey++; }
+    export function lens(next) { fov = next; }
     export function configure(options) {
       if (options.pointerEvents !== undefined) pointerEvents = options.pointerEvents;
       if (options.x !== undefined) x = options.x;
     }
   </script><scene>
-    <perspectiveCamera position={[0, 0, 10]} target={[0, 0, 0]}>
+    {#key cameraKey}
+      <perspectiveCamera active={!alternate} position={[0, 0, 10]} target={[0, 0, 0]} {fov}>
+        {#if controls}<controls><pointerControls wheel="zoom" /></controls>{/if}
+      </perspectiveCamera>
+    {/key}
+    <perspectiveCamera active={alternate} position={[0, 0, 20]} target={[0, 0, 0]}>
       {#if controls}<controls><pointerControls wheel="zoom" /></controls>{/if}
     </perspectiveCamera>
     {#each Array.from({ length: 100 }, (_, i) => i) as i (i)}
@@ -105,6 +115,42 @@ function input(target: EventTarget, type: string) {
 }
 
 describe('interaction-only invalidation', () => {
+  it.each([60, 120, 144])('retains switched cameras and resets keyed cameras through Svelte at %s Hz', async hz => {
+    const f = await setup(hz, 'demand', true);
+    try {
+      const firstNode = f.changed.mock.lastCall![0].cameraNode;
+      f.gpu.createBuffer.mockClear(); f.gpu.createBindGroup.mockClear(); vi.mocked(createMeshPipeline).mockClear();
+      async function settle() {
+        await settleComponentUpdates();
+        for (let i = 0; i < 4; i++) await f.step();
+        expect(f.pending.size).toBe(0);
+        return f.changed.mock.lastCall![0];
+      }
+      input(f.canvas, 'wheel');
+      flushSync(() => f.instance.lens(60));
+      const first = (await settle()).camera;
+      expect(first.fov).toBe(60); expect(first.position[2]).toBeLessThan(10);
+      expect(f.camera).toHaveBeenCalledOnce();
+      flushSync(() => f.instance.selectCamera(true));
+      expect((await settle()).camera.position).toEqual([0, 0, 20]);
+      input(f.canvas, 'wheel');
+      const second = (await settle()).camera;
+      expect(second.position[2]).toBeLessThan(20);
+      flushSync(() => f.instance.selectCamera(false));
+      expect((await settle()).camera).toBe(first);
+      flushSync(() => f.instance.selectCamera(true));
+      expect((await settle()).camera).toBe(second);
+      flushSync(() => { f.instance.selectCamera(false); f.instance.resetCamera(); });
+      const replaced = await settle();
+      expect(replaced.cameraNode).not.toBe(firstNode);
+      expect(replaced.camera.position).toEqual([0, 0, 10]);
+      expect(replaced.camera.fov).toBe(60);
+      expect(f.gpu.createBuffer).not.toHaveBeenCalled(); expect(f.gpu.createBindGroup).not.toHaveBeenCalled();
+      expect(createMeshPipeline).not.toHaveBeenCalled();
+    } finally { await f.dispose(); }
+    expect(f.pending.size).toBe(0);
+  });
+
   it.each([60, 120, 144].flatMap(hz => ['demand', 'manual', 'always'].map(frameloop => ({
     hz, frameloop: frameloop as 'demand' | 'manual' | 'always'
   }))))('updates compiled attachments without extra frames at $hz Hz ($frameloop)', async ({ hz, frameloop }) => {

@@ -24,6 +24,11 @@ simulation, or GPU root. Changing the `scene` component intentionally unmounts
 the old scene and mounts the new one on the same root. Parent Svelte context is
 available to scene components, including reactive values and async children.
 
+Interactive camera views survive unrelated keyed/conditional content updates.
+Changed camera props update their own fields; use a `{#key}` block around the
+camera to reset its view deliberately. Retained inactive cameras keep their views
+when selected again. See [camera continuity](svelte-compatibility.md#camera-continuity).
+
 TypeScript users get scene prop and callback inference from `scene`, including
 required props and tuple values. Unknown inline `sceneProps` fields are rejected
 instead of widening the scene's type. This requires TypeScript 5.4 or newer.

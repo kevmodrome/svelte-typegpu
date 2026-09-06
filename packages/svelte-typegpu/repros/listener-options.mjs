@@ -23,6 +23,7 @@ const source = `<script>
   const x = new Tween(0, { duration: 500 });
   let picked = $state(0), generation = $state(0), wheels = 0, doubles = 0, prevented, active;
   let controls = $state(false), cameraState;
+  let rows = $state([0, 1, 2]), showLast = $state(true);
   function subscribe(key) { return node => {
     const controller = new AbortController(); active = controller;
     onNodeEvent(node, 'click', () => { picked++; void x.set(picked % 2 ? 0.4 : 0); }, { once: true, signal: controller.signal });
@@ -36,6 +37,7 @@ const source = `<script>
   export function rearm() { generation++; }
   export function enableControls() { controls = true; }
   export function camera() { return cameraState; }
+  export function editObjects() { rows.reverse(); showLast = !showLast; }
   export function read() { return { picked, wheels, doubles, prevented, x: x.current }; }
   onDestroy(() => { void x.set(x.current, { duration: 0 }); });
 </script>
@@ -48,6 +50,11 @@ const source = `<script>
       {/if}
     </perspectiveCamera>
     <ambientLight intensity={0.8} />
+    {#each rows as id (id)}
+      {#if showLast || id !== 2}
+        <mesh position={[20 + id, 0, 0]}><boxGeometry /><standardMaterial /></mesh>
+      {/if}
+    {/each}
     <mesh position={[x.current, 0, 0]} rotation={[0.2, 0.4, 0]} scale={2} {@attach subscribe(generation)}>
       <boxGeometry /><standardMaterial color={picked ? [1, 0.7, 0.2] : [0.2, 0.7, 0.55]} />
     </mesh>
@@ -165,6 +172,13 @@ try {
       const camera = await page.evaluate(() => window.commands.camera());
       assert(camera.position[2] > 7, 'Native wheel input must update the orbit camera');
       const cameraPixels = PNG.sync.read(await canvas.screenshot());
+      await page.evaluate(() => window.commands.editObjects()); await idle();
+      const editedPixels = PNG.sync.read(await canvas.screenshot({ path: resolve(output, `${width}-keyed-camera.png`) }));
+      let cameraResetPixels = 0;
+      for (let i = 0; i < cameraPixels.data.length; i += 4) {
+        if (cameraPixels.data[i] !== editedPixels.data[i]) cameraResetPixels++;
+      }
+      assert.equal(cameraResetPixels, 0, 'Unrelated keyed/conditional content must not reset the camera');
       const beforeCameraCleanup = await metrics();
       await page.evaluate(() => window.commands.abort()); await idle();
       const cameraCleanupFrames = (await metrics()).submissions - beforeCameraCleanup.submissions;
@@ -180,7 +194,7 @@ try {
       const final = await metrics(); await page.waitForTimeout(200);
       assert.equal((await metrics()).submissions, final.submissions);
       assert.equal(final.gpuError, undefined); assert.deepEqual(errors, []);
-      console.log(JSON.stringify({ width, pixels, resources, final, onceFrames, abortFrames, rearmFrames, cameraCleanupFrames, output }));
+      console.log(JSON.stringify({ width, pixels, resources, final, onceFrames, abortFrames, rearmFrames, cameraCleanupFrames, cameraResetPixels, output }));
     } finally { await context.close(); }
   }
 } finally { await browser?.close(); await server.close(); await rm(temporary, { recursive: true, force: true }); }

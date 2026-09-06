@@ -12,6 +12,9 @@ reattachment, resource reuse, and unmount during animation at desktop/mobile siz
 Once consumption, abort, and reattachment must submit zero frames and perform zero
 GPU buffer writes when no visual state changes. A native wheel-driven orbit camera
 must retain identical rendered pixels after subscription cleanup.
+The same camera must also survive keyed reordering and conditional removal of
+offscreen meshes, with identical viewport pixels and retained GPU resources. See
+the [camera ownership design](../../../docs/camera-continuity-design.md).
 Use the optional browser dependency, executable, and screenshot-directory variables
 described below. The browser/server close afterward; the normal docs server and
 installed dependencies are unchanged. Software-WebGPU checks do not establish the
