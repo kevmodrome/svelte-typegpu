@@ -31,6 +31,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | Cross-component context | Reactive context preserved through asynchronously mounted children |
 | `getAbortSignal()` | Cancels component-owned model requests on derived replacement and unmount |
 | Conditional texture ownership | Removing the last textured node cancels pending root-owned loading; hidden nodes and other owners retain shared textures |
+| Conditional model ownership | Removing the last implicit URL/data model owner releases its cache entry; pending URL fetches abort, hidden/shared owners retain them, and obsolete results cannot request frames |
 | `<svelte:boundary>` | Error/reset cleanup tested with an externally declared `failed` snippet passed as a prop; inline `failed` snippets crash the pinned compiler |
 | Async expressions and boundary `pending` snippets | Gated: ready/update paths work, but the pinned preview throws after unmounting a pending boundary; tracked by an isolated reproducer |
 
@@ -252,6 +253,43 @@ fetch, or GPU validation errors. Use `{#await ... :catch}` for loader failures.
   <SceneContent />
 </svelte:boundary>
 ```
+
+## Conditional models
+
+Ordinary scene control flow owns implicit model loading:
+
+```svelte
+{#if shown}
+  <model src={modelUrl}>
+    <standardMaterial color={[0.2, 0.7, 0.5]} />
+  </model>
+{/if}
+```
+
+Models sharing a URL use one request per root. Removing the last owner cancels a
+pending fetch and releases the URL cache entry during scene synchronization.
+Changing `src` releases the previous source when no other node uses it. Hidden
+attached models retain ownership; `visible={false}` is not an unmount. Moving or
+removing/reinserting a node before synchronization does not restart its request.
+
+Ready and failed implicit entries are also released after their last owner leaves.
+After that absence is synchronized, mounting the URL again starts a fresh request,
+including retrying a failed source. An immediate same-URL keyed replacement still
+shares the retained entry. Data-backed models similarly release their parsed cache entries;
+synchronous parsing cannot be interrupted midway. An explicit `asset` or `data`
+takes precedence over `src` and therefore does not retain an unused URL request.
+
+Keep a `loadModel()` promise/result in caller-owned state to deliberately retain
+and share CPU assets across unmounts. Removing `<model asset={asset}>` does not
+cancel the caller's promise or invalidate their asset. Use `getAbortSignal()` for
+component-owned explicit requests as described above.
+
+Root disposal cancels pending implicit URL loads. Obsolete success/failure results
+cannot replace newer same-source entries, publish geometry or request a late
+frame. Ownership uses the existing structural scene walk, not a new per-frame
+traversal. Compiled tests verify demand/manual behavior, shared GPU geometry,
+96-byte targeted instance updates and real Tween/Spring cadence at 60/120/144 Hz
+in both callback orders during model cancellation and remounting.
 
 ## Conditional textures
 

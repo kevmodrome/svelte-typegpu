@@ -179,9 +179,11 @@ describe('GPU resource and frame lifecycle', () => {
     { hz, kind, frameloop: 'demand' as const, rendererFirst: false },
     { hz, kind, frameloop: 'demand' as const, rendererFirst: true },
     { hz, kind, frameloop: 'manual' as const, rendererFirst: false }
-  ].flatMap(clock => [false, true].map(store => ({ ...clock, store }))))))(
-    'retains motion cadence across keyed resets at $hz Hz ($kind, $frameloop, renderer first: $rendererFirst, store: $store)',
-    async ({ hz, kind, frameloop, rendererFirst, store }) => {
+  ].flatMap(clock => [
+    { store: false, models: false }, { store: true, models: false }, { store: false, models: true }
+  ].map(variant => ({ ...clock, ...variant }))))))(
+    'retains motion cadence across keyed resets at $hz Hz ($kind, $frameloop, renderer first: $rendererFirst, store: $store, models: $models)',
+    async ({ hz, kind, frameloop, rendererFirst, store, models }) => {
     const pending = new Map<number, FrameRequestCallback>();
     const producers = new WeakSet<FrameRequestCallback>();
     let now = 0, id = 0;
@@ -200,6 +202,11 @@ describe('GPU resource and frame lifecycle', () => {
       new Spring(0, { stiffness: 0.01, damping: 0.5, precision: 1e-8 });
     const stop = () => motion instanceof Tween ? motion.set(motion.current, { duration: 0 }) :
       motion.set(motion.current, { instant: true });
+    const loads: { signal: AbortSignal; resolve(value: unknown): void }[] = [];
+    const body = vi.fn();
+    if (models) vi.stubGlobal('fetch', vi.fn((_src, options) => new Promise(resolve => {
+      loads.push({ signal: options.signal, resolve });
+    })));
     const Scene = compileViewportSource<{ reset(): void }>(`<script>
       let { motion, setup, writable } = $props();
       let revision = $state(0);
@@ -210,6 +217,7 @@ describe('GPU resource and frame lifecycle', () => {
           position.update(value => { value[0] = x; return value; });
         });` : ''}
     </script><scene>
+      ${models ? '{#if revision % 2 === 0}<model src="/pending.obj" />{/if}' : ''}
       {#each Array.from({ length: 300 }, (_, i) => i) as i (i)}
         <mesh position={[i + 10, 0, 0]}><boxGeometry /><standardMaterial /></mesh>
       {/each}
@@ -242,6 +250,7 @@ describe('GPU resource and frame lifecycle', () => {
       for (let i = 0; i < 3; i++) await step();
       if (frameloop === 'manual') renderer.renderFrame(now);
       expect(pending.size).toBe(0);
+      if (models) expect(loads).toHaveLength(1);
       const instances = buffers.find(buffer => buffer.label.endsWith('instances'))!;
       const scene = root.children.find(node => node.name === 'scene')!;
       const siblings = scene.children.filter(node => node.name === 'mesh').slice(0, 300);
@@ -271,6 +280,11 @@ describe('GPU resource and frame lifecycle', () => {
           expect(cleanup).toHaveBeenLastCalledWith(old);
           expect(old.parent).toBeNull();
           expect(scene.children.filter(node => node.name === 'mesh').slice(0, 300)).toEqual(siblings);
+          if (models) {
+            expect(loads[0].signal.aborted).toBe(true);
+            if (resets === 1) loads[0].resolve({ ok: true, arrayBuffer: body });
+            else expect(loads).toHaveLength(2);
+          }
         }
         instances.write.mockClear();
         const before = submissions.length;
@@ -302,6 +316,10 @@ describe('GPU resource and frame lifecycle', () => {
       void motion.set(20);
       await step();
       await unmount(instance); runtime.dispose(); renderer.dispose(); disposed = true;
+      if (models) {
+        expect(loads[1].signal.aborted).toBe(true);
+        loads[1].resolve({ ok: true, arrayBuffer: body });
+      }
       const before = submissions.length;
       expect([...pending.values()].every(callback => producers.has(callback))).toBe(true);
       await stop();
@@ -309,10 +327,107 @@ describe('GPU resource and frame lifecycle', () => {
       expect(submissions).toHaveLength(before);
       expect(cleanup).toHaveBeenCalledTimes(3);
       expect(pending.size).toBe(0);
+      expect(body).not.toHaveBeenCalled();
     } finally {
       await stop();
       if (!disposed) { await unmount(instance); runtime.dispose(); renderer.dispose(); }
     }
+  });
+
+  it.each([60, 120, 144].flatMap(hz => ['demand', 'manual'].flatMap(frameloop =>
+    [false, true].map(settleFirst => ({ hz, frameloop: frameloop as 'demand' | 'manual', settleFirst })))))
+    ('owns conditional model loads at $hz Hz ($frameloop, settlement first: $settleFirst)', async ({ hz, frameloop, settleFirst }) => {
+    const clock = optionClock(hz);
+    const { renderer, root: gpu, buffers, submissions } = await setupRenderer(frameloop);
+    const requests: { signal: AbortSignal; resolve(value: unknown): void }[] = [];
+    vi.stubGlobal('fetch', vi.fn((_src, options) => new Promise(resolve => {
+      requests.push({ signal: options.signal, resolve });
+    })));
+    const body = vi.fn(async () => new TextEncoder().encode('v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3').buffer);
+    const Scene = compileTypeGpuSource<{ configure(values: Record<string, unknown>): void }>(`
+      <script>
+        let controls = $state({ first: true, second: true, visible: true, src: '/shared.obj', x: 2 });
+        export function configure(values) { Object.assign(controls, values); }
+      </script>
+      <scene>
+        <mesh position={[10, 0, 0]}><boxGeometry /><standardMaterial /></mesh>
+        <group visible={controls.visible}>
+          {#if controls.first}<model src={controls.src}><standardMaterial /></model>{/if}
+          {#if controls.second}<model src={controls.src} position={[controls.x, 0, 0]}><standardMaterial /></model>{/if}
+        </group>
+      </scene>
+    `);
+    const root = createFragment();
+    const runtime = createTypeGpuRuntimeForTest(root, new EventTarget() as HTMLCanvasElement, renderer);
+    root.runtime = runtime;
+    const instance = mount(Scene, { renderer: sceneRenderer, target: root });
+    async function flush() { flushSync(); for (let i = 0; i < 12; i++) await Promise.resolve(); }
+    async function settle() { await flush(); for (let i = 0; i < 3; i++) { clock.step(); await flush(); } }
+    function finish(index: number) { requests[index].resolve({ ok: true, arrayBuffer: body }); }
+    try {
+      await settle();
+      if (frameloop === 'manual') renderer.renderFrame(clock.now);
+      expect(requests).toHaveLength(1);
+      expect(clock.pending.size).toBe(0);
+      const staticInstances = buffers.find(buffer => buffer.label.endsWith('instances'))!;
+      staticInstances.write.mockClear();
+      flushSync(() => instance.configure({ visible: false })); await settle();
+      expect(requests[0].signal.aborted).toBe(false);
+      flushSync(() => instance.configure({ visible: true, first: false })); await settle();
+      expect(requests[0].signal.aborted).toBe(false);
+      flushSync(() => instance.configure({ second: false })); await settle();
+      expect(requests[0].signal.aborted).toBe(true);
+      flushSync(() => instance.configure({ first: true, second: true })); await settle();
+      expect(requests).toHaveLength(2);
+      const frames = submissions.length;
+      finish(0); await settle();
+      expect(body).not.toHaveBeenCalled();
+      expect(submissions).toHaveLength(frames);
+      renderer.invalidate();
+      if (settleFirst) { finish(1); await flush(); clock.step(); }
+      else { clock.step(); finish(1); await flush(); }
+      await settle();
+      if (frameloop === 'manual') {
+        expect(clock.request).not.toHaveBeenCalled();
+        expect(submissions).toHaveLength(frames);
+        renderer.renderFrame(clock.now);
+        expect(submissions).toHaveLength(frames + 1);
+      } else {
+        expect(submissions.length - frames).toBeGreaterThanOrEqual(1);
+        expect(submissions.length - frames).toBeLessThanOrEqual(2);
+      }
+      expect(clock.pending.size).toBe(0);
+      expect(body).toHaveBeenCalledOnce();
+      expect(staticInstances.write).not.toHaveBeenCalled();
+      const vertices = buffers.filter(buffer => buffer.label.includes('url:/shared.obj') && buffer.label.endsWith('vertices'));
+      expect(vertices).toHaveLength(1);
+      const instances = buffers.find(buffer => buffer.label.includes('url:/shared.obj') && buffer.label.endsWith('instances'))!;
+      expect(instances.data).toHaveLength(48);
+      gpu.createBuffer.mockClear(); gpu.createBindGroup.mockClear(); vi.mocked(createMeshPipeline).mockClear();
+      instances.write.mockClear();
+      flushSync(() => instance.configure({ x: 3 })); await settle();
+      expect(instances.write).toHaveBeenCalledOnce();
+      expect(instances.write.mock.lastCall![1]).toEqual({ startOffset: 96, endOffset: 192 });
+      expect(gpu.createBuffer).not.toHaveBeenCalled();
+      expect(gpu.createBindGroup).not.toHaveBeenCalled();
+      expect(createMeshPipeline).not.toHaveBeenCalled();
+      expect(requests).toHaveLength(2);
+      flushSync(() => instance.configure({ first: false, second: false })); await settle();
+      expect(vertices[0].destroy).toHaveBeenCalledOnce();
+      expect(instances.destroy).toHaveBeenCalledOnce();
+      expect(staticInstances.destroy).not.toHaveBeenCalled();
+      flushSync(() => instance.configure({ first: true })); await settle();
+      expect(requests).toHaveLength(3);
+    } finally { await unmount(instance); runtime.dispose(); }
+    expect(requests[2].signal.aborted).toBe(true);
+    const frames = submissions.length;
+    const allocations = gpu.createBuffer.mock.calls.length;
+    finish(2); await settle();
+    expect(body).toHaveBeenCalledOnce();
+    expect(gpu.createBuffer).toHaveBeenCalledTimes(allocations);
+    expect(submissions).toHaveLength(frames);
+    expect(clock.pending.size).toBe(0);
+    if (frameloop === 'manual') expect(clock.request).not.toHaveBeenCalled();
   });
 
   it.each([60, 120, 144].flatMap(hz => ['demand', 'manual'].flatMap(frameloop =>
