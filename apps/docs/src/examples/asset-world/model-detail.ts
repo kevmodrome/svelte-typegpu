@@ -1,0 +1,52 @@
+import { BufferAttribute, BufferGeometry } from 'three';
+import { LoopSubdivision } from 'three-subdivide';
+import type { TypeGpuGeometryData } from 'svelte-typegpu';
+import type { WorldAssets } from './world';
+
+const variants = new WeakMap<WorldAssets, Map<number, WorldAssets>>();
+const attributes = [
+  ['position', 0, 3], ['normal', 3, 3], ['uv', 6, 2], ['color', 8, 3], ['alpha', 11, 1]
+] as const;
+
+export function refineGeometry(source: TypeGpuGeometryData, level: number): TypeGpuGeometryData {
+  if (![0, 1, 2].includes(level)) throw new RangeError('Detail must be 0, 1 or 2');
+  if (!level) return source;
+  if (source.vertexFloats !== 12 || source.vertexData.length !== source.vertexCount * 12) throw new Error('Unexpected model vertex layout');
+  const geometry = new BufferGeometry();
+  for (const [name, offset, size] of attributes) {
+    const array = new Float32Array(source.vertexCount * size);
+    for (let vertex = 0; vertex < source.vertexCount; vertex++) {
+      for (let component = 0; component < size; component++) array[vertex * size + component] = source.vertexData[vertex * 12 + offset + component];
+    }
+    // Keep alpha separate: the subdivision utility uses three-component scratch vectors.
+    geometry.setAttribute(name, new BufferAttribute(array, size));
+  }
+  if (source.indexData) geometry.setIndex(new BufferAttribute(source.indexData, 1));
+  const result = LoopSubdivision.modify(geometry, level, { split: false, flatOnly: true });
+  try {
+    const vertexCount = result.getAttribute('position').count, vertexData = new Float32Array(vertexCount * 12);
+    for (const [name, offset, size] of attributes) {
+      const array = result.getAttribute(name).array;
+      for (let vertex = 0; vertex < vertexCount; vertex++) {
+        for (let component = 0; component < size; component++) vertexData[vertex * 12 + offset + component] = array[vertex * size + component];
+      }
+    }
+    return { ...source, key: `${source.key}:flat-${level}`, vertexData, vertexCount,
+      indexData: undefined, indexCount: undefined, indexFormat: undefined };
+  } finally { geometry.dispose(); result.dispose(); }
+}
+
+export function detailWorldAssets(source: WorldAssets, level: number): WorldAssets {
+  if (![0, 1, 2].includes(level)) throw new RangeError('Detail must be 0, 1 or 2');
+  if (!level) return source;
+  let cached = variants.get(source);
+  if (!cached) variants.set(source, cached = new Map());
+  const existing = cached.get(level);
+  if (existing) return existing;
+  const result = Object.fromEntries(Object.entries(source).map(([name, asset]) => [name, {
+    key: `${asset.key}:flat-${level}`,
+    meshes: asset.meshes.map(mesh => ({ ...mesh, geometry: refineGeometry(mesh.geometry, level) }))
+  }])) as WorldAssets;
+  cached.set(level, result);
+  return result;
+}

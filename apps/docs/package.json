@@ -19,12 +19,15 @@
     "sat": "^0.9.0",
     "svelte": "https://pkg.svelte.dev/svelte/c/17e37a51bc539cdb6a923b424e5746fc6505ba89",
     "svelte-typegpu": "workspace:*",
+    "three": "^0.185.1",
+    "three-subdivide": "^1.1.5",
     "typegpu": "^0.11.6"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
     "@types/node": "^24.10.1",
     "@types/sat": "^0.0.35",
+    "@types/three": "^0.185.4",
     "@webgpu/types": "^0.1.70",
     "bun": "1.3.14",
     "shiki": "^4.1.0",
