@@ -9,6 +9,9 @@ import * as TypeGpuAttributeValues from 'svelte-typegpu/internal/attribute-value
 import TypeGpuViewportCanvas from "svelte-typegpu/internal/viewport-canvas";
 import * as TypeGpuCanvasBindings from 'svelte-typegpu/internal/canvas-bindings';
 import Campsite from './Campsite.typegpu.js';
+import Player from './Player.typegpu.js';
+import { createMovementInput, idleMovement } from './player-input.js';
+import { initialCameraDirection } from './player-controller.js';
 
 var root = $.from_tree([
 	[
@@ -34,7 +37,9 @@ var root_1 = $.from_tree(
 	4
 );
 
-var root_2 = $.from_tree([
+var root_2 = $.from_tree([,, ' ',,], 1);
+
+var root_3 = $.from_tree([
 	[
 		'scene',
 		null,,
@@ -84,6 +89,9 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 		shadows = $.prop($$props, 'shadows', 3, true),
 		selected = $.prop($$props, 'selected', 3, ''),
 		cameraVersion = $.prop($$props, 'cameraVersion', 3, 0),
+		playerVersion = $.prop($$props, 'playerVersion', 3, 0),
+		touch = $.prop($$props, 'touch', 3, idleMovement),
+		reducedMotion = $.prop($$props, 'reducedMotion', 3, false),
 		onselect = $.prop($$props, 'onselect', 3, (_key) => {}),
 		frameloop = $.prop($$props, 'frameloop', 3, 'demand'),
 		maxDevicePixelRatio = $.prop($$props, 'maxDevicePixelRatio', 3, 1.5);
@@ -91,9 +99,19 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 	let width = $.state(0);
 	let height = $.state(0);
 	const narrow = $.derived(() => $.get(width) > 0 && $.get(height) > $.get(width) * 0.9);
+	let keys = $.state($.proxy(idleMovement));
+	let cameraView = $.state({ version: -1, direction: initialCameraDirection });
+	const camera = $.derived(() => $.get(cameraView).version === cameraVersion() ? $.get(cameraView).direction : initialCameraDirection);
+	const keyboard = createMovementInput((value) => $.set(keys, value, true));
+
+	const movement = $.derived(() => ({
+		x: $.get(keys).x + touch().x,
+		z: $.get(keys).z + touch().z,
+		run: $.get(keys).run || touch().run
+	}));
 
 	TypeGpuViewportCanvas($$anchor, {
-		scopeClass: 'typegpu-62c55ae4eb',
+		scopeClass: 'typegpu-ccb9bff4bb',
 		'aria-label': 'Pinewater campsite',
 		get frameloop() {
 			return frameloop();
@@ -101,6 +119,23 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 
 		get maxDevicePixelRatio() {
 			return maxDevicePixelRatio();
+		},
+		tabindex: 0,
+		'aria-keyshortcuts': 'W A S D ArrowUp ArrowDown ArrowLeft ArrowRight Shift Escape',
+		[$.attachment()]: (element) => {
+			playerVersion();
+			paused();
+			keyboard.clear();
+
+			return keyboard.attach(element);
+		},
+		onpointerdown: (event) => event.currentTarget.focus({ preventScroll: true }),
+		onkeydown: (event) => {
+			if (assets() && !paused()) keyboard.keydown(event);
+		},
+
+		get onkeyup() {
+			return keyboard.keyup;
 		},
 
 		[$.attachment()]: (TypeGpuCanvasNode) => {
@@ -124,7 +159,7 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 		},
 
 		children: $.renderer_snippet($renderer, ($$anchor, $$slotProps) => {
-			var scene = root_2();
+			var scene = root_3();
 			var node = $.child(scene);
 
 			$.key(node, cameraVersion, ($$anchor) => {
@@ -140,6 +175,16 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 				$.set_attribute(controls, 'maxDistance', 50);
 				$.reset(perspectiveCamera);
 				$.template_effect(() => $.set_attribute(perspectiveCamera, 'fov', $.get(narrow) ? 64 : 43));
+
+				$.event('camerachange', controls, (event) => {
+					const { position, target } = event.detail.camera;
+
+					$.set(cameraView, {
+						version: cameraVersion(),
+						direction: { x: position[0] - target[0], z: position[2] - target[2] }
+					});
+				});
+
 				$.append($$anchor, perspectiveCamera);
 			});
 
@@ -240,27 +285,62 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 
 			{
 				var consequent = ($$anchor) => {
-					Campsite($$anchor, {
-						get assets() {
-							return assets();
-						},
+					var fragment_1 = root_2();
+					var node_3 = $.first_child(fragment_1);
 
-						get paused() {
-							return paused();
-						},
+					{
+						let $0 = $.derived(() => paused() || reducedMotion());
 
-						get forest() {
-							return forest();
-						},
+						Campsite(node_3, {
+							get assets() {
+								return assets();
+							},
 
-						get selected() {
-							return selected();
-						},
+							get paused() {
+								return $.get($0);
+							},
 
-						get onselect() {
-							return onselect();
-						}
+							get forest() {
+								return forest();
+							},
+
+							get selected() {
+								return selected();
+							},
+
+							get onselect() {
+								return onselect();
+							}
+						});
+					}
+
+					var node_4 = $.sibling(node_3, 2);
+
+					$.key(node_4, playerVersion, ($$anchor) => {
+						Player($$anchor, {
+							get movement() {
+								return $.get(movement);
+							},
+
+							get camera() {
+								return $.get(camera);
+							},
+
+							get forest() {
+								return forest();
+							},
+
+							get paused() {
+								return paused();
+							},
+
+							get reducedMotion() {
+								return reducedMotion();
+							}
+						});
 					});
+
+					$.append($$anchor, fragment_1);
 				};
 
 				$.if(node_2, ($$render) => {

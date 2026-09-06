@@ -26,12 +26,18 @@ importers:
 
   apps/docs:
     dependencies:
+      '@lucide/svelte':
+        specifier: ^1.41.0
+        version: 1.41.0(svelte@https://pkg.svelte.dev/svelte/c/17e37a51bc539cdb6a923b424e5746fc6505ba89)
       '@typegpu/noise':
         specifier: ^0.11.0
         version: 0.11.0(typegpu@0.11.6)
       mochi-framework:
         specifier: 0.5.0
         version: 0.5.0(svelte@https://pkg.svelte.dev/svelte/c/17e37a51bc539cdb6a923b424e5746fc6505ba89)
+      sat:
+        specifier: ^0.9.0
+        version: 0.9.0
       svelte:
         specifier: https://pkg.svelte.dev/svelte/c/17e37a51bc539cdb6a923b424e5746fc6505ba89
         version: https://pkg.svelte.dev/svelte/c/17e37a51bc539cdb6a923b424e5746fc6505ba89
@@ -48,6 +54,9 @@ importers:
       '@types/node':
         specifier: ^24.10.1
         version: 24.12.4
+      '@types/sat':
+        specifier: ^0.0.35
+        version: 0.0.35
       '@webgpu/types':
         specifier: ^0.1.70
         version: 0.1.70
@@ -383,6 +392,12 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
+  '@lucide/svelte@1.41.0':
+    resolution: {integrity: sha512-N5dInvHWGxNcnu3VJvbO2zOJA832Uy4he6qGwcqd8i3m8iYGlLoebp+e+X8NfncXXLnXkYvru5BnkUVdNdo1xg==}
+    version: 1.41.0
+    peerDependencies:
+      svelte: ^5
+
   '@manypkg/find-root@1.1.0':
     resolution: {integrity: sha512-mki5uBvhHzO8kYYix/WRy2WX8S3B5wdVSc9D6KcU5lQNglP2yt58/VfLuAK49glRXChosY8ap2oJ1qgma3GUVA==}
 
@@ -700,6 +715,9 @@ packages:
 
   '@types/node@24.12.4':
     resolution: {integrity: sha512-GUUEShf+PBCGW2KaXwcIt3Yk+e3pkKwWKb9GSyM9WQVE+ep2jzmHdGsHzu4wgcZy5fN9FBdVzjpBQsYlpfpgLA==}
+
+  '@types/sat@0.0.35':
+    resolution: {integrity: sha512-e6hhgprjvfncsniUtblt2Q8yV+cMf/Vqxl4CrnhkwPML4Lb7F+1fMNZs+UJ4L6yp2j/vDH8oHpNaubM0rgHXTQ==}
 
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
@@ -1225,6 +1243,9 @@ packages:
   safer-buffer@2.1.2:
     resolution: {integrity: sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==}
 
+  sat@0.9.0:
+    resolution: {integrity: sha512-mxdv5RZJO4tdMnUURGU3gAMcnDUEwcNJwE+lPO0/V+rBeDvFLH3wEZEOR0fH7cTN0zQaNxBEbHnyQL9DzupwQQ==}
+
   semver@7.8.1:
     resolution: {integrity: sha512-rkVq3IXh+4FDGch+KwzX3aV9W3kO54GyEgpvBzSyctDA6Xtd7RJQV1xmXbeQp5v7+VzLOfVqiutSE6GICgPFvg==}
     engines: {node: '>=10'}
@@ -1748,6 +1769,10 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
+  '@lucide/svelte@1.41.0(svelte@https://pkg.svelte.dev/svelte/c/17e37a51bc539cdb6a923b424e5746fc6505ba89)':
+    dependencies:
+      svelte: https://pkg.svelte.dev/svelte/c/17e37a51bc539cdb6a923b424e5746fc6505ba89
+
   '@manypkg/find-root@1.1.0':
     dependencies:
       '@babel/runtime': 7.29.2
@@ -1998,6 +2023,8 @@ snapshots:
   '@types/node@24.12.4':
     dependencies:
       undici-types: 7.16.0
+
+  '@types/sat@0.0.35': {}
 
   '@types/unist@3.0.3': {}
 
@@ -2542,6 +2569,8 @@ snapshots:
       mri: 1.2.0
 
   safer-buffer@2.1.2: {}
+
+  sat@0.9.0: {}
 
   semver@7.8.1: {}
 

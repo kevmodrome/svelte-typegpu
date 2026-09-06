@@ -2,13 +2,16 @@
   import { onMount } from 'svelte';
   import { prefersReducedMotion } from 'svelte/motion';
   import WorldViewport from './WorldViewport.typegpu.svelte';
+  import MovementPad from './MovementPad.svelte';
+  import { RotateCcw, UserRound } from '@lucide/svelte';
+  import { idleMovement } from './player-input';
   import { assetCount, loadWorldAssets, selectable } from './world';
 
   let { frameloop = 'demand', maxDevicePixelRatio = 1.5, onready, onfps, onrenderererror } = $props();
   let assets = $state.raw<Awaited<ReturnType<typeof loadWorldAssets>> | null>(null);
   let loaded = $state(0), failure = $state(''), selected = $state('');
   let paused = $state(false), forest = $state(true), dusk = $state(false), shadows = $state(true);
-  let cameraVersion = $state(0);
+  let cameraVersion = $state(0), playerVersion = $state(0), touch = $state(idleMovement);
   let request: AbortController | undefined;
 
   async function reload() {
@@ -31,11 +34,16 @@
 
 <div class="asset-world" class:dusk>
   <div class="world-stage">
-    <WorldViewport {assets} {forest} {dusk} {shadows} {selected} {cameraVersion}
-      paused={paused || prefersReducedMotion.current}
+    <WorldViewport {assets} {forest} {dusk} {shadows} {selected} {cameraVersion} {playerVersion} {touch} {paused}
+      reducedMotion={prefersReducedMotion.current}
       onselect={(key: string) => selected = key}
       {frameloop} {maxDevicePixelRatio} {onready} {onfps} {onrenderererror} />
     <div class="world-title"><strong>Pinewater</strong><span>Campsite No. 04</span></div>
+    {#if assets}
+      <div class="player-controls">
+        {#key playerVersion}<MovementPad disabled={paused} onmove={value => touch = value} />{/key}
+      </div>
+    {/if}
     {#if failure}
       <div class="asset-status" role="alert"><span>{failure}</span><button type="button" onclick={reload}>Retry assets</button></div>
     {:else if !assets}
@@ -49,13 +57,15 @@
     <label><input type="checkbox" bind:checked={dusk} /> Dusk</label>
     <label><input type="checkbox" bind:checked={forest} /> Forest</label>
     <label><input type="checkbox" bind:checked={shadows} /> Shadows</label>
-    <label><input type="checkbox" bind:checked={paused} disabled={prefersReducedMotion.current} />
-      {prefersReducedMotion.current ? 'Reduced motion' : 'Pause motion'}</label>
+    <label><input type="checkbox" bind:checked={paused} /> Pause motion</label>
     <label class="selection"><span>Selected</span><select bind:value={selected} disabled={!assets}>
       <option value="">None</option>
       {#each selectable as item (item.key)}<option value={item.key}>{item.label}</option>{/each}
     </select></label>
-    <button type="button" onclick={() => cameraVersion++}>Reset view</button>
+    <button type="button" class="icon-button" aria-label="Reset camper" title="Reset camper" disabled={!assets}
+      onclick={() => { touch = idleMovement; playerVersion++; }}><UserRound size={17} aria-hidden="true" /></button>
+    <button type="button" class="icon-button" aria-label="Reset view" title="Reset view"
+      onclick={() => cameraVersion++}><RotateCcw size={17} aria-hidden="true" /></button>
   </div>
   <footer><output aria-live="polite">{assets ? `${assetCount} GLB assets loaded` : failure ? 'Asset loading failed' : 'Loading assets'}</output>
     <a href="https://kenney.nl/assets/nature-kit" target="_blank" rel="noreferrer">Models: Kenney / CC0</a></footer>
@@ -64,6 +74,7 @@
 <style>
   .asset-world { display: grid; grid-template-rows: minmax(0, 1fr) auto auto; height: 100%; min-width: 0; color: #edf1ee; background: #1c2522; font-size: 13px; letter-spacing: 0; }
   .world-stage { position: relative; min-height: 0; min-width: 0; }
+  .player-controls { position: absolute; left: 14px; bottom: 14px; }
   .world-title { position: absolute; top: 18px; right: 20px; text-align: right; color: #172d2e; pointer-events: none; }
   .world-title strong { display: block; font-size: 24px; font-weight: 650; line-height: 1.2; }
   .world-title span { font-size: 12px; }
@@ -77,6 +88,7 @@
   select, button { box-sizing: border-box; min-height: 32px; border: 1px solid #637369; border-radius: 4px; background: #28382f; color: #f1f5f2; padding: 5px 9px; font: inherit; }
   select { min-width: 0; max-width: 160px; }
   button { cursor: pointer; }
+  .icon-button { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; flex: 0 0 32px; }
   button:hover { background: #3a4d40; }
   :focus-visible { outline: 2px solid #f2d361; outline-offset: 3px; }
   footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 8px 16px; border-top: 1px solid #344139; color: #b1c2b7; font-size: 11px; }

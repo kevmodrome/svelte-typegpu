@@ -42,7 +42,8 @@ describe('docs example registry', () => {
     const example = getExampleBySlug('asset-world');
     expect(example.sourceFiles.map(file => file.filename)).toEqual([
       'AssetWorld.svelte', 'WorldViewport.typegpu.svelte', 'Campsite.typegpu.svelte',
-      'Canoe.typegpu.svelte', 'world.ts'
+      'Canoe.typegpu.svelte', 'Player.typegpu.svelte', 'MovementPad.svelte',
+      'player-controller.ts', 'player-input.ts', 'world.ts'
     ]);
     for (const syntax of ['<canvas', '<model', '<frameTask', 'loadModel(', 'onclick=', 'AbortController']) {
       expect(example.code).toContain(syntax);

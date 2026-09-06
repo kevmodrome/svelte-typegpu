@@ -1,5 +1,22 @@
 # Renderer integration probes
 
+## Playable asset world
+
+Start the docs server, then run:
+
+```sh
+rtk proxy env TMPDIR=/tmp pnpm --filter svelte-typegpu exec node repros/asset-world.mjs
+```
+
+`SVELTE_PROBE_URL` defaults to `http://127.0.0.1:3335/examples/asset-world`.
+The optional browser dependencies, executable and screenshot-directory variables
+below apply. This probe checks visible camper movement with keyboard and captured
+mouse/touch input, cancellation/blur/pause/reset, reduced motion, demand idling,
+frame/callback delivery and GPU reuse at desktop/mobile sizes. It also retains
+the asset loading/retry, canvas identity, picking and day/dusk checks. It closes
+its browser and leaves the docs server running. See the
+[playable-world design and measured results](../../../docs/playable-asset-world-design.md).
+
 ## Attachment listener options
 
 ```sh

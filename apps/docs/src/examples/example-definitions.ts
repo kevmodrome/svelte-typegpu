@@ -25,8 +25,8 @@ export const exampleDefinitions = [
     title: 'Asset World',
     category: 'worlds',
     tags: ['3d', 'GLB assets', 'components', 'interaction', 'frame tasks'],
-    description: 'A lakeside campsite with shared GLB models, orbit controls, shadows and a drifting canoe.',
-    notes: 'Nine locally bundled CC0 models from Kenney Nature Kit, composed with ordinary Svelte components, keyed lists and direct model events. The canoe uses a frameTask; pause it to let demand rendering idle. Asset loading includes progress, cancellation and retry.',
+    description: 'A playable lakeside campsite with a walking camper, shared GLB models, shadows and a drifting canoe.',
+    notes: 'Focus the canvas and use WASD or arrow keys to walk, Shift to run, or use the movement pad. Drag to orbit. The camper and canoe use frameTask components; paused demand rendering idles. Nine local Kenney CC0 assets include loading, cancellation and retry. Ground-plane collision uses SAT.js.',
     exportName: 'AssetWorld',
     sourceUrl: new URL('./asset-world/AssetWorld.svelte', import.meta.url),
     sourceFiles: [
@@ -34,6 +34,10 @@ export const exampleDefinitions = [
       new URL('./asset-world/WorldViewport.typegpu.svelte', import.meta.url),
       new URL('./asset-world/Campsite.typegpu.svelte', import.meta.url),
       new URL('./asset-world/Canoe.typegpu.svelte', import.meta.url),
+      new URL('./asset-world/Player.typegpu.svelte', import.meta.url),
+      new URL('./asset-world/MovementPad.svelte', import.meta.url),
+      new URL('./asset-world/player-controller.ts', import.meta.url),
+      new URL('./asset-world/player-input.ts', import.meta.url),
       new URL('./asset-world/world.ts', import.meta.url)
     ],
     typeGpuSourceFiles: []
