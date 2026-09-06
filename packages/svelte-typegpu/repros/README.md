@@ -110,9 +110,11 @@ rtk proxy env SVELTE_PROBE_SUITE=regression pnpm --filter svelte-typegpu exec no
 ```
 
 This enables the async runtime before each isolated test module and runs the entire
-normal renderer package suite plus the focused probes. The candidate passes all
-1,189 tests, including 345 existing GPU lifecycle cases and synchronous canvas
-SSR/hydration. Compiled fixtures keep their current compiler settings: this tests
+normal renderer package suite plus the focused probes. Before the async hydration
+probe it passed all 1,189 tests. The expanded suite currently passes 1,225 and fails
+four new hydration rejection cases with the `nested-effects` candidate, with no
+unhandled errors. Its 345 existing GPU lifecycle cases and 72 async motion cases
+still pass. Compiled fixtures keep their current compiler settings: this tests
 coexistence once an async scene enables Svelte's shared runtime, not a global async
 compiler migration. The original compatibility canary still runs its intentional
 failure in a separate process against the untouched installed dependency.
@@ -155,3 +157,36 @@ assertions, checks native canvas identity and one GPU initialization, and relies
 host unmount for GPU disposal rather than manually disposing the viewport's root.
 This proves controlled callback delivery, not live GPU throughput or physical
 monitor refresh. The Mac was still locked during the attempted live check.
+
+## Async server rendering and hydration
+
+```sh
+rtk proxy pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs baseline repros/probes/async-viewport-hydration.test.ts
+rtk proxy pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs nested-effects repros/probes/async-viewport-hydration.test.ts
+```
+
+Both modes pass 36 of 40 cases and fail the same four assertions, with no unhandled
+errors. Passing cases cover awaited server output, untouched scene work on the
+server, concurrent server contexts, native SSR pending fallbacks, dev/prod, retained
+canvas identity and CSS, native events/size bindings, client-only scene startup,
+server rejection, and late client resolution/rejection after hydration unmount.
+
+Failure: an async script derived rejects after hydrating a pending boundary. When
+the canvas host uses `$derived` object-rest props, an empty canvas remains beside
+the failed snippet; resetting then produces a second canvas. A minimal ordinary
+DOM component reproduces it, without the TypeGPU compiler/runtime:
+
+```svelte
+<script>
+  let { children, ...attributes } = $props();
+  const { class: canvasClass, ...nativeAttributes } = $derived(attributes);
+</script>
+<canvas {...nativeAttributes} class={canvasClass}></canvas>
+```
+
+The async parent passes its rejected derived as `aria-label`. A bare native canvas
+and an async attribute expression pass; the object-rest host and viewport fail in
+both dev/prod. The suspected path is `execute_derived` restoring the derived's
+already-run owner effect, then `handle_error` handling the failure without unwinding
+the still-creating reader. The tests require zero canvases after rejection and one
+after reset, rather than accepting or manually removing orphaned DOM.

@@ -104,3 +104,44 @@ runtime. The full mixed-runtime regression suite passes 1,189 tests with no
 unhandled errors. Probe TypeScript checks pass. These are controlled-clock and
 fake-GPU results; the live check was unavailable because the Mac remained locked.
 Genuinely async SSR/hydration and the upstream patch decision remain open.
+
+## Async server/hydration investigation
+
+Extend the existing high-risk feasibility probe, without production runtime edits:
+
+```text
++ repros/probes/async-viewport-hydration.test.ts
+server render (awaited native props) -> actual server ViewportCanvas -> HTML canvas
+client hydrate (separately pending props) -> same canvas -> onMount -> GPU scene
+```
+
+Compile the real host and viewport for SSR and evaluate them against the isolated
+server runtime graph. Use `await render(...)`, not the synchronous `.body` getter.
+The client uses `compileAsyncViewportSource` and `hydrate(..., { recover: false })`.
+Svelte owns hydration markers, promise suspension and context propagation; the
+test owns deferred values, native DOM, mocked GPU-root startup, and teardown.
+
+First verify dev/prod and async attribute/derived variants: SSR waits for native
+values but never executes scene-only work, starts WebGPU, or runs attachments;
+client hydration keeps the server canvas and CSS scope, waits before startup,
+inherits context, and mounts scene attachments only when their async work resolves.
+Then cover rejection and unmount while hydrating (late resolve/reject), concurrent
+server contexts, and native pending-boundary SSR fallback if supported by Svelte.
+Keep native DOM controls as a parity baseline for any suspected upstream failures.
+The existing native-viewport cadence matrix remains required regression coverage.
+
+Removing the adapter or recovering by replacing the server DOM is not an acceptable
+alternative: it would hide renderer ownership or hydration failures. Preserve
+unhandled errors and hydration warnings as failures. These tests do not establish
+browser GPU throughput, framework-specific streaming integration, or approval to
+activate upstream patches. Unexpected failures become focused reproducers before
+any production or dependency change.
+
+The 40-case probe passes 36 and fails four on both the unmodified preview and the
+two-patch candidate. Awaited SSR, concurrent contexts, direct hydration, cancellation,
+and native pending fallback resolution pass. Rejected async derived props can leave
+an orphan canvas when the host derives object-rest attributes; reset adds a second
+canvas. A minimal plain DOM component reproduces the same dev/prod failure. A bare
+native canvas and direct async attributes pass. This is a new rollout gate, not
+evidence that the renderer needs DOM cleanup workarounds. The expanded mixed-runtime
+regression result is 1,225 passing, four failing, and no unhandled errors.
