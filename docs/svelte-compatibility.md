@@ -23,6 +23,8 @@ Svelte releases. We test compiled components against the actual host renderer.
 | `onpointercancel` | Original pressed-object routing, independent pointer IDs, capture/bubbling, callback replacement and terminal cleanup; no general scene pointer-capture API |
 | `Tween` / `Spring` bound to transforms and material values | Supported; frame delivery tested at 60/120/144 Hz in both RAF callback orders |
 | `MediaQuery` / `prefersReducedMotion` | Native subscription routing, shared listeners and teardown tested; the Svelte Motion example responds to preference changes without replaying settled targets |
+| `svelte/reactivity/window` | Native resize/scroll/online signals, shared consumers, server fallbacks and teardown tested; screen-position polling and module-owned DPR tracking retain upstream lifetimes |
+| `Tween.of` / `Spring.of` | Reactive window targets tested at 60/120/144 Hz in both RAF orders; consumer-owned cancellation and no-op target policy remain important |
 | `{@attach}` | Supported on scene nodes, including reactive replacement and component prop spreads |
 | Scene node references in `$state` | Identity preserved for attachment/event targets, including nested state objects and arrays; node internals remain renderer-owned |
 | `use:` | Not part of the renderer API; use attachments. The pinned preview may accept scene actions incidentally; the canvas boundary rejects them |
@@ -219,6 +221,88 @@ mid-animation cancellation, future target changes, demand/manual rendering,
 targeted instance writes, resource reuse and unmount cleanup. Active demand motion
 drains its already-queued follow-up after cancellation, then idles; turning normal
 motion back on with an unchanged target schedules nothing.
+
+## Reactive window values
+
+Import Svelte's native window values directly in a scene or dedicated viewport.
+They participate in ordinary expressions, snippets and component props:
+
+```svelte
+<script>
+  import { innerWidth, online } from 'svelte/reactivity/window';
+  const camera = $derived((innerWidth.current ?? 1024) < 700 ? [6, 5, 9] : [5, 4, 7]);
+</script>
+
+<canvas frameloop="demand">
+  <scene>
+    <perspectiveCamera active position={camera} target={[0, 0, 0]} />
+    <ambientLight intensity={0.8} />
+    <mesh>
+      <boxGeometry />
+      <standardMaterial color={online.current === false ? [0.8, 0.3, 0.2] : [0.2, 0.7, 0.5]} />
+    </mesh>
+  </scene>
+</canvas>
+```
+
+`innerWidth`/`innerHeight`, `outerWidth`/`outerHeight`, `scrollX`/`scrollY` and
+`online` are event-driven. Each export shares its native subscription across
+consumers and releases it after the last consumer is removed. Same-value events
+do not upload scene data. Untracked reads do not create subscriptions. All window
+values return `undefined` on the server; use an explicit fallback where needed.
+`online` reflects `navigator.onLine`, not whether a particular model URL will load.
+
+Window size is not canvas size. For a canvas in a resizable panel, use its native
+size bindings rather than these window dimensions. This module does not enable
+`<svelte:window>` or add global native event attributes to scene primitives.
+
+Two upstream costs are worth knowing in this pinned preview:
+
+- `screenLeft` and `screenTop` each poll one RAF while observed, shared across
+  consumers. They stop when their last consumer disappears, but run even when
+  the scene itself is idle. Do not use them to measure canvas dimensions.
+- `devicePixelRatio` starts a resolution-query listener when the module loads and
+  replaces that listener as DPR changes. It is module-owned, not scene-owned, and
+  persists after viewport disposal. A non-tree-shaken module also performs this
+  initialization when importing other window values; bundlers may remove the
+  unused export. Viewport destruction is not its cleanup boundary.
+
+### Derived motion targets
+
+`Tween.of` and `Spring.of` connect a reactive expression to a motion target without
+writing a target-sync effect yourself. For example, inside a scene component:
+
+```svelte
+<script>
+  import { onDestroy } from 'svelte';
+  import { Tween } from 'svelte/motion';
+  import { innerWidth } from 'svelte/reactivity/window';
+
+  const target = $derived(Math.max(-4, Math.min(4, ((innerWidth.current ?? 800) - 800) / 100)));
+  const x = Tween.of(() => target, { duration: (from, to) => from === to ? 0 : 250 });
+  onDestroy(() => { void x.set(x.current, { duration: 0 }); });
+</script>
+
+<mesh position={[x.current, 0, 0]}><boxGeometry /><standardMaterial /></mesh>
+```
+
+The scalar `$derived` filters same-value window notifications. The duration
+function prevents a full-duration no-op when `Tween.of` initially sets its target;
+Svelte still evaluates that duration in one startup callback. For `Spring.of`,
+stop active motion on destruction with `spring.set(spring.current, { instant: true })`.
+Destroying the factory's target effect alone does not cancel an active producer.
+Reduced-motion preferences remain a separate consumer animation policy, as above.
+
+Keep the window read in that `$derived`, outside the factory callback. The pinned
+Svelte preview can try to subscribe during SSR for a direct callback such as
+`Tween.of(() => innerWidth.current ?? 800)`, which throws without `window`. This
+also occurs in an ordinary DOM component, not just a GPU viewport. The derived
+target form above is server-rendered in a separate Node-process regression test.
+
+The real window imports and both motion factories are tested at 60/120/144 Hz,
+both callback orders, demand/manual modes, natural settling and unmount during
+motion. Only the moving instance is uploaded; static instances and GPU resources
+remain stable. See the [window-value contract](window-reactivity-design.md).
 
 ## Dynamic primitives
 

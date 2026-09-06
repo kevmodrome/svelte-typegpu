@@ -35,6 +35,12 @@ export default defineConfig({
         )
       },
       {
+        find: /^svelte\/reactivity\/window$/,
+        replacement: fileURLToPath(
+          new URL('./src/reactivity/window/index.js', import.meta.resolve('svelte/package.json'))
+        )
+      },
+      {
         find: /^svelte-test\/server$/,
         replacement: fileURLToPath(
           new URL('./src/index-server.js', import.meta.resolve('svelte/package.json'))
