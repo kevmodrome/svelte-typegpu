@@ -27,8 +27,8 @@ Svelte releases. We test compiled components against the actual host renderer.
 | `Tween.of` / `Spring.of` | Reactive window targets tested at 60/120/144 Hz in both RAF orders; consumer-owned cancellation and no-op target policy remain important |
 | `{@attach}` | Supported on scene nodes, including reactive replacement and component prop spreads |
 | Scene node references in `$state` | Identity preserved for attachment/event targets, including nested state objects and arrays; node internals remain renderer-owned |
-| `use:` | Not part of the renderer API; use attachments. The pinned preview may accept scene actions incidentally; the canvas boundary rejects them |
-| `class:` and `style:` | Not part of the scene API; use material/transform props, and ordinary class/style attributes on the native canvas |
+| `use:` | Rejected by the shared TypeGPU compiler with a source diagnostic; use attachments |
+| `class:` and `style:` | Rejected in TypeGPU host markup; use material/transform props for scenes, and ordinary class/style attributes on the native canvas |
 | Host-element bindings, including `<mesh bind:this>` | Rejected by the pinned upstream compiler |
 | `transition:`, `in:`, `out:`, `animate:` on host nodes | Rejected by the pinned upstream compiler |
 | `{#await}` | Pending/then/catch, replacement, stale results, and unmount cleanup tested |

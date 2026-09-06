@@ -5,6 +5,31 @@ Warnings include a stable code, filename, source range, and code frame. They do
 not change generated component code or add runtime validation to the frame loop.
 Both scene-only components and canvas-owning viewports are checked, including SSR.
 
+## Unsupported directives
+
+`typegpu_unsupported_directive` is a build error for `use:`, `class:` and `style:`
+on host elements in TypeGPU components, including `<svelte:element>`. The error
+includes the original directive's range and a target-specific alternative:
+
+- Use `{@attach ...}` for behavior. An action's `{ update, destroy }` return value
+  is not an attachment cleanup function. Rewrite the function's lifecycle contract;
+  do not just rename `use:setup` to `{@attach setup}`.
+- Use material and transform props for scene appearance, such as
+  `color={selected ? highlight : base}` or `scale={selected ? 1.1 : 1}`. Scene
+  primitives have no CSS styling or layout system.
+- On the native `<canvas>`, use ordinary reactive attributes such as
+  `class={{ selected }}` and `style="width: {width}px"` instead of directives.
+
+The shared compiler checks every authored branch, even an unrendered branch or an
+unused snippet, before SSR removes scene content. Neither `warningFilter`,
+`onwarn`, nor `svelte-ignore` suppresses these errors. Raw upstream acceptance of
+scene actions is not a supported build path. These checks do not disable actions
+or CSS directives in ordinary DOM `.svelte` components, and do not interpret
+component props named `class` or `style`.
+
+Errors are named `TypeGpuCompileError` and expose `code`, `filename`, `start`,
+`end`, `position`, and `frame`. See the [directive contract](unsupported-directives-design.md).
+
 ## Unknown primitives
 
 `typegpu_unknown_primitive` flags names the built-in renderer does not interpret.

@@ -28,18 +28,36 @@ const parents = new Map<string, readonly string[]>([
 export function sceneDiagnostics(ast: AST.Root, source: string, filename: string): Warning[] {
   const warnings: Warning[] = [];
 
+  function directives(node: AST.RegularElement | AST.SvelteElement) {
+    const name = node.type === 'RegularElement' ? node.name : 'svelte:element';
+    for (const attribute of node.attributes) {
+      let message: string;
+      if (attribute.type === 'UseDirective') {
+        message = `use:${attribute.name} is not supported on <${name}>. ` +
+          'Use {@attach ...} with an attachment function instead of an action.';
+      } else if (attribute.type === 'ClassDirective' || attribute.type === 'StyleDirective') {
+        const kind = attribute.type === 'ClassDirective' ? 'class' : 'style';
+        message = `${kind}:${attribute.name} is not supported on <${name}>. ` + (name === 'canvas'
+          ? `Use a reactive ${kind} attribute on the native canvas instead.`
+          : 'Scene primitives do not implement CSS; use material or transform props instead.');
+      } else continue;
+      throw Object.assign(new Error(message), diagnostic(source, filename, attribute,
+        'typegpu_unsupported_directive', message), { name: 'TypeGpuCompileError' });
+    }
+  }
+
   function element(name: string, range: { start: number; end: number }, fragment: AST.Fragment, parent: string | null) {
     const canonical = normalizePrimitiveName(name);
     const known = primitives.has(canonical) || canonical === 'canvas';
     if (!known) {
       const suggestion = suggestPrimitive(name);
-      warnings.push(warning(source, filename, range, 'typegpu_unknown_primitive',
+      warnings.push(diagnostic(source, filename, range, 'typegpu_unknown_primitive',
         `Unknown TypeGPU primitive <${name}>.${suggestion ? ` Did you mean <${suggestion}>?` : ''} ` +
         'The built-in renderer does not interpret this node.'));
     } else {
       const allowed = parents.get(canonical);
       if (parent !== null && allowed && !allowed.includes(parent)) {
-        warnings.push(warning(source, filename, range, 'typegpu_invalid_parent',
+        warnings.push(diagnostic(source, filename, range, 'typegpu_invalid_parent',
           `<${name}> must be a direct child of ${allowed.map((name) => `<${name}>`).join(' or ')}; ` +
           `its parent is <${parent}>. This resource or control will be ignored.`));
       }
@@ -51,9 +69,11 @@ export function sceneDiagnostics(ast: AST.Root, source: string, filename: string
     for (const node of fragment?.nodes ?? []) {
       switch (node.type) {
         case 'RegularElement':
+          directives(node);
           element(node.name, { start: node.start + 1, end: node.start + 1 + node.name.length }, node.fragment, parent);
           break;
         case 'SvelteElement':
+          directives(node);
           if (node.tag.type === 'Literal' && typeof node.tag.value === 'string') {
             element(node.tag.value, node.tag as typeof node.tag & { start: number; end: number }, node.fragment, parent);
           } else {
@@ -123,7 +143,7 @@ function editDistance(a: string, b: string): number {
   return row[b.length];
 }
 
-function warning(source: string, filename: string, range: { start: number; end: number }, code: string, message: string): Warning {
+function diagnostic(source: string, filename: string, range: { start: number; end: number }, code: string, message: string): Warning {
   const locate = (character: number) => {
     const lines = source.slice(0, character).split('\n');
     return { line: lines.length, column: lines.at(-1)!.length, character };
