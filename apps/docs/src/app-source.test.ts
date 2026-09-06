@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { parse, type AST } from 'svelte/compiler';
 import { describe, expect, it } from 'vitest';
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
@@ -32,6 +33,24 @@ describe('docs app source wiring', () => {
 
     expect(source).toContain('svelte-typegpu');
     expect(source).toContain('<SiteNav');
+  });
+
+  it('keeps docs CSS idle instead of running an unbounded decorative animation', () => {
+    const css = parse(`<style>${read('./style.css')}</style>`, { modern: true }).css!;
+    const animations: AST.CSS.Declaration[] = [];
+    const visit = (nodes: AST.CSS.Block['children']) => {
+      for (const node of nodes) {
+        if (node.type === 'Declaration') {
+          if (node.property === 'animation' || node.property === 'animation-iteration-count') {
+            animations.push(node);
+          }
+        } else if (node.block) {
+          visit(node.block.children);
+        }
+      }
+    };
+    visit(css.children);
+    expect(animations.filter(({ value }) => /\binfinite\b/.test(value))).toEqual([]);
   });
 
   it('keeps WebGPU preview failures local', () => {

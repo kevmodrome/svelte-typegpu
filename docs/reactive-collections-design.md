@@ -64,7 +64,7 @@ resources where ownership remains. Disposal cancels renderer work and attachment
 2. Complete: real Tween/Spring updates through map values at 60/120/144 Hz in both RAF orders,
    demand/manual modes. Assert frame delivery, exact writes, resource reuse and
    settled/disposed cancellation. Commit this contract before the example.
-3. Implemented; live GPU gate open: bounded interactive editor using the actual collections and viewport.
+3. Complete, including software-WebGPU checks: bounded interactive editor using the actual collections and viewport.
    Test generated consumer controls, native/scene selection, remove/reset and GPU
    updates. Generate/build docs, check desktop/mobile layout and live scene pixels
    where the machine permits; report unavailable live GPU checks explicitly.
@@ -81,10 +81,16 @@ Headless browser checks pass at 1440x1000 and 390x844: decimal height input,
 checkbox selection, add/remove/reset, bounded scrolling, no text/page overflow or
 canvas/editor overlap, and no page errors. The loading status is confined to the
 canvas after an actual pointer-interception failure exposed it covering the editor.
-Screenshots were inspected at both sizes. Both runs remained pending in native
+Screenshots were inspected at both sizes. The initial runs remained pending in native
 `GPUAdapter.requestDevice`; they do not prove scene pixels, camera framing, GPU
-throughput or physical display cadence. The Mac was also locked when native browser
-access was attempted. These live checks remain required once GPU access is available.
+throughput or physical display cadence. A subsequent isolated CSS probe found the
+docs' infinite full-screen background animation delaying device startup. Removing
+that animation allowed real SwiftShader WebGPU checks with normal motion preferences
+at both sizes: 18,096/8,649 colored canvas pixels and 182/174 changed pixels after
+selection, no page errors, and no canvas/editor or text overlap. Screenshots were
+inspected for framing. See [preview performance](preview-performance.md) for the
+before/after evidence and its limits. Physical high-refresh and hardware GPU
+throughput checks remain separate; the Mac was locked during native browser access.
 
 ## 6. Risks and unresolved decisions
 

@@ -1015,10 +1015,6 @@ textarea {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .site-frame::before {
-    animation: grid-drift 18s linear infinite;
-  }
-
   .brand-mark {
     transition: transform 180ms ease, box-shadow 180ms ease;
   }
@@ -1033,22 +1029,10 @@ textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .site-frame::before,
   .brand-mark {
-    animation: none;
     transition: none;
   }
 
-}
-
-@keyframes grid-drift {
-  from {
-    background-position: 0 0, 0 0, 0 0;
-  }
-
-  to {
-    background-position: 88px 0, 0 88px, 0 0;
-  }
 }
 
 @media (max-width: 1040px) {
