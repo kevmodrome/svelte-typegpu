@@ -105,10 +105,20 @@ describe('compiled camper frame delivery in a 20,000-model dense world', () => {
       const instanceBuffers = buffers.filter(buffer => buffer.label.endsWith('instances'));
       const beforeData = instanceBuffers.map(buffer => buffer.data.slice());
       const reads = vi.spyOn(transforms, 'readLocalTransform');
+      async function walk(value: boolean) {
+        reads.mockClear(); changed.mockClear();
+        for (const buffer of instanceBuffers) buffer.write.mockClear();
+        flushSync(() => instance.walk(value)); await settleComponentUpdates();
+        expect(reads.mock.calls.length).toBeLessThan(20);
+        expect(changed.mock.calls.every(([scene]) => !scene.drawBatchesChanged)).toBe(true);
+        const bytes = instanceBuffers.flatMap(buffer => buffer.write.mock.calls)
+          .reduce((bytes, [, range]) => bytes + range!.endOffset - range!.startOffset, 0);
+        expect(bytes).toBeLessThanOrEqual(12 * 96);
+      }
       gpu.createBuffer.mockClear(); gpu.createBindGroup.mockClear(); vi.mocked(createMeshPipeline).mockClear(); request.mockClear();
-      if (first) { flushSync(() => instance.walk(true)); await settleComponentUpdates(); }
+      if (first) await walk(true);
       instance.animate(); await settleComponentUpdates();
-      if (!first) { flushSync(() => instance.walk(true)); await settleComponentUpdates(); }
+      if (!first) await walk(true);
       for (let frame = 0; frame < hz / 2; frame++) {
         for (const buffer of instanceBuffers) buffer.write.mockClear(); reads.mockClear();
         const before = submissions.length;
@@ -132,11 +142,12 @@ describe('compiled camper frame delivery in a 20,000-model dense world', () => {
       expect(gpu.createBuffer).not.toHaveBeenCalled(); expect(gpu.createBindGroup).not.toHaveBeenCalled();
       expect(createMeshPipeline).not.toHaveBeenCalled();
       if (mode === 'manual') expect(request.mock.calls.every(([callback]) => producers.has(callback))).toBe(true);
+      await walk(false);
       flushSync(() => instance.stop()); await settleComponentUpdates();
       for (let i = 0; i < 5; i++) await step();
       expect(pending.size).toBe(0);
       const settled = submissions.length; for (let i = 0; i < 4; i++) await step(); expect(submissions.length).toBe(settled);
-      flushSync(() => instance.walk(true)); await settleComponentUpdates();
+      await walk(true);
       await unmount(instance); runtime.dispose(); gpuRenderer.dispose(); disposed = true;
       await settleComponentUpdates(); for (let i = 0; i < 4; i++) await step();
       expect(pending.size).toBe(0); expect(submissions.length).toBe(settled); expect(gpu.destroy).toHaveBeenCalledOnce();

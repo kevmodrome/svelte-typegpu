@@ -13,6 +13,30 @@ describe('declarative frame tasks', () => {
     return node;
   }
 
+  it('does not rediscover static scene nodes when tasks are activated or updated', () => {
+    const root = createElement('scene'), group = createElement('group');
+    insert(root, group, null);
+    let reads = 0;
+    for (let i = 0; i < 1000; i++) {
+      const node = createElement('model');
+      Object.defineProperty(node, 'name', { get: () => { reads++; return 'model'; } });
+      insert(root, node, null);
+    }
+    const update = vi.fn(), node = task(group, update), tasks = new FrameTasks();
+    tasks.reconcile(root); reads = 0;
+    for (let i = 0; i < 10; i++) {
+      setAttribute(node, 'active', i % 2 === 0);
+      tasks.reconcile(root); tasks.run(frame);
+    }
+    expect(reads).toBe(0); expect(update).toHaveBeenCalledTimes(5);
+    setAttribute(group, 'visible', false); tasks.reconcile(root); tasks.run(frame);
+    setAttribute(node, 'active', true); tasks.reconcile(root); tasks.run(frame);
+    expect(update).toHaveBeenCalledTimes(5);
+    setAttribute(group, 'visible', true); tasks.reconcile(root); tasks.run(frame);
+    expect(update).toHaveBeenCalledTimes(6);
+    expect(reads).toBe(0);
+  });
+
   it('orders by priority then tree order and reconciles active, hidden, removed, and reparented tasks', () => {
     const root = createElement('scene');
     const group = createElement('group');

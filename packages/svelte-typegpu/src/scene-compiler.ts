@@ -219,7 +219,9 @@ function updateSceneValuesAndTransforms(
   dirty: Dirty,
   nodes?: ReadonlyMap<TypeGpuNode, Dirty>
 ): TypeGpuSceneState | null {
-  const allowed = Dirty.Transform | Dirty.Lights | Dirty.MaterialUniform | Dirty.Camera | Dirty.Interaction;
+  // Task activation often changes an animated pose in the same Svelte flush.
+  // Its membership is reconciled by the runtime, not by rebuilding mesh batches.
+  const allowed = Dirty.Transform | Dirty.Lights | Dirty.MaterialUniform | Dirty.Camera | Dirty.Interaction | Dirty.FrameTasks;
   if (
     !cache.lastState ||
     !nodes?.size ||

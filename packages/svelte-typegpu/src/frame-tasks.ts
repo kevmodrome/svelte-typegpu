@@ -20,18 +20,35 @@ interface FrameTask {
 export class FrameTasks {
   #tasks: FrameTask[] = [];
   #generation = 0;
+  #root: TypeGpuNode | null = null;
+  #treeRevision = -1;
+  #candidates: TypeGpuNode[] = [];
 
   get continuous(): boolean {
     return this.#tasks.some((task) => task.continuous);
   }
 
   reconcile(root: TypeGpuNode): void {
+    if (this.#root !== root || this.#treeRevision !== root.treeRevision) {
+      this.#root = root;
+      this.#treeRevision = root.treeRevision;
+      this.#candidates = [];
+      const visit = (node: TypeGpuNode) => {
+        // Discover hidden/inactive tasks too; membership can change without a tree edit.
+        if (node.name === 'frameTask') this.#candidates.push(node);
+        for (let child = node.firstChild; child; child = child.nextSibling) visit(child);
+      };
+      visit(root);
+    }
     const tasks: FrameTask[] = [];
-    function visit(node: TypeGpuNode, parentVisible: boolean) {
-      const visible = parentVisible && node.attributes.visible !== false;
-      if (!visible) return;
+    for (const node of this.#candidates) {
+      let visible = true;
+      for (let ancestor: TypeGpuNode | null = node; ancestor; ancestor = ancestor.parent) {
+        if (ancestor.attributes.visible === false) { visible = false; break; }
+        if (ancestor === root) break;
+      }
       if (
-        node.name === 'frameTask' &&
+        visible &&
         node.attributes.active !== false &&
         typeof node.attributes.update === 'function'
       ) {
@@ -42,9 +59,7 @@ export class FrameTasks {
           continuous: node.attributes.continuous !== false
         });
       }
-      for (let child = node.firstChild; child; child = child.nextSibling) visit(child, visible);
     }
-    visit(root, true);
     // Stable sorting preserves tree order for equal priorities.
     this.#tasks = tasks.sort((a, b) => a.priority - b.priority);
   }
@@ -60,6 +75,9 @@ export class FrameTasks {
 
   clear(): void {
     this.#tasks = [];
+    this.#candidates = [];
+    this.#root = null;
+    this.#treeRevision = -1;
     this.#generation++;
   }
 }
