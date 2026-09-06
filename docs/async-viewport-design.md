@@ -1,0 +1,92 @@
+# Async viewport compilation
+
+## 1. Scope and risk
+
+Allow explicitly opted-in async expressions in the dedicated canvas entry, including
+native attributes and script derived values, while retaining GPU-owned children.
+High risk: the compiler adapter selects the DOM/GPU renderer boundary. This is a
+compiler compatibility change, not approval to enable async authoring in the apps
+or carry the isolated upstream runtime patches. Actions and scene CSS stay out of
+scope. Existing async lifecycle and cadence rollout gates remain in force.
+
+## 2. Current program model
+
+`compiler/index.ts:prepareTypeGpuSource` lowers one unconditional native canvas to
+`ViewportCanvas.svelte`, scopes CSS by compiling a scene-free native shell, and
+rewrites size bindings to attachments. `compileTypeGpu` forwards async options to
+the final compile. `compiler/vite.ts` uses the same preparation before Vite chooses
+its final compiler options. The CSS-only pass currently omits the async option.
+
+`adaptViewportClient` accepts one top-level static host call and changes only its
+entry renderer scope to null. The pinned compiler wraps async host props in
+`$.async(anchor, blockers, expressions, callback)`, so the adapter rejects them.
+Svelte's async runtime captures/restores the renderer around that callback.
+
+```text
+source -> preparation (CSS analysis) -> Svelte compile -> static entry adaptation
+       -> DOM canvas host -> onMount -> GPU root -> renderer-owned scene snippet
+```
+
+## 3. Proposed program shape
+
+```text
+~ compiler/index.ts: async-capable CSS analysis; recognize generated async host callback
+~ compiler/vite.ts: merge dynamic experimental options, retaining owned renderer selection
+~ src/viewport-compiler.test.ts: opt-in, CSS/binding, server, and fail-closed contracts
+~ src/vite-integration.test.ts + test fixture: client/server order and dynamic opt-in
+~ src/viewport-test-utils.ts: explicit test-only async compile helper
++ repros/probes/async-viewport.test.ts: actual canvas/native-boundary lifecycle
+~ repros/README.md: evidence and remaining gates
+```
+
+Allow async only in the discarded-JavaScript CSS analysis pass; final compilation
+remains authoritative for feature opt-in. Extend entry inspection through only the
+known four-argument `$.async` callback with matching anchor, not arbitrary closures.
+Inspect that callback for foreign anchors and still require exactly one host call.
+GPU snippet bodies remain opaque and renderer-owned. No new renderer state or RAF.
+
+```text
+entry inspection -> top-level blocks
+                 -> known $.async render callback -> static host validation
+                 -> reject unknown/multiple host shapes or foreign anchors
+```
+
+## 4. Contracts and invariants
+
+Production function signatures stay unchanged. `compileAsyncViewportSource` is a
+test helper that imports the real async flag before evaluating compiled output.
+Svelte owns promise settlement, stale results, boundaries and effect cancellation.
+The canvas host still owns native attachments and GPU startup/disposal. Pending
+canvas initialization must not allocate a root; subsequent async props must reuse
+the canvas/root. Late results after unmount must not create or mutate either.
+Scene snippets must never produce native DOM nodes. CSS and size binding diagnostics
+must remain native Svelte diagnostics. No application compiler flags are changed.
+Vite merges the resolved base experimental options with dynamic overrides, then
+reasserts the file boundary's renderer selection. Dynamic options cannot replace
+the DOM/scene ownership rule. SSR viewport compilation retains async and selects
+the DOM renderer; GPU-only files retain the custom renderer on the client.
+
+## 5. Vertical slices and verification
+
+1. Reproduce and fix compilation: async attributes/deriveds, dev/prod, with and
+   without CSS/size bindings, client/server, opt-out errors and adapter negatives.
+2. Mount compiled viewports inside native pending/error boundaries using the
+   isolated Svelte copy. Assert attachment order, renderer ownership, canvas/root
+   identity, rejection/reset and late resolve/reject after disposal. Run the existing
+   60/120/144 Hz async Tween/Spring matrix and full mixed-runtime regression suite.
+3. Record evidence and keep rollout gated on upstream runtime approval, genuine
+   async SSR/hydration, and live GPU validation. Compiler-only server checks do not
+   prove async hydration. Any new runtime failure gets a reproducer, not a workaround.
+
+## 6. Risks and unresolved decisions
+
+Threading final async options through preparation is an alternative, but Vite's
+dynamic options are selected after markup preprocessing. It would duplicate option
+resolution merely for discarded JS. Permissive CSS analysis plus strict final
+compilation preserves a single authoritative opt-in. Traversing arbitrary closures
+would weaken the renderer boundary and is rejected. Changes to Svelte's generated
+async shape should fail closed, with tests pinning the supported structure.
+
+Rollback is reverting the compiler change; there is no state migration or new
+resource owner. Errors remain normal compiler/runtime errors. The upstream runtime
+patch decision and global async rollout remain unresolved and separate.

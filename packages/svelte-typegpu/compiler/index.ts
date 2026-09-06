@@ -100,7 +100,9 @@ export function prepareTypeGpuSource(source: string, filename: string): Prepared
       if (node.type === 'SnippetBlock') omitNodes(shell, node.body.nodes);
     }
     const css = compile(shell.toString(), {
-      filename, generate: 'client', runes: true, css: 'external', cssHash: () => scopeClass
+      filename, generate: 'client', runes: true, css: 'external', cssHash: () => scopeClass,
+      // Only CSS/diagnostics survive this pass; the final compile owns async opt-in.
+      experimental: { async: true }
     }).css?.code ?? '';
     if (ast.css) {
       result.overwrite(ast.css.content.start, ast.css.content.end, `:global { ${css} }`);
@@ -117,9 +119,21 @@ export function adaptViewportClient(code: string, inputMap?: any) {
   if (entry?.declaration.type !== 'FunctionDeclaration') {
     throw new Error('Unsupported Svelte viewport output: expected a static component function (HMR must be disabled).');
   }
-  const flatten = (statements: any[]): any[] => statements.flatMap((statement) =>
-    statement.type === 'BlockStatement' ? flatten(statement.body) : [statement]);
-  const statements = flatten(entry.declaration.body.body);
+  const flatten = (statements: any[], anchor: string): any[] => statements.flatMap((statement) => {
+    if (statement.type === 'BlockStatement') return flatten(statement.body, anchor);
+    const call = statement.type === 'ExpressionStatement' ? statement.expression : null;
+    const callback = call?.arguments?.[3];
+    // Async props defer the same static host, not an arbitrary nested component.
+    if (call?.type === 'CallExpression' && call.callee.object?.name === '$' &&
+        call.callee.property?.name === 'async' && call.arguments.length === 4 &&
+        call.arguments[0].type === 'Identifier' && call.arguments[0].name === anchor &&
+        callback?.type === 'ArrowFunctionExpression' && !callback.async &&
+        callback.params[0]?.type === 'Identifier' && callback.body.type === 'BlockStatement') {
+      return [statement, ...flatten(callback.body.body, callback.params[0].name)];
+    }
+    return [statement];
+  });
+  const statements = flatten(entry.declaration.body.body, entry.declaration.params[0]?.name);
   const scopes = statements.flatMap((statement: any) => statement.type === 'VariableDeclaration'
     ? statement.declarations.filter((item: any) =>
       item.init?.type === 'CallExpression' && item.init.callee.type === 'MemberExpression' &&

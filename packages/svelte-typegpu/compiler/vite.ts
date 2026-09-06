@@ -10,6 +10,8 @@ export function typegpuSvelte(options: Options = {}) {
   const diagnostics = new Map<string, Warning[]>();
   const pendingWarnings = new Map<string, Warning[]>();
   const warningKey = (filename: string, ssr = false) => `${ssr ? 'server' : 'client'}:${filename}`;
+  const customRenderer = ({ filename }: { filename: string }) =>
+    filename.endsWith('.typegpu.svelte') ? 'svelte-typegpu/svelte-renderer' : null;
   return [
     svelte({
       ...options,
@@ -33,8 +35,7 @@ export function typegpuSvelte(options: Options = {}) {
         ...options.compilerOptions,
         hmr: false,
         runes: true,
-        experimental: { ...options.compilerOptions?.experimental, customRenderer: ({ filename }) =>
-          filename.endsWith('.typegpu.svelte') ? 'svelte-typegpu/svelte-renderer' : null }
+        experimental: { ...options.compilerOptions?.experimental, customRenderer }
       },
       async dynamicCompileOptions(args) {
         const extra = await options.dynamicCompileOptions?.(args) ?? {};
@@ -44,9 +45,11 @@ export function typegpuSvelte(options: Options = {}) {
           pendingWarnings.set(warningKey(args.filename, args.compileOptions.generate === 'server'),
             warnings.filter((warning) => filter?.(warning) ?? true));
         }
-        return { ...extra, hmr: false, ...(args.compileOptions.generate === 'server' && viewports.has(args.filename) ? {
-          experimental: { ...options.compilerOptions?.experimental, customRenderer: () => null }
-        } : {}) };
+        return { ...extra, hmr: false, experimental: {
+          ...args.compileOptions.experimental, ...extra.experimental,
+          customRenderer: args.compileOptions.generate === 'server' && viewports.has(args.filename)
+            ? () => null : customRenderer
+        } };
       }
     }),
     {

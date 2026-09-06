@@ -74,7 +74,8 @@ for effects that already ran. All lifecycle and focused cadence cases pass
 with this candidate, but it is not an active dependency patch or an async-support
 claim. See the [scheduler investigation](../../../docs/async-boundary-effects-design.md).
 
-Verified on the pinned commit above:
+Boundary lifecycle/motion comparison on the pinned commit above (before adding
+the separate viewport probes):
 
 | Probe | Passing / failing tests | Unhandled errors | Exit status |
 | --- | --- | --- | --- |
@@ -109,7 +110,7 @@ rtk proxy env SVELTE_PROBE_SUITE=regression pnpm --filter svelte-typegpu exec no
 
 This enables the async runtime before each isolated test module and runs the entire
 normal renderer package suite plus the focused probes. The candidate passes all
-1,135 tests, including 345 existing GPU lifecycle cases and synchronous canvas
+1,153 tests, including 345 existing GPU lifecycle cases and synchronous canvas
 SSR/hydration. Compiled fixtures keep their current compiler settings: this tests
 coexistence once an async scene enables Svelte's shared runtime, not a global async
 compiler migration. The original compatibility canary still runs its intentional
@@ -126,3 +127,21 @@ retain Node. A test-only server alias keeps SSR context and rendering in one Sve
 module graph. No installed runtime behavior is mocked or patched by the harness.
 Global async compiler opt-in, genuinely async SSR/hydration, production patch policy,
 and live GPU/physical-refresh validation remain gates before enabling this in apps.
+
+## Async native canvas entry
+
+The compiler now recognizes Svelte's generated async host callback and permits
+async syntax in the CSS-only analysis pass. Final compilation still requires
+explicit async opt-in. Vite preserves dynamic experimental options while retaining
+the TypeGPU-owned renderer selection, in either client/server transform order.
+These fixes do not enable async in applications or activate the candidate patches.
+
+`probes/async-viewport.test.ts` adds ten candidate-runtime tests for async native
+attributes and script derived values, including dev/prod, scoped canvas CSS and
+size bindings. A native parent boundary owns pending/error content. The tests
+verify no GPU startup while pending, native/scene attachment ownership, inherited
+context, stable canvas/root identity on updates, rejection/reset, and late
+resolve/reject after unmount. All ten pass with the combined candidate; the full
+mixed-runtime result above includes them. Server compiler tests alone are not
+evidence of genuinely async hydration. See the
+[viewport compiler design](../../../docs/async-viewport-design.md).

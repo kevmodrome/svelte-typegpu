@@ -88,4 +88,48 @@ describe('viewport compiler boundary', () => {
       filename, preserveComments: true
     })).toThrow(/Unsupported Svelte/);
   });
+
+  describe('explicit async opt-in', () => {
+    const sources = [
+      '<script>let { request } = $props();</script><canvas aria-label={await request}><scene /></canvas>',
+      '<script>let { request } = $props(); let label = $derived(await request);</script><canvas aria-label={label}><scene /></canvas>'
+    ];
+    const variants = (source: string) => [
+      source,
+      source + '<style>canvas { height: 420px; }</style>',
+      source.replace('<canvas ', '<canvas bind:clientWidth={null, () => {}} ')
+    ];
+    it.each([false, true])('preserves async host ownership with CSS and bindings (dev %s)', (dev) => {
+      for (const source of sources.flatMap(variants)) {
+        const result = compileTypeGpu(source, { filename, dev, experimental: { async: true } });
+        expect(result.js.code).toContain('$.push_renderer(null)');
+        expect(result.js.code).toContain('$.async(');
+        expect(result.js.code).toContain('$.renderer_snippet($renderer');
+        expect(result.js.map.sourcesContent).toEqual([source]);
+        if (source.includes('<style>')) expect(result.css?.code).toContain('canvas.typegpu-');
+        const server = compileTypeGpu(source, { filename, dev, generate: 'server', experimental: { async: true } });
+        expect(server.js.code).toContain('TypeGpuViewportCanvas');
+        expect(server.js.code).not.toContain('svelte-typegpu/svelte-renderer');
+        expect(server.js.code).not.toContain('<scene');
+      }
+    });
+    it('still requires async opt-in after CSS and binding analysis', () => {
+      for (const source of sources.flatMap(variants)) {
+        for (const generate of ['client', 'server'] as const) {
+          expect(() => compileTypeGpu(source, { filename, generate })).toThrow(/experimental.async/);
+        }
+      }
+    });
+    it('does not treat arbitrary callbacks as static canvas hosts', () => {
+      const code = compile(prepareTypeGpuSource(sources[0], filename).code, {
+        filename, experimental: { async: true, customRenderer: 'svelte-typegpu/svelte-renderer' }
+      }).js.code;
+      for (const invalid of [
+        code.replace('$.async(', '$.unknown_async('),
+        code.replace('$.async($$anchor,', '$.async(otherAnchor,'),
+        code.replace('TypeGpuViewportCanvas($$anchor,', '$.comment(); TypeGpuViewportCanvas($$anchor,'),
+        code.replace('TypeGpuViewportCanvas($$anchor,', 'TypeGpuViewportCanvas($$anchor, {}); TypeGpuViewportCanvas($$anchor,')
+      ]) expect(() => adaptViewportClient(invalid)).toThrow(/Unsupported Svelte/);
+    });
+  });
 });
