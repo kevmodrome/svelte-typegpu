@@ -37,6 +37,7 @@ creation. These are CPU-side contract checks, not GPU throughput measurements.
 + src/gpu-test-utils.ts: shared existing fake GPU recorder, excluded from publication
 ~ src/gpu-lifecycle.test.ts: reuse the same recorder without changing assertions
 ~ package.json: exclude the test helper from published files
+~ workspace-structure.test.ts: verify the helper's publication exclusion
 ~ repros/README.md: measured results and remaining gates
 ```
 
@@ -100,3 +101,29 @@ with no unhandled errors. This includes parent-first and child-first resolution,
 rejection/reset, nested removal, keyed replacement, and late settlement after
 unmount. The teardown-only candidate still fails eight attachment lifecycle cases.
 High-refresh and full async-mode regression checks remain open.
+
+The first cadence probe passes reveal/removal frame delivery but exposes a second
+effect path on conditional remount: `create_effect` appends new user effects to
+`collected_effects` during an active batch traversal, bypassing `Batch.schedule`.
+Revise the candidate to share `defer_to_pending_boundary(effect): boolean` between
+`Batch.schedule` and `flush_queued_effects` before execution. The latter first checks
+destroyed/inert/dirty state as before. Both callers retain the first-run flag gate;
+already-run motion effects still avoid the ancestor walk. This is the same boundary
+ownership rule, not another queue or a change to counter lifetime. Add a direct
+DOM/scene remount case alongside the frame-delivery case before accepting the revision.
+
+Revised checkpoint: all 60 isolated tests pass, including 24 lifecycle tests and
+36 real Tween/Spring cadence cases (60/120/144 Hz, demand in both RAF orders, manual,
+late resolve/reject). Each clock step submits one frame. Steady-state movement
+uploads one 96-byte instance; reveal/removal have bounded structural uploads.
+The CPU instance backing buffer, GPU buffers, bind groups and pipelines are reused.
+Demand stops even with a promise still pending; manual schedules no renderer RAF;
+late settlement after disposal cannot upload or render. No app runtime was changed.
+
+The motion fixture deliberately does not call Svelte's async `tick()`, which itself
+schedules RAF and races it against a timer in this preview. It uses a task boundary
+to drain microtasks outside the measured frames, and the same controlled callback
+checkpoint as the existing motion suite within frames. This keeps test-generated
+callbacks out of renderer/manual-mode assertions. These checks do not establish
+physical refresh rate or GPU throughput, and full async-mode regression/live
+validation remain open.

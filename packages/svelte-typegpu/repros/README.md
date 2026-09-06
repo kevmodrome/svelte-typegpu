@@ -59,8 +59,8 @@ elements, for both late resolve and late reject.
 
 The broader suite with only the teardown candidate remains failing: attachments under a nested
 boundary without its own pending snippet execute while the ancestor still shows
-pending content. This happens in both hosts, with and without the teardown candidate. Eight
-tests preserve the desired lifecycle contract rather than accepting the
+pending content. This happens in both hosts, with and without the teardown candidate.
+The lifecycle tests preserve the desired contract rather than accepting the
 observed behavior. Pending counters drain and the parent appears, but early
 attachment execution needs a separate scheduler correction. Additional cases cover
 parent/child pending snippets resolving in either order and rejection followed by reset.
@@ -68,7 +68,9 @@ parent/child pending snippets resolving in either order and rejection followed b
 The `nested-effects` mode applies both separate candidates. For eligible effects
 that have not run yet, it finds the nearest pending ancestor and stores the deferred
 effect there. Rescheduling after that boundary resolves rechecks the chain. It adds
-no per-update ancestor walk for effects that already ran. All lifecycle cases pass
+the same check before running effects collected during an existing batch traversal,
+which is necessary for conditional remounts. It adds no per-update ancestor walk
+for effects that already ran. All lifecycle and focused cadence cases pass
 with this candidate, but it is not an active dependency patch or an async-support
 claim. See the [scheduler investigation](../../../docs/async-boundary-effects-design.md).
 
@@ -76,10 +78,18 @@ Verified on the pinned commit above:
 
 | Probe | Passing / failing tests | Unhandled errors | Exit status |
 | --- | --- | --- | --- |
-| Full baseline | 14 / 8 | 6 teardown TypeErrors | 1 |
-| Full teardown candidate | 14 / 8 | 0 | 1 |
-| Full nested-effects candidate | 22 / 0 | 0 | 0 |
+| Full baseline | 14 / 46 | 42 teardown TypeErrors | 1 |
+| Full teardown candidate | 14 / 46 | 0 | 1 |
+| Full nested-effects candidate | 60 / 0 | 0 | 0 |
 | Original teardown with candidate | 2 / 0 | 0 | 0 |
+
+The 36 motion cases use real compiled async scenes and Tween/Spring at 60/120/144
+Hz in both demand RAF orders and manual mode. They assert frame delivery during
+pending/reveal/removal/remount, 96-byte targeted steady-state uploads, CPU instance
+storage and GPU resource reuse, idle pending boundaries, and cancellation on
+disposal with late resolve/reject. The test shares the normal suite's fake GPU
+recorder. Its synchronization avoids async `tick()` because that API adds its own
+RAF callback; those test-generated callbacks must not be counted as renderer work.
 
 Type-check the opt-in probe code separately from the package's normal source:
 
@@ -90,4 +100,4 @@ rtk proxy pnpm --filter svelte-typegpu exec tsc -p repros/tsconfig.json
 This opt-in suite is excluded from normal tests. The normal suite still checks
 the precise original failure against the untouched installed dependency. Passing
 the narrow teardown probe is not sufficient to enable experimental async scenes;
-nested effects, GPU lifecycle, real motion cadence, and live rendering remain gates.
+full async-mode regressions and live rendering remain gates beyond these focused tests.

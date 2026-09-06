@@ -38,6 +38,7 @@ import SharedStores from '../../../apps/docs/src/generated/typegpu-scenes/shared
 import { createViewProjectionMatrix, readCameraState } from './camera';
 import { rotateVectorXyz, transformPoint4 } from './math3d';
 import { vectorTuple } from './attributes';
+import { createFakeGpuRoot } from './gpu-test-utils';
 
 const captured = vi.hoisted(() => ({ bindings: [] as unknown[][], counts: [] as number[] }));
 
@@ -70,19 +71,12 @@ vi.mock('typegpu', async (importOriginal) => {
 vi.mock('@typegpu/noise', () => ({
   perlin3d: { staticCache: () => ({ inject: () => (root: unknown) => root, destroy() {} }) }
 }));
-vi.mock('./typegpu-pipeline', () => {
-  function pipeline(bindings: unknown[] = []) {
-    return {
-      with: (...values: unknown[]) => pipeline([...bindings, ...values]),
-      withIndexBuffer: (...values: unknown[]) => pipeline([...bindings, ...values]),
-      draw: (_vertices: number, count = 1) => { captured.bindings.push(bindings); captured.counts.push(count); },
-      drawIndexed: (_indices: number, count = 1) => { captured.bindings.push(bindings); captured.counts.push(count); }
-    };
-  }
+vi.mock('./typegpu-pipeline', async () => {
+  const { createFakePipeline } = await import('./gpu-test-utils');
   return {
-    createMeshPipeline: vi.fn(() => pipeline()),
-    createShadowPipeline: vi.fn(() => pipeline()),
-    createShaderPassPipeline: vi.fn(() => pipeline())
+    createMeshPipeline: vi.fn(() => createFakePipeline(captured)),
+    createShadowPipeline: vi.fn(() => createFakePipeline(captured)),
+    createShaderPassPipeline: vi.fn(() => createFakePipeline(captured))
   };
 });
 
@@ -2328,82 +2322,6 @@ async function setupRenderer(
   return { ...fake, renderer, canvas };
 }
 
-function fakeBuffer() {
-  return {
-    label: '',
-    buffer: {},
-    data: new Float32Array(),
-    $usage() {
-      return this;
-    },
-    $name(label: string) {
-      this.label = label;
-      return this;
-    },
-    write: vi.fn(function (
-      this: { data: Float32Array },
-      data: ArrayBuffer,
-      options?: { startOffset: number; endOffset: number }
-    ) {
-      if (options) {
-        if (this.data.byteLength < options.endOffset) {
-          const expanded = new Float32Array(options.endOffset / 4);
-          expanded.set(this.data);
-          this.data = expanded;
-        }
-        this.data.set(new Float32Array(data), options.startOffset / 4);
-      }
-      else this.data = new Float32Array(data.slice(0));
-    }),
-    destroy: vi.fn()
-  };
-}
-
 function fakeRoot() {
-  const buffers: ReturnType<typeof fakeBuffer>[] = [];
-  const submissions: Float32Array[][] = [];
-  const root = {
-    createBuffer: vi.fn(() => {
-      const buffer = fakeBuffer();
-      buffers.push(buffer);
-      return buffer;
-    }),
-    createTexture: vi.fn(() => ({
-      $usage() {
-        return this;
-      },
-      $name() {
-        return this;
-      },
-      write: vi.fn(),
-      destroy: vi.fn(),
-      createView: () => ({})
-    })),
-    createBindGroup: vi.fn((_layout: unknown, entries: unknown) => ({ entries })),
-    createSampler: vi.fn(() => ({})),
-    createComparisonSampler: vi.fn(() => ({})),
-    configureContext: vi.fn(() => ({ getCurrentTexture: () => ({ createView: () => ({}) }) })),
-    unwrap: (resource: unknown) => resource,
-    pipe() {
-      return this;
-    },
-    destroy: vi.fn(),
-    device: {
-      createCommandEncoder: () => ({ beginRenderPass: () => ({ end() {} }), finish: () => ({}) }),
-      queue: {
-        submit: () => {
-          // Uniform writes take effect before submission, not separately for each draw call.
-          submissions.push(
-            captured.bindings.splice(0).map((bindings) => {
-              const group = bindings.find((value: any) => value?.entries?.uniforms) as {
-                entries: { uniforms: ReturnType<typeof fakeBuffer> };
-              };
-              return group?.entries.uniforms.data.slice() ?? new Float32Array();
-            })
-          );
-        }
-      }
-    }
-  };
-  return { root, buffers, submissions };
+  return createFakeGpuRoot(captured);
 }

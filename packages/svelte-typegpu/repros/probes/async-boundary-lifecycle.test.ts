@@ -75,6 +75,42 @@ async function fixture<Exports extends Record<string, unknown>>(
 describe.each(['scene', 'dom'] as const)('isolated async boundary candidate (%s)', (host) => {
   const tag = host === 'scene' ? 'mesh' : 'div';
 
+  it('defers attachments created during a conditional remount', async () => {
+    const first = deferred();
+    const next = deferred();
+    const cleanup = vi.fn();
+    const setup = vi.fn(() => cleanup);
+    const view = await fixture<{ hide(): void; show(value: Promise<string>): void }>(host, `
+      <script>
+        let { initial, setup } = $props();
+        let request = $state.raw(initial);
+        let visible = $state(true);
+        export function hide() { visible = false; }
+        export function show(value) { request = value; visible = true; }
+      </script>
+      {#snippet pending()}<${tag} name="pending"></${tag}>{/snippet}
+      {#if visible}
+        <svelte:boundary {pending}><svelte:boundary>
+          <${tag} name={await request} {@attach setup}></${tag}>
+        </svelte:boundary></svelte:boundary>
+      {/if}
+    `, { initial: first.promise, setup });
+    first.resolve('first'); await tick(); await settled();
+    expect(setup).toHaveBeenCalledOnce();
+    flushSync(() => view.instance.hide()); await tick();
+    expect(view.names()).toEqual([]);
+    expect(cleanup).toHaveBeenCalledOnce();
+    flushSync(() => view.instance.show(next.promise)); await tick();
+    expect(view.names()).toEqual(['pending']);
+    const pendingCalls = setup.mock.calls.length;
+    next.resolve('next'); await tick(); await settled();
+    expect(view.names()).toEqual(['next']);
+    expect(pendingCalls).toBe(1);
+    expect(setup).toHaveBeenCalledTimes(2);
+    await view.dispose();
+    expect(cleanup).toHaveBeenCalledTimes(2);
+  });
+
   it.each(['parent', 'child'] as const)('waits for all pending ancestors when %s resolves first', async (first) => {
     const parent = deferred();
     const child = deferred();

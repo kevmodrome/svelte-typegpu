@@ -1,22 +1,52 @@
 diff --git a/src/internal/client/reactivity/batch.js b/src/internal/client/reactivity/batch.js
 --- a/src/internal/client/reactivity/batch.js
 +++ b/src/internal/client/reactivity/batch.js
-@@ -933,10 +933,15 @@
- 		if (
+@@ -933,10 +933,3 @@
+-		if (
 -			effect.b?.is_pending &&
- 			(effect.f & (EFFECT | RENDER_EFFECT | MANAGED_EFFECT)) !== 0 &&
- 			(effect.f & REACTION_RAN) === 0
- 		) {
+-			(effect.f & (EFFECT | RENDER_EFFECT | MANAGED_EFFECT)) !== 0 &&
+-			(effect.f & REACTION_RAN) === 0
+-		) {
 -			effect.b.defer_effect(effect);
 -			return;
-+			var boundary = effect.b;
-+			while (boundary !== null) {
-+				if (boundary.is_pending) {
-+					boundary.defer_effect(effect);
-+					return;
-+				}
-+				boundary = boundary.parent;
-+			}
- 		}
+-		}
++		if (defer_to_pending_boundary(effect)) return;
  
  		var e = effect;
+@@ -1080,6 +1073,27 @@
+ 
+ /** @type {Set<Effect> | null} */
+ export let eager_block_effects = null;
++
++/**
++ * @param {Effect} effect
++ * @returns {boolean}
++ */
++function defer_to_pending_boundary(effect) {
++	if (
++		(effect.f & (EFFECT | RENDER_EFFECT | MANAGED_EFFECT)) !== 0 &&
++		(effect.f & REACTION_RAN) === 0
++	) {
++		var boundary = effect.b;
++		while (boundary !== null) {
++			if (boundary.is_pending) {
++				boundary.defer_effect(effect);
++				return true;
++			}
++			boundary = boundary.parent;
++		}
++	}
++	return false;
++}
+ 
+ /**
+  * @param {Array<Effect>} effects
+@@ -1095,6 +1109,8 @@
+ 		var effect = effects[i++];
+ 
+ 		if ((effect.f & (DESTROYED | INERT)) === 0 && is_dirty(effect)) {
++			if (defer_to_pending_boundary(effect)) continue;
++
+ 			eager_block_effects = new Set();
+ 
+ 			update_effect(effect);
