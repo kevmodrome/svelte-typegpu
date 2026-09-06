@@ -275,6 +275,31 @@ function fakeFrameScheduler(): {
 }
 
 describe('TypeGPU camera interaction controller', () => {
+  it.each([60, 120, 144].flatMap(hz => [false, true].map(pointerFirst => ({ hz, pointerFirst }))))(
+    'keeps orbit dragging through follow translation at $hz Hz (pointer first: $pointerFirst)', ({ hz, pointerFirst }) => {
+      const canvas = fakeCanvas(), frames = fakeFrameScheduler(), renderer = fakeRenderer(), windowTarget = new FakeEventTarget();
+      const controller = createCameraInteractionController({ canvas: canvas as unknown as HTMLCanvasElement, renderer,
+        windowTarget, requestFrame: frames.requestFrame, cancelFrame: frames.cancelFrame });
+      let scene = sceneState();
+      controller.reconcile(scene);
+      canvas.dispatch<MouseEvent>('mousedown', { button: 0, buttons: 1, clientX: 100, clientY: 100 });
+      for (let i = 1; i <= 12; i++) {
+        windowTarget.dispatch<MouseEvent>('mousemove', { buttons: 1, clientX: 100 + i * 5, clientY: 100 });
+        if (pointerFirst) frames.runFrame(i * 1000 / hz);
+        const translate = (vector: [number, number, number]): [number, number, number] => [vector[0] + 1 / hz, vector[1], vector[2]];
+        scene = { ...scene, camera: { ...scene.camera, position: translate(scene.camera.position), target: translate(scene.camera.target) } };
+        controller.reconcile(scene);
+        if (!pointerFirst) frames.runFrame(i * 1000 / hz);
+        expect(renderer.setCamera).toHaveBeenCalledTimes(i);
+        const offset = scene.camera.position[0] - scene.camera.target[0];
+        expect(offset).toBeCloseTo(-Math.sin(i * 0.025) * 5, 5);
+        expect(scene.camera.target[0]).toBeCloseTo(i / hz, 8);
+      }
+      expect(frames.cancelFrame).not.toHaveBeenCalled();
+      windowTarget.dispatch<MouseEvent>('mouseup', { button: 0 });
+      expect(frames.pendingCount()).toBe(0); controller.dispose();
+    }
+  );
   it.each(['switch', 'dispose', 'throw'] as const)('commits camera state before a callback can %s', operation => {
     const canvas = fakeCanvas(), frames = fakeFrameScheduler(), renderer = fakeRenderer();
     const controller = createCameraInteractionController({

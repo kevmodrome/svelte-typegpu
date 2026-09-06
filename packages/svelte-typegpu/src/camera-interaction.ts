@@ -617,6 +617,16 @@ export function createCameraInteractionController({
           resetKeyboardState();
         }
 
+        if (sameInputState && framePending && orbit && activeScene &&
+          !vectorEqual(activeScene.camera.target, nextScene.camera.target)) {
+          // Follow motion translates the pending gesture, not its yaw/pitch/zoom.
+          orbit = { ...orbit, target: [
+            orbit.target[0] + nextScene.camera.target[0] - activeScene.camera.target[0],
+            orbit.target[1] + nextScene.camera.target[1] - activeScene.camera.target[1],
+            orbit.target[2] + nextScene.camera.target[2] - activeScene.camera.target[2]
+          ] };
+        }
+
         activeScene = nextScene;
         activePointerControls = activeControls.pointer;
         activeKeyboardControls = activeControls.keyboard;
@@ -681,9 +691,19 @@ function hasSameCameraInputState(
   return (
     previous.cameraNode === next.cameraNode &&
     previous.cameraControllerNode === next.cameraControllerNode &&
-    cameraPoseEqual(previous.camera, next.camera) &&
+    (cameraPoseEqual(previous.camera, next.camera) || cameraTranslationEqual(previous.camera, next.camera)) &&
     cameraControllersEqual(previous.cameraController, next.cameraController)
   );
+}
+
+function cameraTranslationEqual(previous: TypeGpuCameraSettings, next: TypeGpuCameraSettings): boolean {
+  if ((previous.projection ?? 'perspective') !== (next.projection ?? 'perspective')) return false;
+  for (let axis = 0; axis < 3; axis++) {
+    const positionDelta = next.position[axis] - previous.position[axis];
+    const targetDelta = next.target[axis] - previous.target[axis];
+    if (!Number.isFinite(positionDelta) || !Number.isFinite(targetDelta) || Math.abs(positionDelta - targetDelta) > 1e-6) return false;
+  }
+  return true;
 }
 
 function activeInputControlsFor(
