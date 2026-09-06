@@ -5,14 +5,16 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const mode = process.argv[2];
+const suite = process.env.SVELTE_PROBE_SUITE ?? (mode === 'boundary-snippets' ? 'boundary-snippets' : 'focused');
 const candidates = {
   baseline: [],
   candidate: ['async-boundary-destroyed.patch'],
   'nested-effects': ['async-boundary-destroyed.patch', 'async-pending-ancestor.patch'],
-  'derived-errors': ['async-boundary-destroyed.patch', 'async-pending-ancestor.patch', 'async-derived-errors.patch']
+  'derived-errors': ['async-boundary-destroyed.patch', 'async-pending-ancestor.patch', 'async-derived-errors.patch'],
+  'boundary-snippets': ['boundary-snippets.patch']
 };
 if (!Object.hasOwn(candidates, mode)) {
-  throw new Error('Usage: node repros/probe-async-boundary.mjs baseline|candidate|nested-effects|derived-errors [vitest filters]');
+  throw new Error('Usage: node repros/probe-async-boundary.mjs baseline|candidate|nested-effects|derived-errors|boundary-snippets [vitest filters]');
 }
 
 const directory = fileURLToPath(new URL('..', import.meta.url));
@@ -34,8 +36,8 @@ try {
   const result = spawnSync(process.execPath, [
     cli, 'run', '--config', 'repros/vitest.svelte-probe.config.ts', ...process.argv.slice(3)
   ], {
-    cwd: directory, env: { ...process.env, SVELTE_PROBE_DIR: copy }, stdio: 'inherit',
-    timeout: process.env.SVELTE_PROBE_SUITE === 'regression' ? 120000 : 30000
+    cwd: directory, env: { ...process.env, SVELTE_PROBE_DIR: copy, SVELTE_PROBE_SUITE: suite }, stdio: 'inherit',
+    timeout: suite === 'regression' ? 120000 : 30000
   });
   if (result.error) throw result.error;
   process.exitCode = result.status ?? 1;

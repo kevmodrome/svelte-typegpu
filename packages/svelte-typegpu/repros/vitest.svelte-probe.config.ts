@@ -6,7 +6,7 @@ import base from '../vitest.config';
 const directory = process.env.SVELTE_PROBE_DIR;
 if (!directory) throw new Error('Set SVELTE_PROBE_DIR to an isolated copy of the pinned Svelte package.');
 const suite = process.env.SVELTE_PROBE_SUITE ?? 'focused';
-if (suite !== 'focused' && suite !== 'regression') throw new Error(`Unknown Svelte probe suite: ${suite}`);
+if (!['focused', 'regression', 'boundary-snippets'].includes(suite)) throw new Error(`Unknown Svelte probe suite: ${suite}`);
 const { exports } = JSON.parse(readFileSync(resolve(directory, 'package.json'), 'utf8'));
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const alias = Object.entries(exports).flatMap(([name, entry]) => {
@@ -28,7 +28,7 @@ export default defineConfig({
     ...base.test,
     alias,
     setupFiles: suite === 'regression' ? ['repros/enable-async.ts'] : [],
-    include: [
+    include: suite === 'boundary-snippets' ? ['repros/boundary-snippets/*.test.ts'] : [
       'repros/async-boundary-unmount.test.ts',
       'repros/probes/*.test.ts',
       ...(suite === 'regression' ? base.test!.include! : ['src/async-expressions.test.ts'])

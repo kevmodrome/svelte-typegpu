@@ -1,5 +1,34 @@
 # Async boundary teardown reproducer
 
+## Inline boundary snippets (compiler-only)
+
+The independent `boundary-snippets` mode applies only
+`probes/boundary-snippets.patch` to a temporary Svelte copy. It selects its own
+synchronous suite by default and does not apply any async runtime patch:
+
+```sh
+rtk proxy env TMPDIR=/tmp pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs boundary-snippets
+rtk proxy env TMPDIR=/tmp NODE_ENV=production pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs boundary-snippets
+rtk proxy env TMPDIR=/tmp SVELTE_PROBE_SUITE=boundary-snippets pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs baseline repros/boundary-snippets/lifecycle.test.ts
+```
+
+The baseline command intentionally fails the scene cases with a compiler TypeError;
+native scope/error comparisons pass. The candidate passes 56 development and 51
+production tests, including 36 real Tween/Spring cadence cases across scene and
+viewport entries at 60/120/144 Hz. It preserves renderer guards, boundary-local
+constant scope, failure/reset cleanup, native compiler output, targeted writes,
+resource reuse, settled idling and manual/disposal behavior.
+
+This fixes the client boundary visitor's lookup of the function inside a
+renderer-tagged snippet. It neither hoists consumer source nor adds a component
+wrapper. The ESM compiler source is patched in isolation; the CommonJS compiler
+bundle remains the untouched native-output comparison. CommonJS parity, an
+approved installed patch or upstream update, and live deployed-compiler checking
+remain gates. Inline boundary snippets are not yet supported in the running apps.
+See the [design and results](../../../docs/boundary-snippets-design.md).
+
+## Async teardown baseline
+
 Run from the workspace root:
 
 ```sh

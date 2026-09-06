@@ -1,0 +1,31 @@
+diff --git a/src/compiler/phases/3-transform/client/visitors/SvelteBoundary.js b/src/compiler/phases/3-transform/client/visitors/SvelteBoundary.js
+--- a/src/compiler/phases/3-transform/client/visitors/SvelteBoundary.js
++++ b/src/compiler/phases/3-transform/client/visitors/SvelteBoundary.js
+@@ -1,7 +1,7 @@
+ /** @import { BlockStatement, Statement, Expression, VariableDeclaration } from 'estree' */
+ /** @import { AST } from '#compiler' */
+ /** @import { ComponentContext } from '../types' */
+-import { dev } from '../../../../state.js';
++import { custom_renderer, dev } from '../../../../state.js';
+ import * as b from '#compiler/builders';
+ 
+ /**
+@@ -86,9 +86,16 @@
+ 				const snippet = /** @type {VariableDeclaration} */ (statements[0]);
+ 
++				const initializer = snippet.declarations[0].init;
++				const wrapped = /** @type {Expression} */ (
++					custom_renderer
++						? /** @type {import('estree').CallExpression} */ (initializer).arguments[1]
++						: initializer
++				);
++
+ 				const snippet_fn = dev
+ 					? // @ts-expect-error we know this shape is correct
+-						snippet.declarations[0].init.arguments[1]
+-					: snippet.declarations[0].init;
++						wrapped.arguments[1]
++					: wrapped;
+ 
+ 				if (!context.state.options.experimental.async) {
+ 					snippet_fn.body.body.unshift(
