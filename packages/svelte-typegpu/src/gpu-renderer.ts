@@ -338,6 +338,12 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
   setScene(scene: TypeGpuSceneState): void {
     if (this.#disposed) return;
+    // Picking/listener changes are reconciled by the runtime, not by drawing.
+    if (
+      scene.dirty === Dirty.Interaction && !scene.lightsChanged &&
+      !scene.drawBatchesChanged && !scene.shaderPassesChanged &&
+      !scene.instanceUpdates?.length && !scene.materialUpdates?.length
+    ) return;
 
     const depthChanged = this.#renderSettings.depth !== scene.renderSettings.depth;
     // A scene update is one invalidation, including its camera projection.

@@ -110,6 +110,27 @@ export function createSceneState(
   options: TypeGpuSceneStateOptions = {}
 ): TypeGpuSceneState {
   const dirty = options.dirty ?? Dirty.All;
+  if (
+    dirty === Dirty.Interaction && cache.lastState && cache.transforms.isReady(root) &&
+    !options.reuseDrawBatches && !options.reuseLights
+  ) {
+    // Input changes must retain camera movement committed outside the scene markup.
+    const interaction = createInteractionIndex(createInteractionTargets(cache.resourceItems));
+    cache.cleanInteraction = interaction;
+    cache.transforms.attachInteraction(interaction.targets);
+    return (cache.lastState = {
+      ...cache.lastState,
+      dirty,
+      drawBatches: cache.drawBatchCache.updateInstances([]).batches,
+      drawBatchesChanged: false,
+      instanceUpdates: undefined,
+      materialUpdates: undefined,
+      lightsChanged: false,
+      shaderPassesChanged: false,
+      interaction,
+      interactionChanged: true
+    });
+  }
   const incremental =
     !options.reuseDrawBatches && !options.reuseLights
       ? updateSceneValuesAndTransforms(root, cache, dirty, options.dirtyNodes)

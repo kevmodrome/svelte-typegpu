@@ -25,6 +25,36 @@ function fixture() {
 }
 
 describe('ancestor interaction eligibility', () => {
+  it('preserves an interactive camera and clears previous visual deltas on listener edits', () => {
+    const { root, group, meshes, cache } = fixture();
+    createSceneState(root, cache);
+    setAttribute(meshes[0], 'position', [2, 0, 0]);
+    const moving = createSceneState(root, cache, {
+      dirty: Dirty.Transform, dirtyNodes: new Map([[meshes[0], Dirty.Transform]])
+    });
+    expect(moving.instanceUpdates).toHaveLength(1);
+    const interactiveCamera = { ...moving.camera, position: [0, 3, 12] as [number, number, number] };
+    moving.camera = interactiveCamera;
+    const reset = vi.spyOn(cache.transforms, 'reset');
+    addEventListener(group, 'click', vi.fn());
+    const next = createSceneState(root, cache, { dirty: Dirty.Interaction });
+    expect(next.camera).toBe(interactiveCamera);
+    expect(next.renderSettings).toBe(moving.renderSettings);
+    expect(next.drawBatches).toBe(moving.drawBatches);
+    expect(next.resourceItems).toBe(moving.resourceItems);
+    expect(next.liveResourceKeys).toBe(moving.liveResourceKeys);
+    expect(next.lights).toBe(moving.lights);
+    expect(next.shaderPasses).toBe(moving.shaderPasses);
+    expect(next.instanceUpdates ?? []).toHaveLength(0);
+    expect(next.materialUpdates ?? []).toHaveLength(0);
+    expect(next.drawBatches.every(batch => !batch.instancesChanged && !batch.dirtyRanges.length)).toBe(true);
+    expect(next.drawBatchesChanged || next.lightsChanged || next.shaderPassesChanged).toBe(false);
+    expect(next.interactionChanged).toBe(true);
+    expect(next.interaction.targets).toHaveLength(3);
+    expect(next.interaction.targets[0].bounds.min[0]).toBe(1.5);
+    expect(reset).not.toHaveBeenCalled();
+  });
+
   it('shares inherited handler sets and only copies them for new event types', () => {
     const { root, scene, group, meshes } = fixture();
     addEventListener(scene, 'click', vi.fn());
