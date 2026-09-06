@@ -138,9 +138,9 @@ export function perspectiveMatrix(
 
   matrix[0] = f / aspect;
   matrix[5] = f;
-  matrix[10] = (far + near) / (near - far);
+  matrix[10] = far / (near - far);
   matrix[11] = -1;
-  matrix[14] = (2 * far * near) / (near - far);
+  matrix[14] = (far * near) / (near - far);
 
   return matrix;
 }
@@ -157,10 +157,10 @@ export function orthographicMatrix(
 
   matrix[0] = 2 / (right - left);
   matrix[5] = 2 / (top - bottom);
-  matrix[10] = -2 / (far - near);
+  matrix[10] = -1 / (far - near);
   matrix[12] = -(right + left) / (right - left);
   matrix[13] = -(top + bottom) / (top - bottom);
-  matrix[14] = -(far + near) / (far - near);
+  matrix[14] = -near / (far - near);
   matrix[15] = 1;
 
   return matrix;

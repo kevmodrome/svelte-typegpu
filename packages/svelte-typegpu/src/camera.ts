@@ -121,7 +121,7 @@ export function cameraRayFromViewport(input: {
     if (!inverseViewProjection) {
       throw new Error('Camera view-projection matrix is not invertible');
     }
-    const origin = transformPoint4(inverseViewProjection, [ndcX, ndcY, -1]);
+    const origin = transformPoint4(inverseViewProjection, [ndcX, ndcY, 0]);
     const direction = normalize3(subtract3(camera.target, camera.position), [0, 0, -1]);
 
     return { origin, direction };

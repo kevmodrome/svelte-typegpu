@@ -9,6 +9,7 @@ import {
   invert4,
   multiply4,
   perspectiveMatrix,
+  orthographicMatrix,
   readTransformAttributes,
   transformPoint4
 } from './math3d';
@@ -60,8 +61,8 @@ describe('TypeGPU camera math', () => {
     expect(Array.from(matrix).every(Number.isFinite)).toBe(true);
     expect(matrix[0]).toBeCloseTo(1.125);
     expect(matrix[5]).toBeCloseTo(1.856953);
-    expect(matrix[10]).toBeCloseTo(-0.018589);
-    expect(matrix[14]).toBeCloseTo(-0.78638);
+    expect(matrix[10]).toBeCloseTo(-0.009294);
+    expect(matrix[14]).toBeCloseTo(0.10681);
   });
 
   it('creates a center perspective ray from viewport coordinates', () => {
@@ -285,6 +286,23 @@ describe('TypeGPU camera math', () => {
     for (let index = 0; index < 16; index += 1) {
       expect(identity[index]).toBeCloseTo(index % 5 === 0 ? 1 : 0, 5);
     }
+  });
+
+  it.each(['perspective', 'orthographic'])('maps %s near/far planes to WebGPU depth 0/1', kind => {
+    const near = 1, far = 10;
+    const matrix = kind === 'perspective' ? perspectiveMatrix(Math.PI / 3, 1, near, far)
+      : orthographicMatrix(-2, 2, -2, 2, near, far);
+    expect(transformPoint4(matrix, [0, 0, -near])[2]).toBeCloseTo(0, 6);
+    expect(transformPoint4(matrix, [0, 0, -far])[2]).toBeCloseTo(1, 6);
+    expect(transformPoint4(matrix, [0, 0, -near / 2])[2]).toBeLessThan(0);
+    expect(transformPoint4(matrix, [0, 0, -far * 2])[2]).toBeGreaterThan(1);
+  });
+
+  it('starts orthographic picking rays on the declared near plane', () => {
+    const ray = cameraRayFromViewport({ x: 50, y: 50, viewport: { width: 100, height: 100 },
+      camera: { projection: 'orthographic', position: [0, 0, 10], target: [0, 0, 0], near: 2, far: 50, zoom: 1 } });
+    expect(ray.origin[2]).toBeCloseTo(8);
+    expect(ray.direction).toEqual([0, 0, -1]);
   });
 
   it('throws when transforming a point with a near-zero homogeneous coordinate', () => {
