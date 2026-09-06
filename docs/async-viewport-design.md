@@ -145,3 +145,9 @@ canvas. A minimal plain DOM component reproduces the same dev/prod failure. A ba
 native canvas and direct async attributes pass. This is a new rollout gate, not
 evidence that the renderer needs DOM cleanup workarounds. The expanded mixed-runtime
 regression result is 1,225 passing, four failing, and no unhandled errors.
+
+The separate [derived-error investigation](async-derived-errors-design.md) now
+tests a third isolated candidate. It fixes those failures and preserves the existing
+boundary reset behavior; all 41 hydration/error-cache cases and 1,230 mixed-runtime
+regression tests pass with that candidate. No dependency patch is active. Broad
+runtime review, production-runtime coverage and live verification still gate rollout.

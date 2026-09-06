@@ -1,0 +1,54 @@
+diff --git a/src/internal/client/error-handling.js b/src/internal/client/error-handling.js
+--- a/src/internal/client/error-handling.js
++++ b/src/internal/client/error-handling.js
+@@ -8,6 +8,7 @@ import {
+ 	BOUNDARY_EFFECT,
+ 	REACTION_RAN,
+ 	EFFECT,
++	DERIVED,
+ 	DESTROYED,
+ 	DESTROYING
+ } from './constants.js';
+@@ -28,6 +29,11 @@ export function handle_error(error) {
+ 		return error;
+ 	}
+ 
++	// Let the reader handle owned-derived failures and unwind component creation.
++	if (active_reaction !== null && (active_reaction.f & DERIVED) !== 0) {
++		throw error;
++	}
++
+ 	if (DEV && error instanceof Error && !adjustments.has(error)) {
+ 		adjustments.set(error, get_adjustments(error, effect));
+ 	}
+diff --git a/src/internal/client/reactivity/deriveds.js b/src/internal/client/reactivity/deriveds.js
+--- a/src/internal/client/reactivity/deriveds.js
++++ b/src/internal/client/reactivity/deriveds.js
+@@ -48,6 +48,7 @@
+ import { increment_pending, unset_context } from './async.js';
+ import { deferred, includes, noop } from '../../shared/utils.js';
+ import { set_signal_status, update_derived_status } from './status.js';
++import { handle_error } from '../error-handling.js';
+ 
+ /**
+  * This allows us to track 'reactivity loss' that occurs when signals
+@@ -368,6 +369,9 @@ export function execute_derived(derived) {
+ 			derived.f &= ~WAS_MARKED;
+ 			destroy_derived_effects(derived);
+ 			value = update_reaction(derived);
++		} catch (error) {
++			set_active_effect(prev_active_effect ?? parent);
++			value = handle_error(error);
+ 		} finally {
+ 			set_active_effect(prev_active_effect);
+ 			set_eager_effects(prev_eager_effects);
+@@ -380,6 +384,9 @@ export function execute_derived(derived) {
+ 			derived.f &= ~WAS_MARKED;
+ 			destroy_derived_effects(derived);
+ 			value = update_reaction(derived);
++		} catch (error) {
++			set_active_effect(prev_active_effect ?? parent);
++			value = handle_error(error);
+ 		} finally {
+ 			set_active_effect(prev_active_effect);
+ 		}

@@ -106,15 +106,15 @@ the narrow teardown probe is not sufficient to enable experimental async scenes.
 ## Existing-component regression suite
 
 ```sh
-rtk proxy env SVELTE_PROBE_SUITE=regression pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs nested-effects
+rtk proxy env SVELTE_PROBE_SUITE=regression pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs derived-errors
 ```
 
 This enables the async runtime before each isolated test module and runs the entire
-normal renderer package suite plus the focused probes. Before the async hydration
-probe it passed all 1,189 tests. The expanded suite currently passes 1,225 and fails
-four new hydration rejection cases with the `nested-effects` candidate, with no
-unhandled errors. Its 345 existing GPU lifecycle cases and 72 async motion cases
-still pass. Compiled fixtures keep their current compiler settings: this tests
+normal renderer package suite plus the focused probes. The three-patch
+`derived-errors` candidate passes all 1,230 tests, with no unhandled errors,
+including 345 existing GPU lifecycle cases and 72 async motion cases. The earlier
+`nested-effects` candidate fails the four hydration rejection cases described below.
+Compiled fixtures keep their current compiler settings: this tests
 coexistence once an async scene enables Svelte's shared runtime, not a global async
 compiler migration. The original compatibility canary still runs its intentional
 failure in a separate process against the untouched installed dependency.
@@ -190,3 +190,29 @@ both dev/prod. The suspected path is `execute_derived` restoring the derived's
 already-run owner effect, then `handle_error` handling the failure without unwinding
 the still-creating reader. The tests require zero canvases after rejection and one
 after reset, rather than accepting or manually removing orphaned DOM.
+
+## Isolated derived-error candidate
+
+```sh
+rtk proxy pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs derived-errors
+```
+
+This mode adds `probes/async-derived-errors.patch` to the two earlier candidates.
+Owned-derived errors unwind to `execute_derived`, which restores the reader effect
+before invoking the existing error handler. Scheduler dirty checks without an
+active reader retain the owner boundary context. Unowned deriveds keep their error
+cache and recover after invalidation. A throw-only version was rejected because it
+broke an existing boundary reset test during `is_dirty`; the refined candidate
+passes that test without changing its assertions.
+
+The candidate passes all 147 focused probes, including 41 hydration/error-cache
+cases and 72 cadence cases, and all 1,230 mixed-runtime regression tests. Normal
+workspace tests still pass all 1,174 cases against the untouched dependency. Probe
+TypeScript checks pass. This is not an active patch or a general Svelte runtime
+correctness claim; see the [error propagation design](../../../docs/async-derived-errors-design.md).
+
+Both compiler `dev` settings are exercised. A separate `NODE_ENV=production` run
+could not load the tests because the Vite/Vitest harness externalized their Node
+built-ins; that attempt provides no production-runtime verification. Upstream error
+handling tests, production-runtime coverage, patch approval, global async compiler
+rollout, and live GPU verification remain separate gates.

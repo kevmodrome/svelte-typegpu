@@ -41,6 +41,32 @@ function meshes(root: TypeGpuNode) {
   return result;
 }
 type Controls = { reference(): HTMLCanvasElement | null | undefined; update(value: Promise<string>): void };
+
+it('preserves unowned derived error caching and recovery', async () => {
+  await import('svelte/internal/flags/async');
+  const runtime = client as unknown as {
+    state(value: unknown): unknown; derived(fn: () => unknown): unknown;
+    get(value: unknown): unknown; set(state: unknown, value: unknown): void
+  };
+  const invalid = runtime.state(true);
+  const failure = new Error('unowned derived failure');
+  const read = vi.fn(() => {
+    if (runtime.get(invalid)) throw failure;
+    return 'recovered';
+  });
+  const value = runtime.derived(read);
+  expect(() => runtime.get(value)).toThrow(failure);
+  expect(() => runtime.get(value)).toThrow(failure);
+  expect(read).toHaveBeenCalledOnce();
+  runtime.set(invalid, false);
+  expect(runtime.get(value)).toBe('recovered');
+  expect(runtime.get(value)).toBe('recovered');
+  expect(read).toHaveBeenCalledTimes(2);
+  runtime.set(invalid, true);
+  expect(() => runtime.get(value)).toThrow(failure);
+  expect(read).toHaveBeenCalledTimes(3);
+});
+
 async function components(mode: 'attribute' | 'derived', dev: boolean) {
   await import('svelte/internal/flags/async');
   const source = `<script>

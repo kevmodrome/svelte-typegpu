@@ -8,10 +8,11 @@ const mode = process.argv[2];
 const candidates = {
   baseline: [],
   candidate: ['async-boundary-destroyed.patch'],
-  'nested-effects': ['async-boundary-destroyed.patch', 'async-pending-ancestor.patch']
+  'nested-effects': ['async-boundary-destroyed.patch', 'async-pending-ancestor.patch'],
+  'derived-errors': ['async-boundary-destroyed.patch', 'async-pending-ancestor.patch', 'async-derived-errors.patch']
 };
 if (!Object.hasOwn(candidates, mode)) {
-  throw new Error('Usage: node repros/probe-async-boundary.mjs baseline|candidate|nested-effects [vitest filters]');
+  throw new Error('Usage: node repros/probe-async-boundary.mjs baseline|candidate|nested-effects|derived-errors [vitest filters]');
 }
 
 const directory = fileURLToPath(new URL('..', import.meta.url));
