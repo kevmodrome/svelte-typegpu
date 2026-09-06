@@ -36,6 +36,7 @@ source -> preparation (CSS analysis) -> Svelte compile -> static entry adaptatio
 ~ src/vite-integration.test.ts + test fixture: client/server order and dynamic opt-in
 ~ src/viewport-test-utils.ts: explicit test-only async compile helper
 + repros/probes/async-viewport.test.ts: actual canvas/native-boundary lifecycle
+~ repros/probes/async-boundary-motion.test.ts: native viewport parity and async canvas updates
 ~ repros/README.md: evidence and remaining gates
 ```
 
@@ -90,3 +91,16 @@ async shape should fail closed, with tests pinning the supported structure.
 Rollback is reverting the compiler change; there is no state migration or new
 resource owner. Errors remain normal compiler/runtime errors. The upstream runtime
 patch decision and global async rollout remain unresolved and separate.
+
+## Verified results
+
+The compiler and Vite fixes pass the normal workspace suite (1,174 tests), package
+TypeScript build, and Svelte type checks. Ten isolated native-viewport lifecycle
+cases pass. The motion probe now runs 72 scene/viewport cases, with an awaited
+native canvas attribute updating during Tween/Spring motion, both RAF orders,
+60/120/144 Hz and manual mode. One frame per measured step, targeted uploads,
+resource reuse, idle settlement, and host-owned disposal hold in the candidate
+runtime. The full mixed-runtime regression suite passes 1,189 tests with no
+unhandled errors. Probe TypeScript checks pass. These are controlled-clock and
+fake-GPU results; the live check was unavailable because the Mac remained locked.
+Genuinely async SSR/hydration and the upstream patch decision remain open.

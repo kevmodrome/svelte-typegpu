@@ -84,8 +84,9 @@ the separate viewport probes):
 | Full nested-effects candidate | 60 / 0 | 0 | 0 |
 | Original teardown with candidate | 2 / 0 | 0 | 0 |
 
-The 36 motion cases use real compiled async scenes and Tween/Spring at 60/120/144
-Hz in both demand RAF orders and manual mode. They assert frame delivery during
+The motion probe now has 72 cases: scene-only and native-viewport entries using
+real compiled async scenes and Tween/Spring at 60/120/144 Hz in both demand RAF
+orders and manual mode. They assert frame delivery during
 pending/reveal/removal/remount, 96-byte targeted steady-state uploads, CPU instance
 storage and GPU resource reuse, idle pending boundaries, and cancellation on
 disposal with late resolve/reject. The test shares the normal suite's fake GPU
@@ -110,7 +111,7 @@ rtk proxy env SVELTE_PROBE_SUITE=regression pnpm --filter svelte-typegpu exec no
 
 This enables the async runtime before each isolated test module and runs the entire
 normal renderer package suite plus the focused probes. The candidate passes all
-1,153 tests, including 345 existing GPU lifecycle cases and synchronous canvas
+1,189 tests, including 345 existing GPU lifecycle cases and synchronous canvas
 SSR/hydration. Compiled fixtures keep their current compiler settings: this tests
 coexistence once an async scene enables Svelte's shared runtime, not a global async
 compiler migration. The original compatibility canary still runs its intentional
@@ -145,3 +146,12 @@ resolve/reject after unmount. All ten pass with the combined candidate; the full
 mixed-runtime result above includes them. Server compiler tests alone are not
 evidence of genuinely async hydration. See the
 [viewport compiler design](../../../docs/async-viewport-design.md).
+
+The 36 added viewport cadence cases use the actual native canvas host and GPU root
+lifecycle with the shared fake GPU recorder. Native canvas attributes suspend,
+commit, and settle late after disposal alongside nested pending scene content and
+real Svelte motion. The matrix retains the scene-only frame/upload/allocation
+assertions, checks native canvas identity and one GPU initialization, and relies on
+host unmount for GPU disposal rather than manually disposing the viewport's root.
+This proves controlled callback delivery, not live GPU throughput or physical
+monitor refresh. The Mac was still locked during the attempted live check.

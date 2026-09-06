@@ -1,14 +1,16 @@
 // @vitest-environment happy-dom
 import tgpu from 'typegpu';
-import { flushSync, mount, unmount } from 'svelte';
+import { compile } from 'svelte/compiler';
+import { flushSync, mount, unmount, type Component } from 'svelte';
 import { Spring, Tween } from 'svelte/motion';
 import * as client from 'svelte/internal/client';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi, type MockInstance } from 'vitest';
 import { compileAsyncTypeGpuSource, settleComponentUpdates } from '../../src/component-test-utils';
+import { compileAsyncViewportSource } from '../../src/viewport-test-utils';
 import { createFragment } from '../../src/core';
 import { createFakeGpuRoot } from '../../src/gpu-test-utils';
-import { createTypeGpuRenderer } from '../../src/gpu-renderer';
-import renderer, { createTypeGpuRuntimeForTest } from '../../src/svelte-renderer';
+import { createTypeGpuRenderer, type TypeGpuRenderer } from '../../src/gpu-renderer';
+import renderer, { createTypeGpuRuntimeForTest, type TypeGpuRoot } from '../../src/svelte-renderer';
 import { createMeshPipeline } from '../../src/typegpu-pipeline';
 
 const captured = vi.hoisted(() => ({ bindings: [] as unknown[][], counts: [] as number[] }));
@@ -32,6 +34,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   captured.bindings.length = 0;
   captured.counts.length = 0;
+  document.body.replaceChildren();
 });
 
 function deferred() {
@@ -41,13 +44,35 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-it.each([60, 120, 144].flatMap(hz => ['Tween', 'Spring'].flatMap(kind => [
+type Controls = { hide(): void; show(value: Promise<string>): void; rename?(value: Promise<string>): void };
+function viewportParent(): Component<any, Controls> {
+  const compiled = compile(`<script>
+    let { Viewport, motion, initial, setup, frameloop, onready } = $props();
+    let viewport;
+    let label = $state.raw(Promise.resolve('initial'));
+    export function hide() { viewport.hide(); }
+    export function show(value) { viewport.show(value); }
+    export function rename(value) { label = value; }
+  </script>
+  {#snippet pending()}<p>Loading canvas</p>{/snippet}
+  <svelte:boundary {pending}>
+    <Viewport {motion} {initial} {setup} {frameloop} {onready} {label} bind:this={viewport} />
+  </svelte:boundary>`, {
+    filename: 'AsyncMotionParent.svelte', runes: true, experimental: { async: true }
+  });
+  const name = compiled.js.code.match(/export default function (\w+)/)![1];
+  const code = compiled.js.code.replace(/^import .*;\n/gm, '')
+    .replace(`export default function ${name}`, `function ${name}`);
+  return new Function('$', `${code}\nreturn ${name};`)(client);
+}
+
+it.each(['scene', 'viewport'].flatMap(host => [60, 120, 144].flatMap(hz => ['Tween', 'Spring'].flatMap(kind => [
   { frameloop: 'demand' as const, rendererFirst: false },
   { frameloop: 'demand' as const, rendererFirst: true },
   { frameloop: 'manual' as const, rendererFirst: false }
-].flatMap(clock => ['resolve', 'reject'].map(outcome => ({ hz, kind, ...clock, outcome }))))))(
-  'keeps pending ancestors out of $kind frames at $hz Hz ($frameloop, renderer first: $rendererFirst, late: $outcome)',
-  async ({ hz, kind, frameloop, rendererFirst, outcome }) => {
+].flatMap(clock => ['resolve', 'reject'].map(outcome => ({ host, hz, kind, ...clock, outcome })))))))(
+  'keeps pending ancestors out of $host $kind frames at $hz Hz ($frameloop, renderer first: $rendererFirst, late: $outcome)',
+  async ({ host, hz, kind, frameloop, rendererFirst, outcome }) => {
     const pending = new Map<number, FrameRequestCallback>();
     const producers = new WeakSet<FrameRequestCallback>();
     let now = 0, id = 0;
@@ -63,10 +88,8 @@ it.each([60, 120, 144].flatMap(hz => ['Tween', 'Spring'].flatMap(kind => [
       new Spring(0, { stiffness: 0.01, damping: 0.5, precision: 1e-8 });
     const stop = () => motion instanceof Tween ? motion.set(motion.current, { duration: 0 }) :
       motion.set(motion.current, { instant: true });
-    const Scene = await compileAsyncTypeGpuSource<{
-      hide(): void; show(value: Promise<string>): void;
-    }>(`<script>
-      let { motion, initial, setup } = $props();
+    const source = `<script>
+      let { motion, initial, setup, label, frameloop, onready } = $props();
       let request = $state.raw(initial);
       let visible = $state(true);
       export function hide() { visible = false; }
@@ -74,6 +97,7 @@ it.each([60, 120, 144].flatMap(hz => ['Tween', 'Spring'].flatMap(kind => [
     </script>
     {#snippet pending()}<group name="pending" />{/snippet}
     {#snippet failed(error)}<group name={error.message} />{/snippet}
+    ${host === 'viewport' ? '<canvas aria-label={await label} {frameloop} {onready}>' : ''}
     <scene>
       {#each Array.from({ length: 64 }, (_, i) => i) as i (i)}
         <mesh position={[i + 10, 0, 0]}><boxGeometry /><standardMaterial /></mesh>
@@ -88,23 +112,43 @@ it.each([60, 120, 144].flatMap(hz => ['Tween', 'Spring'].flatMap(kind => [
           ${'</svelte:boundary>'.repeat(4)}
         </svelte:boundary>
       {/if}
-    </scene>`);
+    </scene>
+    ${host === 'viewport' ? '</canvas><style>canvas { height: 420px; }</style>' : ''}`;
+    const Scene = host === 'viewport' ? await compileAsyncViewportSource<Controls>(source) :
+      await compileAsyncTypeGpuSource<Controls>(source);
     const { root: gpu, buffers, submissions } = createFakeGpuRoot(captured);
-    vi.mocked(tgpu.init).mockResolvedValue(gpu as never);
+    vi.mocked(tgpu.init).mockClear().mockResolvedValue(gpu as never);
     vi.stubGlobal('navigator', { gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
-    const canvas = Object.assign(new EventTarget(), {
-      clientWidth: 100, clientHeight: 100, width: 100, height: 100
-    }) as HTMLCanvasElement;
-    const draw = await createTypeGpuRenderer({ canvas, frameloop });
-    const setScene = vi.spyOn(draw, 'setScene');
-    const root = createFragment();
-    const runtime = createTypeGpuRuntimeForTest(root, canvas, draw);
-    root.runtime = runtime;
     const first = deferred();
     const late = deferred();
     const cleanup = vi.fn();
     const setup = vi.fn(() => cleanup);
-    const instance = mount(Scene, { renderer, target: root, props: { motion, initial: first.promise, setup } });
+    let draw!: TypeGpuRenderer;
+    let setScene!: MockInstance<TypeGpuRenderer['setScene']>;
+    let disposeRenderer = () => {};
+    let instance: Controls;
+    let canvas: HTMLCanvasElement;
+    if (host === 'viewport') {
+      instance = mount(viewportParent(), { target: document.body, props: {
+        Viewport: Scene, motion, initial: first.promise, setup, frameloop,
+        onready(root: TypeGpuRoot) { draw = root.gpu; setScene = vi.spyOn(draw, 'setScene'); }
+      } });
+      await settleComponentUpdates(); await settleComponentUpdates();
+      canvas = document.querySelector('canvas')!;
+      expect(canvas?.getAttribute('aria-label')).toBe('initial');
+      expect(document.querySelector('scene, mesh')).toBeNull();
+    } else {
+      canvas = Object.assign(new EventTarget(), {
+        clientWidth: 100, clientHeight: 100, width: 100, height: 100
+      }) as HTMLCanvasElement;
+      draw = await createTypeGpuRenderer({ canvas, frameloop });
+      setScene = vi.spyOn(draw, 'setScene');
+      const root = createFragment();
+      const runtime = createTypeGpuRuntimeForTest(root, canvas, draw);
+      root.runtime = runtime;
+      disposeRenderer = () => { runtime.dispose(); draw.dispose(); };
+      instance = mount(Scene, { renderer, target: root, props: { motion, initial: first.promise, setup } });
+    }
     const order: string[] = [];
     async function step() {
       now += 1000 / hz;
@@ -134,8 +178,18 @@ it.each([60, 120, 144].flatMap(hz => ['Tween', 'Spring'].flatMap(kind => [
       void motion.set(10);
       if (frameloop === 'demand' && !rendererFirst) { draw.invalidate(); draw.invalidate(); }
       const revealFrame = Math.floor(hz / 3), hideFrame = Math.floor(2 * hz / 3);
+      const label = deferred();
       for (let frame = 0; frame < hz; frame++) {
         instances.write.mockClear();
+        if (host === 'viewport' && frame === 5) {
+          flushSync(() => instance.rename!(label.promise)); await settleComponentUpdates();
+          expect(canvas.getAttribute('aria-label')).toBe('initial');
+        }
+        if (host === 'viewport' && frame === 10) {
+          label.resolve('updated'); await settleComponentUpdates();
+          expect(canvas.getAttribute('aria-label')).toBe('updated');
+          expect(document.querySelector('canvas')).toBe(canvas);
+        }
         if (frame === revealFrame) {
           first.resolve('ready'); await settleComponentUpdates();
           expect(setup).toHaveBeenCalledOnce();
@@ -165,19 +219,23 @@ it.each([60, 120, 144].flatMap(hz => ['Tween', 'Spring'].flatMap(kind => [
       expect(gpu.createBuffer).not.toHaveBeenCalled();
       expect(gpu.createBindGroup).not.toHaveBeenCalled();
       expect(createMeshPipeline).not.toHaveBeenCalled();
+      if (host === 'viewport') expect(tgpu.init).toHaveBeenCalledOnce();
       expect(buffers).toEqual(retained);
       expect(buffers.every(buffer => buffer.destroy.mock.calls.length === 0)).toBe(true);
       await stop();
       for (let i = 0; i < 4; i++) await step();
       expect(pending.size).toBe(0);
       flushSync(() => instance.show(late.promise)); await settleComponentUpdates();
+      if (host === 'viewport') {
+        flushSync(() => instance.rename!(late.promise)); await settleComponentUpdates();
+      }
       for (let i = 0; i < 3; i++) await step();
       expect(pending.size).toBe(0);
       expect(setup).toHaveBeenCalledOnce();
       if (frameloop === 'manual') expect(request.mock.calls.every(([callback]) => producers.has(callback))).toBe(true);
       void motion.set(20);
       await step();
-      await unmount(instance); runtime.dispose(); draw.dispose(); disposed = true;
+      await unmount(instance); disposeRenderer(); disposed = true;
       const before = submissions.length;
       instances.write.mockClear();
       if (outcome === 'resolve') late.resolve('obsolete');
@@ -192,9 +250,10 @@ it.each([60, 120, 144].flatMap(hz => ['Tween', 'Spring'].flatMap(kind => [
       expect(setup).toHaveBeenCalledOnce();
       expect(cleanup).toHaveBeenCalledOnce();
       expect(gpu.destroy).toHaveBeenCalledOnce();
+      if (host === 'viewport') expect(document.querySelector('canvas')).toBeNull();
     } finally {
       await stop();
-      if (!disposed) { await unmount(instance); runtime.dispose(); draw.dispose(); }
+      if (!disposed) { await unmount(instance); disposeRenderer(); }
     }
   }
 );
