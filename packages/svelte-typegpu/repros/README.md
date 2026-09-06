@@ -37,6 +37,7 @@ The candidate is a research artifact, not an active pnpm patch.
 ```sh
 rtk proxy pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs baseline
 rtk proxy pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs candidate
+rtk proxy pnpm --filter svelte-typegpu exec node repros/probe-async-boundary.mjs nested-effects
 ```
 
 To compare only the original teardown bug:
@@ -56,19 +57,28 @@ resolution followed by unmount, and removal of a nested boundary contributing to
 its live parent's pending count. Every scenario runs with native DOM and scene
 elements, for both late resolve and late reject.
 
-The broader suite intentionally remains failing: attachments under a nested
+The broader suite with only the teardown candidate remains failing: attachments under a nested
 boundary without its own pending snippet execute while the ancestor still shows
-pending content. This happens in both hosts, with and without the candidate. Four
-assertions preserve the desired lifecycle contract rather than accepting the
+pending content. This happens in both hosts, with and without the teardown candidate. Eight
+tests preserve the desired lifecycle contract rather than accepting the
 observed behavior. Pending counters drain and the parent appears, but early
-attachment execution is a separate unresolved async-composition issue.
+attachment execution needs a separate scheduler correction. Additional cases cover
+parent/child pending snippets resolving in either order and rejection followed by reset.
+
+The `nested-effects` mode applies both separate candidates. For eligible effects
+that have not run yet, it finds the nearest pending ancestor and stores the deferred
+effect there. Rescheduling after that boundary resolves rechecks the chain. It adds
+no per-update ancestor walk for effects that already ran. All lifecycle cases pass
+with this candidate, but it is not an active dependency patch or an async-support
+claim. See the [scheduler investigation](../../../docs/async-boundary-effects-design.md).
 
 Verified on the pinned commit above:
 
 | Probe | Passing / failing tests | Unhandled errors | Exit status |
 | --- | --- | --- | --- |
-| Full baseline | 12 / 4 | 6 teardown TypeErrors | 1 |
-| Full candidate | 12 / 4 | 0 | 1 |
+| Full baseline | 14 / 8 | 6 teardown TypeErrors | 1 |
+| Full teardown candidate | 14 / 8 | 0 | 1 |
+| Full nested-effects candidate | 22 / 0 | 0 | 0 |
 | Original teardown with candidate | 2 / 0 | 0 | 0 |
 
 Type-check the opt-in probe code separately from the package's normal source:

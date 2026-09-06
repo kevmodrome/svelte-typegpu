@@ -75,6 +75,83 @@ async function fixture<Exports extends Record<string, unknown>>(
 describe.each(['scene', 'dom'] as const)('isolated async boundary candidate (%s)', (host) => {
   const tag = host === 'scene' ? 'mesh' : 'div';
 
+  it.each(['parent', 'child'] as const)('waits for all pending ancestors when %s resolves first', async (first) => {
+    const parent = deferred();
+    const child = deferred();
+    const cleanup = vi.fn();
+    const setup = vi.fn(() => cleanup);
+    const view = await fixture(host, `
+      <script>let { parent, child, setup } = $props();</script>
+      {#snippet outerPending()}<${tag} name="outer-pending"></${tag}>{/snippet}
+      {#snippet innerPending()}<${tag} name="inner-pending"></${tag}>{/snippet}
+      <svelte:boundary pending={outerPending}>
+        <${tag} name={await parent}></${tag}>
+        <svelte:boundary pending={innerPending}>
+          <${tag} name={await child} {@attach setup}></${tag}>
+        </svelte:boundary>
+      </svelte:boundary>
+    `, { parent: parent.promise, child: child.promise, setup });
+    expect(view.names()).toEqual(['outer-pending']);
+    const requests = { parent, child };
+    requests[first].resolve(first);
+    await tick();
+    expect(view.names()).toEqual(first === 'parent' ? ['parent', 'inner-pending'] : ['outer-pending']);
+    const prematureCalls = setup.mock.calls.length;
+    const last = first === 'parent' ? 'child' : 'parent';
+    requests[last].resolve(last);
+    await tick();
+    await settled();
+    expect(view.names()).toEqual(['parent', 'child']);
+    expect(prematureCalls).toBe(0);
+    expect(setup).toHaveBeenCalledOnce();
+    await view.dispose();
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
+  it('discards deferred attachments on rejection and starts them once after reset', async () => {
+    const first = deferred();
+    const next = deferred();
+    const cleanup = vi.fn();
+    const setup = vi.fn(() => cleanup);
+    const report = vi.fn();
+    const view = await fixture<{ recover(value: Promise<string>): void }>(host, `
+      <script>
+        let { initial, setup, report } = $props();
+        let request = $state.raw(initial);
+        let retry;
+        function onerror(error, reset) { report(error); retry = reset; }
+        export function recover(value) { request = value; retry(); }
+      </script>
+      {#snippet pending()}<${tag} name="pending"></${tag}>{/snippet}
+      {#snippet failed(error)}<${tag} name={error.message}></${tag}>{/snippet}
+      <${tag} name="sibling"></${tag}>
+      <svelte:boundary {pending} {failed} {onerror}>
+        <svelte:boundary>
+          <${tag} name={await request} {@attach setup}></${tag}>
+        </svelte:boundary>
+      </svelte:boundary>
+    `, { initial: first.promise, setup, report });
+    first.reject(new Error('broken'));
+    await tick();
+    expect(view.names()).toEqual(['sibling', 'broken']);
+    expect(report).toHaveBeenCalledOnce();
+    const rejectedCalls = setup.mock.calls.length;
+    flushSync(() => view.instance.recover(next.promise));
+    await tick();
+    expect(view.names()).toEqual(['sibling', 'pending']);
+    const retryCalls = setup.mock.calls.length;
+    next.resolve('recovered');
+    await tick();
+    await settled();
+    expect(view.names()).toEqual(['sibling', 'recovered']);
+    expect(rejectedCalls).toBe(0);
+    expect(retryCalls).toBe(0);
+    expect(setup).toHaveBeenCalledOnce();
+    expect(cleanup).not.toHaveBeenCalled();
+    await view.dispose();
+    expect(cleanup).toHaveBeenCalledOnce();
+  });
+
   it.each(['resolve', 'reject'] as const)('drains a removed nested boundary into its live parent (%s)', async (outcome) => {
     const request = deferred();
     const setup = vi.fn();

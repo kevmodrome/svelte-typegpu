@@ -161,3 +161,5 @@ red for this case rather than declaring the behavior supported. The parent's
 pending count does drain after removal and settlement; keyed replacement and
 partial-unmount tests pass with the guard. Any scheduler fix needs its own design
 and high-refresh verification, not an expansion of this fragment-insertion patch.
+The separate [pending-ancestor investigation](async-boundary-effects-design.md)
+now tests that scheduler candidate explicitly; neither patch is active in the apps.

@@ -1,0 +1,22 @@
+diff --git a/src/internal/client/reactivity/batch.js b/src/internal/client/reactivity/batch.js
+--- a/src/internal/client/reactivity/batch.js
++++ b/src/internal/client/reactivity/batch.js
+@@ -933,10 +933,15 @@
+ 		if (
+-			effect.b?.is_pending &&
+ 			(effect.f & (EFFECT | RENDER_EFFECT | MANAGED_EFFECT)) !== 0 &&
+ 			(effect.f & REACTION_RAN) === 0
+ 		) {
+-			effect.b.defer_effect(effect);
+-			return;
++			var boundary = effect.b;
++			while (boundary !== null) {
++				if (boundary.is_pending) {
++					boundary.defer_effect(effect);
++					return;
++				}
++				boundary = boundary.parent;
++			}
+ 		}
+ 
+ 		var e = effect;
