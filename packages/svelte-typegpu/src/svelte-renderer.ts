@@ -660,6 +660,7 @@ function createRuntime(
     dispose() {
       if (disposed) return;
       disposed = true;
+      sceneCache.modelCache.dispose();
       frameTasks.clear();
       gpu.setFrameHandler?.(null);
       dirtyNodes.clear();

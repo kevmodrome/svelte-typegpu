@@ -1693,7 +1693,7 @@ describe('TypeGPU Svelte renderer runtime', () => {
     await Promise.resolve();
 
     expect(renderer.setScene).toHaveBeenCalledTimes(1);
-    expect(loadUrl).toHaveBeenCalledWith('/models/empty.glb');
+    expect(loadUrl).toHaveBeenCalledWith('/models/empty.glb', expect.any(AbortSignal));
 
     resolveLoad(loadedModel('url:/models/empty.glb'));
     await Promise.resolve();

@@ -238,6 +238,7 @@ function updateSceneValuesAndTransforms(
 }
 
 function collectMeshDrawItems(root: TypeGpuNode, cache: TypeGpuSceneCache): TypeGpuMeshDrawItem[] {
+  cache.modelCache.beginCollection();
   cache.transforms.reset(root);
   cache.values.reset();
   const items: TypeGpuMeshDrawItem[] = [];
@@ -247,6 +248,7 @@ function collectMeshDrawItems(root: TypeGpuNode, cache: TypeGpuSceneCache): Type
     items,
     cache
   );
+  cache.modelCache.endCollection();
   return items;
 }
 

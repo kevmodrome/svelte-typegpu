@@ -91,4 +91,16 @@ describe('explicit model loading', () => {
       'unmounted'
     );
   });
+
+  it('does not consume a late response body after cancellation', async () => {
+    const controller = new AbortController();
+    const body = vi.fn();
+    let finish!: (response: unknown) => void;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(resolve => { finish = resolve; })));
+    const loading = loadModel('/triangle.obj', { signal: controller.signal });
+    controller.abort(new Error('removed'));
+    finish({ ok: true, arrayBuffer: body });
+    await expect(loading).rejects.toThrow('removed');
+    expect(body).not.toHaveBeenCalled();
+  });
 });

@@ -13,6 +13,118 @@ function loadedModel(key: string): TypeGpuLoadedModel {
 }
 
 describe('TypeGPU model cache', () => {
+  function collect(cache: ReturnType<typeof createModelCache>, requests: Parameters<typeof cache.read>[0][] = []) {
+    cache.beginCollection();
+    const entries = requests.map(request => cache.read(request));
+    cache.endCollection();
+    return entries;
+  }
+
+  it.each(['resolve', 'reject'] as const)('ignores an evicted URL %s without replacing a new same-source request', async outcome => {
+    const loads: { signal: AbortSignal; resolve(value: TypeGpuLoadedModel): void; reject(error: unknown): void }[] = [];
+    const loadUrl = vi.fn((_src: string, signal?: AbortSignal) => new Promise<TypeGpuLoadedModel>((resolve, reject) => {
+      loads.push({ signal: signal!, resolve, reject });
+    }));
+    const onSettled = vi.fn();
+    const cache = createModelCache({ loadUrl, onSettled });
+    const request = { src: '/shared.obj' };
+    collect(cache, [request]); collect(cache);
+    expect(loads[0].signal.aborted).toBe(true);
+    const [replacement] = collect(cache, [request]);
+    if (outcome === 'resolve') loads[0].resolve(loadedModel('obsolete'));
+    else loads[0].reject(new Error('obsolete'));
+    await Promise.resolve();
+    expect(cache.read(request)).toBe(replacement);
+    expect(onSettled).not.toHaveBeenCalled();
+    loads[1].resolve(loadedModel('replacement'));
+    await Promise.resolve();
+    expect(cache.read(request)).toMatchObject({ status: 'ready', model: { key: 'replacement' } });
+    expect(onSettled).toHaveBeenCalledOnce();
+  });
+
+  it.each(['resolve', 'reject'] as const)('ignores an evicted data %s without retaining the old buffer entry', async outcome => {
+    const loads: { resolve(value: TypeGpuLoadedModel): void; reject(error: unknown): void }[] = [];
+    const loadData = vi.fn(() => new Promise<TypeGpuLoadedModel>((resolve, reject) => loads.push({ resolve, reject })));
+    const onSettled = vi.fn();
+    const cache = createModelCache({ loadData, onSettled });
+    const request = { data: new ArrayBuffer(0) };
+    collect(cache, [request]); collect(cache);
+    const [replacement] = collect(cache, [request]);
+    expect(loadData).toHaveBeenCalledTimes(2);
+    if (outcome === 'resolve') loads[0].resolve(loadedModel('obsolete'));
+    else loads[0].reject(new Error('obsolete'));
+    await Promise.resolve();
+    expect(cache.read(request)).toBe(replacement);
+    expect(onSettled).not.toHaveBeenCalled();
+    loads[1].resolve(loadedModel('replacement'));
+    await Promise.resolve();
+    expect(cache.read(request)).toMatchObject({ status: 'ready', model: { key: 'replacement' } });
+    expect(onSettled).toHaveBeenCalledOnce();
+  });
+
+  it.each(['ready', 'failed'] as const)('releases settled %s URL entries and retries when owned again', async status => {
+    let signal!: AbortSignal;
+    const loadUrl = vi.fn(async (_src: string, value?: AbortSignal) => {
+      signal = value!;
+      if (status === 'failed') throw new Error('failed');
+      return loadedModel('ready');
+    });
+    const cache = createModelCache({ loadUrl });
+    const request = { src: '/shared.obj' };
+    collect(cache, [request]); await Promise.resolve();
+    const entry = cache.read(request);
+    expect(entry.status).toBe(status);
+    collect(cache, [request]);
+    expect(cache.read(request)).toBe(entry);
+    expect(loadUrl).toHaveBeenCalledOnce();
+    const abort = vi.fn();
+    signal.addEventListener('abort', abort);
+    collect(cache);
+    expect(abort).not.toHaveBeenCalled();
+    collect(cache, [request]);
+    expect(loadUrl).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(['url', 'data'] as const)('disposal invalidates late %s settlement and prevents new reads from loading', async source => {
+    let finish!: (model: TypeGpuLoadedModel) => void;
+    const load = vi.fn(() => new Promise<TypeGpuLoadedModel>(resolve => { finish = resolve; }));
+    const onSettled = vi.fn();
+    const cache = createModelCache({ loadUrl: load, loadData: load, onSettled });
+    const request = source === 'url' ? { src: '/shared.obj' } : { data: new ArrayBuffer(0) };
+    collect(cache, [request]);
+    cache.dispose(); cache.dispose();
+    finish(loadedModel('disposed')); await Promise.resolve();
+    expect(onSettled).not.toHaveBeenCalled();
+    expect(cache.read(request)).toEqual({ status: 'idle' });
+    expect(cache.read({ asset: loadedModel('external') })).toEqual({ status: 'idle' });
+    expect(load).toHaveBeenCalledOnce();
+  });
+
+  it('shares parsed data until its last owner leaves, then gives a reload a fresh geometry key', async () => {
+    const loadData = vi.fn(async (_buffer: ArrayBuffer, key: string) => loadedModel(key));
+    const cache = createModelCache({ loadData });
+    const request = { data: new ArrayBuffer(0) };
+    collect(cache, [request, request]); await Promise.resolve();
+    const [first] = collect(cache, [request]);
+    expect(loadData).toHaveBeenCalledOnce();
+    expect(first).toMatchObject({ status: 'ready', model: { key: 'data:1' } });
+    collect(cache);
+    collect(cache, [request]); await Promise.resolve();
+    expect(cache.read(request)).toMatchObject({ status: 'ready', model: { key: 'data:2' } });
+    expect(loadData).toHaveBeenCalledTimes(2);
+  });
+
+  it('invalidates an entry before a synchronous abort callback rereads its key', () => {
+    const loadUrl = vi.fn((_src: string, signal?: AbortSignal) => new Promise<TypeGpuLoadedModel>(() => {
+      signal!.addEventListener('abort', () => cache.read({ src: '/shared.obj' }), { once: true });
+    }));
+    const cache = createModelCache({ loadUrl });
+    collect(cache, [{ src: '/shared.obj' }]); collect(cache);
+    expect(loadUrl).toHaveBeenCalledTimes(2);
+    cache.dispose();
+    expect(loadUrl).toHaveBeenCalledTimes(2);
+  });
+
   it('reads resolved assets synchronously with stable weak entries and no loading work', () => {
     const loadUrl = vi.fn();
     const loadData = vi.fn();
@@ -113,7 +225,7 @@ describe('TypeGPU model cache', () => {
     expect(cache.read({ src }).status).toBe('loading');
     const entry = await settleModel(cache, { src });
 
-    expect(fetchMock).toHaveBeenCalledWith(src);
+    expect(fetchMock).toHaveBeenCalledWith(src, { signal: expect.any(AbortSignal) });
     expect(entry).toMatchObject({
       status: 'ready',
       model: {

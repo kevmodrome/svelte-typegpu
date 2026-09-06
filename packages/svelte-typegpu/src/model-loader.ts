@@ -27,6 +27,7 @@ export async function loadUrlModel(
 ): Promise<TypeGpuLoadedModel> {
   signal?.throwIfAborted();
   const response = await (signal ? fetch(src, { signal }) : fetch(src));
+  signal?.throwIfAborted();
   if (!response.ok) {
     throw new Error(`Failed to load model ${src}: ${response.status}`);
   }

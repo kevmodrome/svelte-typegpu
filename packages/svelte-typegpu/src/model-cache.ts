@@ -14,38 +14,67 @@ export interface TypeGpuModelRequest {
 }
 
 export interface TypeGpuModelCacheOptions {
-  loadUrl?: (src: string) => Promise<TypeGpuLoadedModel>;
+  loadUrl?: (src: string, signal?: AbortSignal) => Promise<TypeGpuLoadedModel>;
   loadData?: (data: ArrayBuffer, key: string) => Promise<TypeGpuLoadedModel>;
   onSettled?: () => void;
 }
 
 export interface TypeGpuModelCache {
   read(request: TypeGpuModelRequest): TypeGpuModelCacheEntry;
+  beginCollection(): void;
+  endCollection(): void;
+  dispose(): void;
+}
+
+interface ModelRecord {
+  entry: TypeGpuModelCacheEntry;
+  lastRead: number;
+  controller?: AbortController;
 }
 
 export function createModelCache({
-  loadUrl = loadUrlModel,
+  loadUrl = (src, signal) => loadUrlModel(src, undefined, signal),
   loadData = loadDataModel,
   onSettled = () => {}
 }: TypeGpuModelCacheOptions = {}): TypeGpuModelCache {
-  const urls = new Map<string, TypeGpuModelCacheEntry>();
-  const data = new WeakMap<ArrayBuffer, TypeGpuModelCacheEntry>();
-  const assets = new WeakMap<TypeGpuLoadedModel, TypeGpuModelCacheEntry>();
+  const urls = new Map<string, ModelRecord>();
+  const data = new Map<ArrayBuffer, ModelRecord>();
+  let assets = new WeakMap<TypeGpuLoadedModel, TypeGpuModelCacheEntry>();
   let nextDataKey = 1;
   let revision = 1;
+  let collection = 0;
+  let disposed = false;
 
-  function settleUrl(src: string, entry: TypeGpuModelCacheEntry): void {
-    urls.set(src, entry);
+  function settle<Key>(
+    entries: Map<Key, ModelRecord>, key: Key, record: ModelRecord,
+    result: { status: 'ready'; model: TypeGpuLoadedModel } | { status: 'failed'; error: unknown }
+  ): void {
+    if (disposed || entries.get(key) !== record) return;
+    record.controller = undefined;
+    record.entry = { ...result, revision: revision++ };
     onSettled();
   }
 
-  function settleData(buffer: ArrayBuffer, entry: TypeGpuModelCacheEntry): void {
-    data.set(buffer, entry);
-    onSettled();
+  function prune<Key>(entries: Map<Key, ModelRecord>): void {
+    for (const [key, record] of entries) {
+      if (!disposed && record.lastRead === collection) continue;
+      // Invalidate before abort: loader abort listeners may run synchronously.
+      entries.delete(key);
+      record.controller?.abort();
+    }
   }
 
   return {
+    beginCollection() { collection++; },
+    endCollection() { prune(urls); prune(data); },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      prune(urls); prune(data);
+      assets = new WeakMap();
+    },
     read(request) {
+      if (disposed) return { status: 'idle' };
       if (isLoadedModel(request.asset)) {
         const asset = request.asset;
         let entry = assets.get(asset);
@@ -59,32 +88,37 @@ export function createModelCache({
       if (request.data instanceof ArrayBuffer) {
         const buffer = request.data;
         const existing = data.get(buffer);
-        if (existing) return existing;
+        if (existing) {
+          existing.lastRead = collection;
+          return existing.entry;
+        }
 
         const key = `data:${nextDataKey++}`;
-        const loading: TypeGpuModelCacheEntry = { status: 'loading' };
-        data.set(buffer, loading);
+        const record: ModelRecord = { entry: { status: 'loading' }, lastRead: collection };
+        data.set(buffer, record);
         void loadData(buffer, key).then(
-          (model) => settleData(buffer, { status: 'ready', model, revision: revision++ }),
-          (error: unknown) =>
-            settleData(buffer, { status: 'failed', error, revision: revision++ })
-          );
-        return loading;
+          (model) => settle(data, buffer, record, { status: 'ready', model }),
+          (error: unknown) => settle(data, buffer, record, { status: 'failed', error })
+        );
+        return record.entry;
       }
 
       if (typeof request.src === 'string' && request.src.length > 0) {
         const src = request.src;
         const existing = urls.get(src);
-        if (existing) return existing;
+        if (existing) {
+          existing.lastRead = collection;
+          return existing.entry;
+        }
 
-        const loading: TypeGpuModelCacheEntry = { status: 'loading' };
-        urls.set(src, loading);
-        void loadUrl(src).then(
-          (model) => settleUrl(src, { status: 'ready', model, revision: revision++ }),
-          (error: unknown) =>
-            settleUrl(src, { status: 'failed', error, revision: revision++ })
-          );
-        return loading;
+        const controller = new AbortController();
+        const record: ModelRecord = { entry: { status: 'loading' }, lastRead: collection, controller };
+        urls.set(src, record);
+        void loadUrl(src, controller.signal).then(
+          (model) => settle(urls, src, record, { status: 'ready', model }),
+          (error: unknown) => settle(urls, src, record, { status: 'failed', error })
+        );
+        return record.entry;
       }
 
       return { status: 'idle' };
