@@ -22,6 +22,7 @@ Svelte releases. We test compiled components against the actual host renderer.
 | Scene event attributes and `onclickcapture` | Capture/target/bubble ordering, group boundaries, bubbling pointerover/pointerout, double-click/context-menu/wheel, and propagation controls supported |
 | `onpointercancel` | Original pressed-object routing, independent pointer IDs, capture/bubbling, callback replacement and terminal cleanup; no general scene pointer-capture API |
 | `Tween` / `Spring` bound to transforms and material values | Supported; frame delivery tested at 60/120/144 Hz in both RAF callback orders |
+| `MediaQuery` / `prefersReducedMotion` | Native subscription routing, shared listeners and teardown tested; the Svelte Motion example responds to preference changes without replaying settled targets |
 | `{@attach}` | Supported on scene nodes, including reactive replacement and component prop spreads |
 | Scene node references in `$state` | Identity preserved for attachment/event targets, including nested state objects and arrays; node internals remain renderer-owned |
 | `use:` | Not part of the renderer API; use attachments. The pinned preview may accept scene actions incidentally; the canvas boundary rejects them |
@@ -183,6 +184,41 @@ Height inputs replace individual records; checkboxes and mesh clicks update the
 same selection set. Add/remove/reset commands reconcile keyed objects without
 recreating the canvas. The example is bounded to 64 objects and defaults to demand
 rendering.
+
+## Media queries and reduced motion
+
+Svelte's `MediaQuery.current` can drive ordinary scene props, including inside
+snippets and child components. The renderer forwards subscriptions on native event
+targets to those targets rather than treating them as scene nodes. Multiple reads
+of a query share one listener; replacing it or removing its last consumer releases
+that listener. Same-value notifications do not dirty the scene. This also supports
+non-DOM subscriptions made through `svelte/events` in scene effects.
+
+A MediaQuery observes browser media conditions, not the canvas's content dimensions.
+Use native CSS for page layout and canvas size bindings for size-dependent scene
+values. SSR only has the query's fallback, not the user's actual browser preference.
+This does not enable `<svelte:window>` or turn scene nodes into DOM EventTargets.
+DOM delegation-sensitive `svelte/events` subscriptions should remain in ordinary
+DOM components: the pinned Svelte event wrapper skips DOM delegation in GPU scope.
+
+The [Svelte Motion example](../apps/docs/src/examples/svelte-motion/SvelteMotion.typegpu.svelte)
+reads the real `prefersReducedMotion` export from `svelte/motion`. When reduced
+motion is enabled, it sets Tween values with `{ duration: 0 }` and Spring values
+with `{ instant: true }`. This changes animation policy, not renderer frame rate:
+interaction and demand/manual rendering continue to work normally.
+
+When the preference switches off, compare the requested target with the existing
+target before starting another animation. Read the existing target with `untrack`
+so the effect does not subscribe to the target it writes. Otherwise a preference
+change can start a full-duration no-op tween. The example keeps its existing
+`onDestroy` cleanup for all producers.
+
+The generated consumer example is tested with its two real Tweens, Spring, and
+MediaQuery at 60/120/144 Hz in both RAF orders, initially normal/reduced modes,
+mid-animation cancellation, future target changes, demand/manual rendering,
+targeted instance writes, resource reuse and unmount cleanup. Active demand motion
+drains its already-queued follow-up after cancellation, then idles; turning normal
+motion back on with an unchanged target schedules nothing.
 
 ## Dynamic primitives
 

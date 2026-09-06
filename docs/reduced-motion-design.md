@@ -74,14 +74,14 @@ not make scene nodes DOM EventTargets or enable rejected `<svelte:window>` synta
 
 ## 5. Vertical slices and verification
 
-1. Fix native listener routing, then real MediaQuery in compiled direct/component/snippet scopes: changed/no-op
+1. Complete: native listener routing and real MediaQuery in compiled direct/component/snippet scopes: changed/no-op
    events, keyed conditional subscriptions, replacement and final cleanup. Assert
    stable nodes, bounded targeted dirty ranges and one shared native listener.
-2. Actual generated motion example: normal and initially reduced preference;
+2. Complete: actual generated motion example: normal and initially reduced preference;
    toggle during movement, change targets while reduced, toggle back without
    replay, then animate new targets. Exercise 60/120/144 Hz and both RAF orders,
    demand/manual, exact affected uploads, resource reuse, idling and disposal.
-3. Document the consumer policy and regenerate source listings. Run workspace
+3. Software GPU verified; physical refresh open: document the consumer policy and regenerate source listings. Run workspace
    tests/builds and development/production runtime profiles. Check live examples
    and browser preference emulation when GPU access is available; retain the open
    live GPU/physical refresh gate if the Mac remains locked or device creation stalls.
@@ -112,3 +112,29 @@ pass; no persisted state or data migration is involved. Rollback removes the two
 forwarding branches and the preference example change, restoring the reproduced
 MediaQuery limitation. Existing capture/bubble and handler-replacement tests guard
 scene semantics. Live GPU verification remains open rather than inferred from mocks.
+
+## Verification results
+
+- Two compiled MediaQuery composition cases and three native event-target cases
+  pass. The original MediaQuery crash was reproduced before changing the hooks.
+- Eighteen real-example cadence cases pass across 60/120/144 Hz, both callback
+  orders, initial preference states, demand/manual modes and cancellation. Both
+  material batches retain instance storage and only the three marker instances
+  are written; all 64 static instances remain unchanged. Listener ownership and
+  native options, including once/abort, are also covered.
+- The workspace passes 1,227 tests. Renderer development/production each pass
+  1,132, the full build passes, and svelte-check reports zero errors/warnings.
+  Isolated async-candidate regression passes 1,278 development and 1,258 production
+  tests. The installed Svelte dependency and application async flags are unchanged.
+- The served motion page returns HTTP 200; native reduced-motion media emulation
+  and client startup pass without page errors. Actual SwiftShader WebGPU checks at
+  1440x1000 and 390x844 confirm nonblank scene pixels, visible movement, pixel-stable
+  cancellation, no replay on re-enable, instant target parity and demand settling.
+  Screenshots were inspected at both sizes. Native resource counts stay at ten
+  buffers, six bind groups and two pipelines throughout interaction.
+- In the final software-GPU run, desktop delivered nine renders over ten callback
+  ticks (4.4 Hz) and mobile delivered 41 over 42 (24.6 Hz), with no duplicate render
+  ticks. Median renderer RAF CPU time was approximately 0.2 ms in both viewports.
+  These are software-GPU/browser observations, not hardware GPU throughput or
+  physical display measurements. Native browser access still reports a locked Mac;
+  physical high-refresh verification remains required.

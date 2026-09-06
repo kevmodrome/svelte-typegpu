@@ -5,8 +5,8 @@ import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
 import * as TypeGpuAttributeValues from 'svelte-typegpu/internal/attribute-values';
-import { onDestroy } from 'svelte';
-import { Spring, Tween } from 'svelte/motion';
+import { onDestroy, untrack } from 'svelte';
+import { Spring, Tween, prefersReducedMotion } from 'svelte/motion';
 import { cubicInOut } from 'svelte/easing';
 import MotionMarker from './MotionMarker.typegpu.js';
 import { motionField } from './motion-field.js';
@@ -55,15 +55,32 @@ export default function SvelteMotion_typegpu($$anchor, $$props) {
 	}
 
 	$.user_effect(() => {
-		position.target = [$$props.controls.x, 2, $$props.controls.z];
+		const target = [$$props.controls.x, 2, $$props.controls.z];
+		const reduced = prefersReducedMotion.current;
+		const previous = untrack(() => position.target);
+
+		// Preference changes stop active motion without replaying an unchanged target.
+		if (reduced || target.some((value, index) => value !== previous[index])) {
+			void position.set(target, reduced ? { duration: 0 } : undefined);
+		}
 	});
 
 	$.user_effect(() => {
-		lift.target = $$props.controls.lift;
+		const target = $$props.controls.lift;
+		const reduced = prefersReducedMotion.current;
+
+		if (reduced || target !== untrack(() => lift.target)) {
+			void lift.set(target, reduced ? { instant: true } : undefined);
+		}
 	});
 
 	$.user_effect(() => {
-		appearance.target = $$props.controls.appearance;
+		const target = $$props.controls.appearance;
+		const reduced = prefersReducedMotion.current;
+
+		if (reduced || target !== untrack(() => appearance.target)) {
+			void appearance.set(target, reduced ? { duration: 0 } : undefined);
+		}
 	});
 
 	onDestroy(() => {

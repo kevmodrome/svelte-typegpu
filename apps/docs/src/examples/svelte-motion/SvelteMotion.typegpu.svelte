@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
-  import { Spring, Tween } from 'svelte/motion';
+  import { onDestroy, untrack } from 'svelte';
+  import { Spring, Tween, prefersReducedMotion } from 'svelte/motion';
   import { cubicInOut } from 'svelte/easing';
   import type { TypeGpuNodeEvent, Vector3Tuple } from 'svelte-typegpu';
   import MotionMarker from './MotionMarker.typegpu.svelte';
@@ -21,13 +21,27 @@
   }
 
   $effect(() => {
-    position.target = [controls.x, 2, controls.z];
+    const target: Vector3Tuple = [controls.x, 2, controls.z];
+    const reduced = prefersReducedMotion.current;
+    const previous = untrack(() => position.target);
+    // Preference changes stop active motion without replaying an unchanged target.
+    if (reduced || target.some((value, index) => value !== previous[index])) {
+      void position.set(target, reduced ? { duration: 0 } : undefined);
+    }
   });
   $effect(() => {
-    lift.target = controls.lift;
+    const target = controls.lift;
+    const reduced = prefersReducedMotion.current;
+    if (reduced || target !== untrack(() => lift.target)) {
+      void lift.set(target, reduced ? { instant: true } : undefined);
+    }
   });
   $effect(() => {
-    appearance.target = controls.appearance;
+    const target = controls.appearance;
+    const reduced = prefersReducedMotion.current;
+    if (reduced || target !== untrack(() => appearance.target)) {
+      void appearance.set(target, reduced ? { duration: 0 } : undefined);
+    }
   });
   onDestroy(() => {
     void position.set(position.current, { duration: 0 });
