@@ -1,5 +1,23 @@
 # Async boundary teardown reproducer
 
+## Mesh noise resources
+
+`noise-resources.mjs` uses the installed compiler and a separate Vite/WebGPU browser
+to exercise conditional standard/smoky materials on a real compiled viewport:
+
+```sh
+rtk proxy env TMPDIR=/tmp pnpm --filter svelte-typegpu exec node repros/noise-resources.mjs
+```
+
+It uses the same optional `SVELTE_PROBE_BROWSER_DEPENDENCIES`,
+`SVELTE_PROBE_CHROMIUM`, and `SVELTE_PROBE_OUTPUT` settings described below.
+Desktop/mobile checks cover visible material replacement, animated noise, 60 manual
+frames with no new buffers or pipelines, one noise initialization across material
+switches, zero renderer RAF callbacks, idle submissions, and buffer/device cleanup.
+It never patches dependencies or changes the normal docs server. The plain scene
+must not create a noise compute pipeline. See the
+[design and allocation results](../../../docs/lazy-noise-design.md).
+
 ## Inline boundary snippets (compiler-only)
 
 The independent `boundary-snippets` mode applies the ESM
