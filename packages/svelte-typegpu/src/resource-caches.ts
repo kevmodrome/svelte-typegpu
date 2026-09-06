@@ -1,7 +1,9 @@
 import { perlin3d } from '@typegpu/noise';
 import { growInstanceCapacity } from './instance-data';
-import {
+import tgpu, {
   d,
+  MissingSlotValueError,
+  ResolutionError,
   type IndexFlag,
   type SampledFlag,
   type TgpuBindGroup,
@@ -10,7 +12,8 @@ import {
   type TgpuRoot,
   type TgpuTexture,
   type TgpuVertexLayout,
-  type UniformFlag
+  type UniformFlag,
+  type WithBinding
 } from 'typegpu';
 import { DEFAULT_SAMPLER, textureKeyFor } from './material-descriptors';
 import { createMeshPipeline } from './typegpu-pipeline';
@@ -480,26 +483,42 @@ export class MaterialResourceCache {
 
 export class PipelineResourceCache {
   readonly #resources = new Map<string, TypeGpuMeshPipeline>();
-  readonly #perlin3dCache: TypeGpuPerlin3DCache;
+  readonly #pendingGradient = tgpu.slot<TypeGpuPerlin3DCache['getJunctionGradient']>();
+  #pipelineRoot: WithBinding;
+  #perlin3dCache: TypeGpuPerlin3DCache | undefined;
+  #disposed = false;
 
   constructor(
     private readonly root: TgpuRoot,
     private readonly format: GPUTextureFormat
   ) {
-    this.#perlin3dCache = perlin3d.staticCache({ root, size: d.vec3u(32, 32, 32) });
+    this.#pipelineRoot = root.pipe(config => config.with(perlin3d.getJunctionGradientSlot, this.#pendingGradient));
   }
 
   getOrCreate(batch: TypeGpuDrawBatch, depth = true): TypeGpuMeshPipeline {
+    if (this.#disposed) throw new Error('Pipeline resource cache has been disposed.');
     const key = pipelineResourceKeyFor(batch, depth);
     const existing = this.#resources.get(key);
 
     if (existing) return existing;
 
-    const pipeline = createMeshPipeline(
-      this.root.pipe(this.#perlin3dCache.inject()),
-      this.format,
-      meshPipelineOptionsFor(batch, depth)
-    );
+    const options = meshPipelineOptionsFor(batch, depth);
+    let pipeline = createMeshPipeline(this.#pipelineRoot, this.format, options);
+    try {
+      this.root.unwrap(pipeline);
+    } catch (error) {
+      if (
+        !(error instanceof ResolutionError) ||
+        !(error.cause instanceof MissingSlotValueError) ||
+        error.cause.slot !== this.#pendingGradient
+      ) throw error;
+      // TypeGPU cannot nest compute dispatch inside shader resolution. Satisfy only
+      // our missing dependency outside resolution, then retry the first noisy pipeline.
+      this.#perlin3dCache = perlin3d.staticCache({ root: this.root, size: d.vec3u(32, 32, 32) });
+      this.#pipelineRoot = this.root.pipe(this.#perlin3dCache.inject());
+      pipeline = createMeshPipeline(this.#pipelineRoot, this.format, options);
+      this.root.unwrap(pipeline);
+    }
     this.#resources.set(key, pipeline);
     return pipeline;
   }
@@ -511,8 +530,11 @@ export class PipelineResourceCache {
   }
 
   dispose(): void {
+    if (this.#disposed) return;
+    this.#disposed = true;
     this.#resources.clear();
-    this.#perlin3dCache.destroy();
+    this.#perlin3dCache?.destroy();
+    this.#perlin3dCache = undefined;
   }
 }
 

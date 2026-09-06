@@ -178,6 +178,7 @@ try {
       await page.evaluate(() => { window.originalCanvas = document.querySelector('canvas'); });
       const initial = PNG.sync.read(await canvas.screenshot());
       const resources = await page.evaluate(() => window.metrics.resources);
+      assert.deepEqual(resources, { buffers: 6, bindGroups: 4, pipelines: 1 });
       const stable = await page.evaluate(() => window.commands.nodes().filter(node => node.name.startsWith('floor-') || node.name === 'motion'));
       assert.equal(stable.length, 37);
       await page.evaluate(() => window.commands.move(2)); await idle();
@@ -212,12 +213,8 @@ try {
       assert.deepEqual(await page.evaluate(() => window.commands.nodes()), []);
       assert.equal(await page.evaluate(() => window.metrics.deviceDestroyCalls), 1);
       const lifetimes = await page.evaluate(() => window.metrics.buffers);
-      // TypeGPU's guarded-compute size uniform is released by device.destroy().
-      // Renderer-managed buffers and the noise cache have explicit destruction.
-      assert.deepEqual(lifetimes.filter(buffer => !buffer.destroyed), [
-        { label: '<unnamed>', size: 12, usage: 76, destroyed: false }
-      ]);
-      assert.equal(await page.evaluate(() => window.metrics.destroyedBuffers), resources.buffers - 1);
+      assert.deepEqual(lifetimes.filter(buffer => !buffer.destroyed), []);
+      assert.equal(await page.evaluate(() => window.metrics.destroyedBuffers), resources.buffers);
       const final = await page.evaluate(() => window.metrics.submissions);
       await page.waitForTimeout(200);
       assert.equal(await page.evaluate(() => window.metrics.submissions), final);

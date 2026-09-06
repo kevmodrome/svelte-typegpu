@@ -102,9 +102,6 @@ describe('TypeGPU GPU renderer', () => {
     expect(cacheSource).toContain('depthWrite:${material.depthWrite !== false}');
     expect(cacheSource).toContain('depthTest:${material.depthTest !== false}');
     expect(cacheSource).toContain("cull:${material.cullMode ?? 'back'}");
-    expect(cacheSource).toContain("import { perlin3d } from '@typegpu/noise'");
-    expect(cacheSource).toContain('perlin3d.staticCache');
-    expect(cacheSource).toContain('this.root.pipe(this.#perlin3dCache.inject())');
     expect(rendererSource).toContain('this.#pipelines.dispose()');
   });
 
