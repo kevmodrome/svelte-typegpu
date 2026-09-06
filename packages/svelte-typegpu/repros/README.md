@@ -1,4 +1,19 @@
-# Async boundary teardown reproducer
+# Renderer integration probes
+
+## Attachment listener options
+
+```sh
+rtk proxy env TMPDIR=/tmp pnpm --filter svelte-typegpu exec node repros/listener-options.mjs
+```
+
+This separate installed-compiler WebGPU viewport checks picked one-time clicks,
+real Tween movement, passive native wheel cancellation, AbortController removal,
+reattachment, resource reuse, and unmount during animation at desktop/mobile sizes.
+Use the optional browser dependency, executable, and screenshot-directory variables
+described below. The browser/server close afterward; the normal docs server and
+installed dependencies are unchanged. Software-WebGPU checks do not establish the
+physical display refresh rate. See the
+[listener contract and design](../../../docs/event-listener-options-design.md).
 
 ## Mesh noise resources
 
