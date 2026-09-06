@@ -773,6 +773,20 @@ textarea {
   height: 480px;
 }
 
+.preview-panel.preview-with-collection-controls {
+  aspect-ratio: auto;
+  height: 520px;
+}
+
+.preview-with-collection-controls .fps-badge {
+  left: 14px;
+  right: auto;
+}
+
+@media (max-width: 1000px) {
+  .preview-panel.preview-with-collection-controls { height: 640px; }
+}
+
 .preview-panel::before,
 .preview-panel::after {
   position: absolute;
@@ -851,8 +865,13 @@ textarea {
   font-size: 0.9rem;
 }
 
-.preview-with-store-controls .preview-status {
+.preview-with-store-controls .preview-status,
+.preview-with-collection-controls .preview-status {
   inset: 64px 14px auto;
+}
+
+@media (min-width: 1001px) {
+  .preview-with-collection-controls .preview-status { right: 262px; }
 }
 
 .example-controls {

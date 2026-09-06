@@ -1,0 +1,71 @@
+<script lang="ts">
+  import CollectionViewport from './CollectionViewport.typegpu.svelte';
+  import { capacity, createCollection } from './collection';
+
+  let { frameloop = 'demand', maxDevicePixelRatio = 1.5, onready, onfps, onrenderererror } = $props();
+  const { objects, selected, reset, addObject, removeSelected, setHeight } = createCollection();
+</script>
+
+<div class="collection-workbench">
+  <div class="collection-scene">
+    <CollectionViewport {objects} {selected}
+      {frameloop} {maxDevicePixelRatio} {onready} {onfps} {onrenderererror} />
+  </div>
+  <section class="collection-editor" aria-label="Scene objects">
+    <header><h2>Objects</h2><output>{objects.size} / {capacity}</output></header>
+    <div class="collection-actions">
+      <button type="button" onclick={addObject} disabled={objects.size >= capacity}>Add object</button>
+      <button type="button" onclick={removeSelected} disabled={selected.size === 0}>Remove selected</button>
+    </div>
+    <div class="collection-headings"><span>Selection</span><span>Height</span></div>
+    <div class="collection-list">
+      {#each objects.keys() as id (id)}
+        {@const object = objects.get(id)!}
+        <div class="collection-row">
+          <label>
+            <input type="checkbox" checked={selected.has(id)}
+              onchange={(event) => event.currentTarget.checked ? selected.add(id) : selected.delete(id)} />
+            <span class="object-swatch" style={`background: rgb(${object.color.map(value => value * 255).join(' ')})`}></span>
+            <span>Box {id + 1}</span>
+          </label>
+          <input type="number" min="0.25" max="3" step="0.25" aria-label={`Box ${id + 1} height`}
+            value={object.height} oninput={(event) => setHeight(id, event.currentTarget.valueAsNumber)}
+            onchange={(event) => { event.currentTarget.value = String(objects.get(id)!.height); }} />
+        </div>
+      {:else}
+        <p class="collection-empty">No objects</p>
+      {/each}
+    </div>
+    <footer><output>{selected.size} selected</output><button type="button" onclick={reset}>Reset scene</button></footer>
+  </section>
+</div>
+
+<style>
+  .collection-workbench { display: grid; grid-template-columns: minmax(0, 1fr) 248px; height: 100%; min-width: 0; }
+  .collection-scene { min-width: 0; min-height: 0; }
+  .collection-editor { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr) auto; min-width: 0; min-height: 0; background: #171b1b; border-left: 1px solid #394141; color: #e1e6e6; font-size: 13px; }
+  header, footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px; }
+  h2 { margin: 0; font-size: 16px; font-weight: 600; }
+  output { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .collection-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 12px; }
+  .collection-headings, .collection-row { display: grid; grid-template-columns: minmax(0, 1fr) 68px; gap: 10px; align-items: center; padding: 8px 12px; }
+  .collection-headings { color: #a7b3b3; border-block: 1px solid #394141; font-size: 11px; }
+  .collection-list { overflow: auto; min-height: 0; scrollbar-gutter: stable; }
+  .collection-row { min-height: 42px; border-bottom: 1px solid #2b3232; }
+  label { display: flex; align-items: center; gap: 8px; min-width: 0; cursor: pointer; }
+  input[type="checkbox"] { margin: 0; accent-color: #e8c84b; }
+  .object-swatch { width: 10px; height: 10px; flex-shrink: 0; border-radius: 2px; }
+  input[type="number"] { box-sizing: border-box; width: 100%; min-width: 0; padding: 5px; border: 1px solid #525d5d; border-radius: 4px; color: #f0f3f3; background: #252d2d; font: inherit; }
+  button { padding: 6px 8px; border: 1px solid #525d5d; border-radius: 4px; background: #252d2d; color: #f0f3f3; font: inherit; font-size: 12px; cursor: pointer; }
+  button:hover:not(:disabled) { background: #354040; }
+  button:disabled { opacity: 0.45; cursor: default; }
+  :focus-visible { outline: 2px solid #e8c84b; outline-offset: 2px; }
+  footer { border-top: 1px solid #394141; }
+  .collection-empty { margin: 0; padding: 20px 12px; color: #a7b3b3; }
+  @media (max-width: 1000px) {
+    .collection-workbench { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) 280px; }
+    .collection-editor { border-left: 0; border-top: 1px solid #394141; }
+    .collection-actions { padding-bottom: 8px; }
+    header, footer { padding-block: 8px; }
+  }
+</style>

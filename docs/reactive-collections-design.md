@@ -32,7 +32,8 @@ scene/DOM event -> collection mutation -> Svelte effect -> targeted renderer dir
 + apps/docs/src/examples/reactive-collections/ReactiveCollections.svelte: per-instance state/editor
 + apps/docs/src/examples/reactive-collections/CollectionViewport.typegpu.svelte: native canvas/scene
 + apps/docs/src/examples/reactive-collections/collection.ts: bounded object creation/edit commands
-~ docs registry/source listing/preview: existing dedicated-viewport integration
++ apps/docs/src/examples/reactive-collections/collection.test.ts: command bounds and per-instance ownership
+~ docs registry/source listing/preview/styles: existing dedicated-viewport integration
 ~ docs/svelte-compatibility.md: collection semantics and example link
 ```
 
@@ -63,17 +64,27 @@ resources where ownership remains. Disposal cancels renderer work and attachment
 2. Complete: real Tween/Spring updates through map values at 60/120/144 Hz in both RAF orders,
    demand/manual modes. Assert frame delivery, exact writes, resource reuse and
    settled/disposed cancellation. Commit this contract before the example.
-3. Pending: add a bounded interactive editor using the actual collections and viewport.
+3. Implemented; live GPU gate open: bounded interactive editor using the actual collections and viewport.
    Test generated consumer controls, native/scene selection, remove/reset and GPU
    updates. Generate/build docs, check desktop/mobile layout and live scene pixels
    where the machine permits; report unavailable live GPU checks explicitly.
 
-Contract verification: four composition tests and 18 cadence cases pass. The
-workspace passes 1,196 tests; the renderer passes 1,107 in both development and
-production, and TypeScript passes. The isolated async candidate regression passes
-1,253 development and 1,233 production tests. The test harness explicitly selects
+Contract verification: four composition tests and 18 cadence cases pass, plus two
+generated-example GPU lifecycle cases and four consumer command cases. The
+workspace passes 1,204 tests; the renderer passes 1,109 in both development and
+production, and the full workspace build passes. The isolated async candidate regression passes
+1,255 development and 1,235 production tests. The test harness explicitly selects
 Svelte's browser collection exports; server exports are plain Map/Set. No renderer
 implementation or installed Svelte dependency changed for these contracts.
+
+Headless browser checks pass at 1440x1000 and 390x844: decimal height input,
+checkbox selection, add/remove/reset, bounded scrolling, no text/page overflow or
+canvas/editor overlap, and no page errors. The loading status is confined to the
+canvas after an actual pointer-interception failure exposed it covering the editor.
+Screenshots were inspected at both sizes. Both runs remained pending in native
+`GPUAdapter.requestDevice`; they do not prove scene pixels, camera framing, GPU
+throughput or physical display cadence. The Mac was also locked when native browser
+access was attempted. These live checks remain required once GPU access is available.
 
 ## 6. Risks and unresolved decisions
 

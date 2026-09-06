@@ -5,6 +5,7 @@ import {
   Gravity,
   NativeEvents,
   SharedStores,
+  ReactiveCollections,
   MultipleSmokyTriangles,
   PhongReflection,
   SimpleShadow,
@@ -18,6 +19,7 @@ type TypeGpuSceneComponent = Component<any>;
 export const sceneComponents = {
   'native-events': NativeEvents,
   'shared-stores': SharedStores,
+  'reactive-collections': ReactiveCollections,
   'svelte-motion': SvelteMotion,
   'two-boxes': TwoBoxes,
   'phong-reflection': PhongReflection,

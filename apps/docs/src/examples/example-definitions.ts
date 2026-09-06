@@ -66,6 +66,22 @@ export const exampleDefinitions = [
     typeGpuSourceFiles: []
   },
   {
+    slug: 'reactive-collections',
+    title: 'Reactive Collections',
+    category: 'interaction',
+    tags: ['3d', 'SvelteMap', 'SvelteSet', 'keyed each', 'interaction'],
+    description: 'An object editor with keyed collections, shared selection, and per-object height controls.',
+    notes: 'A per-instance SvelteMap owns plain object records; immutable set updates change individual meshes. A SvelteSet shares selection between DOM checkboxes and direct mesh events. Add, remove, and reset use ordinary keyed each blocks.',
+    exportName: 'ReactiveCollections',
+    sourceUrl: new URL('./reactive-collections/ReactiveCollections.svelte', import.meta.url),
+    sourceFiles: [
+      new URL('./reactive-collections/ReactiveCollections.svelte', import.meta.url),
+      new URL('./reactive-collections/CollectionViewport.typegpu.svelte', import.meta.url),
+      new URL('./reactive-collections/collection.ts', import.meta.url)
+    ],
+    typeGpuSourceFiles: []
+  },
+  {
     slug: 'phong-reflection',
     title: 'Phong Reflection Model',
     category: 'rendering',

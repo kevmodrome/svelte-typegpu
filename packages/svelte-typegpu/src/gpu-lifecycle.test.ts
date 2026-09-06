@@ -37,6 +37,7 @@ import CanvasMotionHost from './test-fixtures/CanvasMotionHost.svelte';
 import NativeRangeInput from './test-fixtures/NativeRangeInput.svelte';
 import NativeEvents from '../../../apps/docs/src/generated/typegpu-scenes/native-events/NativeEvents.typegpu.js';
 import SharedStores from '../../../apps/docs/src/generated/typegpu-scenes/shared-stores/SharedStores.svelte';
+import ReactiveCollections from '../../../apps/docs/src/generated/typegpu-scenes/reactive-collections/ReactiveCollections.svelte';
 import { createViewProjectionMatrix, readCameraState } from './camera';
 import { rotateVectorXyz, transformPoint4 } from './math3d';
 import { vectorTuple } from './attributes';
@@ -90,6 +91,118 @@ afterEach(() => {
 });
 
 describe('GPU resource and frame lifecycle', () => {
+  it.each(['demand', 'manual'] as const)('edits the generated reactive collection scene without recreating GPU resources (%s)', async frameloop => {
+    const clock = optionClock(120);
+    const { root: gpu, buffers, submissions } = fakeRoot();
+    vi.mocked(tgpu.init).mockResolvedValue(gpu as never);
+    vi.stubGlobal('navigator', { gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
+    let root!: TypeGpuRoot;
+    const onready = vi.fn((value: TypeGpuRoot) => { root = value; });
+    const error = vi.fn();
+    const instance = mount(ReactiveCollections, {
+      target: document.body, props: { frameloop, onready, onrenderererror: error }
+    });
+    const rows = () => [...document.querySelectorAll<HTMLDivElement>('.collection-row')];
+    const buttons = () => [...document.querySelectorAll<HTMLButtonElement>('.collection-editor button')];
+    const meshes = () => createSceneState(root).interaction.targets.map(target => target.node);
+    async function settle() {
+      await settleComponentUpdates(); await settleComponentUpdates();
+      for (let i = 0; i < 3; i++) { clock.step(); await settleComponentUpdates(); }
+    }
+    try {
+      await settle();
+      expect(onready).toHaveBeenCalledOnce();
+      expect(error).not.toHaveBeenCalled();
+      if (frameloop === 'manual') root.gpu.renderFrame(clock.now);
+      expect(rows()).toHaveLength(16);
+      const original = meshes();
+      const firstRow = rows()[0];
+      const canvas = document.querySelector('canvas')!;
+      const height = firstRow.querySelector<HTMLInputElement>('input[type="number"]')!;
+      const selected = firstRow.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+      const buffer = buffers.find(buffer => buffer.label.endsWith('instances'))!;
+      gpu.createBuffer.mockClear(); gpu.createBindGroup.mockClear(); vi.mocked(createMeshPipeline).mockClear();
+      buffer.write.mockClear(); clock.request.mockClear();
+      const before = submissions.length;
+      height.value = '2'; height.dispatchEvent(new Event('input', { bubbles: true }));
+      await settle();
+      expect(original[0].attributes.position).toEqual([-1.5, 1, -1.5]);
+      expect(original[0].attributes.scale).toEqual([0.82, 2, 0.82]);
+      expect(buffer.write).toHaveBeenCalledOnce();
+      expect(buffer.write.mock.lastCall![1]).toEqual({ startOffset: 64 * 96, endOffset: 65 * 96 });
+      expect(submissions.length - before).toBe(frameloop === 'manual' ? 0 : 1);
+      if (frameloop === 'manual') root.gpu.renderFrame(clock.now);
+      buffer.write.mockClear();
+      const beforeNoop = submissions.length;
+      height.dispatchEvent(new Event('input', { bubbles: true }));
+      height.value = ''; height.dispatchEvent(new Event('input', { bubbles: true }));
+      await settle();
+      expect(height.value).toBe('');
+      height.dispatchEvent(new Event('change', { bubbles: true }));
+      expect(height.value).toBe('2');
+      expect(buffer.write).not.toHaveBeenCalled();
+      expect(submissions).toHaveLength(beforeNoop);
+      selected.click(); await settle();
+      expect(original[0].children.find(node => node.name === 'standardMaterial')!.attributes.color).toEqual([1, 0.8, 0.2]);
+      expect(buffer.write).toHaveBeenCalledOnce();
+      expect(buffer.write.mock.lastCall![1]).toEqual({ startOffset: 64 * 96, endOffset: 65 * 96 });
+      expect(meshes()).toEqual(original);
+      expect(rows()[0]).toBe(firstRow);
+      canvas.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await settle();
+      expect(selected.checked).toBe(false);
+      expect(buttons()[1].disabled).toBe(true);
+
+      const size = root.gpu.getRenderSize();
+      const matrix = createViewProjectionMatrix(size.width / size.height, readCameraState(root).settings);
+      const position = vectorTuple(original[15].attributes.position, [0, 0, 0]);
+      const point = transformPoint4(matrix, position);
+      const click = new MouseEvent('click', { bubbles: true });
+      Object.defineProperties(click, {
+        offsetX: { value: (point[0] + 1) * size.width / 2 },
+        offsetY: { value: (1 - point[1]) * size.height / 2 }
+      });
+      canvas.dispatchEvent(click); await settle();
+      expect(rows()[15].querySelector<HTMLInputElement>('input[type="checkbox"]')!.checked).toBe(true);
+      expect(document.querySelector('.collection-editor footer output')!.textContent).toBe('1 selected');
+      buttons()[1].click(); await settle();
+      expect(meshes()).toEqual(original.slice(0, 15));
+      expect(rows()).toHaveLength(15);
+      expect(rows()[0]).toBe(firstRow);
+      expect(original[15].parent).toBeNull();
+      expect(buttons()[1].disabled).toBe(true);
+      for (let i = 0; i < 64; i++) buttons()[0].click();
+      await settle();
+      expect(rows()).toHaveLength(64);
+      expect(meshes().slice(0, 15)).toEqual(original.slice(0, 15));
+      expect(buttons()[0].disabled).toBe(true);
+      expect(document.querySelector('.collection-editor header output')!.textContent).toBe('64 / 64');
+      for (const row of rows()) row.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click();
+      await settle();
+      buttons()[1].click(); await settle();
+      expect(meshes()).toEqual([]);
+      expect(document.querySelector('.collection-empty')!.textContent).toBe('No objects');
+      expect(document.querySelector('.collection-editor footer output')!.textContent).toBe('0 selected');
+      buttons()[2].click(); await settle();
+      expect(rows()).toHaveLength(16);
+      expect(meshes()).toHaveLength(16);
+      expect(document.querySelector('canvas')).toBe(canvas);
+      expect(onready).toHaveBeenCalledOnce();
+      expect(error).not.toHaveBeenCalled();
+      expect(gpu.createBuffer).not.toHaveBeenCalled();
+      expect(gpu.createBindGroup).not.toHaveBeenCalled();
+      expect(createMeshPipeline).not.toHaveBeenCalled();
+      expect(buffers.every(buffer => buffer.destroy.mock.calls.length === 0)).toBe(true);
+      expect(clock.pending.size).toBe(0);
+      if (frameloop === 'manual') expect(clock.request).not.toHaveBeenCalled();
+      const idleFrames = submissions.length;
+      await settle();
+      expect(submissions).toHaveLength(idleFrames);
+    } finally { await unmount(instance); document.body.replaceChildren(); }
+    expect(clock.pending.size).toBe(0);
+    expect(gpu.destroy).toHaveBeenCalledOnce();
+  });
+
   it.each([60, 120, 144].flatMap(hz => ['Tween', 'Spring'].flatMap(kind => [
     { hz, kind, frameloop: 'demand' as const, rendererFirst: false },
     { hz, kind, frameloop: 'demand' as const, rendererFirst: true },

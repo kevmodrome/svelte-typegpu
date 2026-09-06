@@ -177,6 +177,13 @@ callback orders, with exact instance upload ranges, resource reuse, demand settl
 manual scheduling and disposal checks. No collection-specific renderer API or
 animation loop is needed.
 
+The [Reactive Collections example](../apps/docs/src/examples/reactive-collections/ReactiveCollections.svelte)
+shares these collections between a DOM object list and a dedicated GPU viewport.
+Height inputs replace individual records; checkboxes and mesh clicks update the
+same selection set. Add/remove/reset commands reconcile keyed objects without
+recreating the canvas. The example is bounded to 64 objects and defaults to demand
+rendering.
+
 ## Dynamic primitives
 
 Use `<svelte:element>` inside a stable mesh when the primitive type is dynamic.

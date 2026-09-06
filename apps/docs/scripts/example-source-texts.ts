@@ -28,10 +28,14 @@ import gravityFrameTask from '../src/examples/gravity/GravityFrameTask.typegpu.s
 import nativeEvents from '../src/examples/native-events/NativeEvents.typegpu.svelte' with { type: 'text' };
 import sharedStores from '../src/examples/shared-stores/SharedStores.svelte' with { type: 'text' };
 import storeViewport from '../src/examples/shared-stores/StoreViewport.typegpu.svelte' with { type: 'text' };
+import reactiveCollections from '../src/examples/reactive-collections/ReactiveCollections.svelte' with { type: 'text' };
+import collectionViewport from '../src/examples/reactive-collections/CollectionViewport.typegpu.svelte' with { type: 'text' };
+import collection from '../src/examples/reactive-collections/collection.ts' with { type: 'text' };
 
 export const exampleSourceTexts = {
   'native-events': [nativeEvents],
   'shared-stores': [sharedStores, storeViewport],
+  'reactive-collections': [reactiveCollections, collectionViewport, collection],
   'svelte-motion': [svelteMotion, motionMarker, motionField, markerFragment],
   'two-boxes': [twoBoxes, floor, sceneBox, boxGeometry, boxInteraction],
   'phong-reflection': [phongReflection, phongLights],

@@ -115,16 +115,19 @@ describe('docs app source wiring', () => {
     expect(orbitField).not.toMatch(/from ['"]\.\/disco-fragment['"]/);
   });
 
-  it('leaves DOM example components to the app compiler instead of importing client code on the server', () => {
-    const wrapper = read('./generated/typegpu-scenes/shared-stores/SharedStores.svelte');
-    const viewport = read('./generated/typegpu-scenes/shared-stores/StoreViewport.typegpu.js');
+  it.each([
+    ['shared-stores', 'SharedStores', 'StoreViewport'],
+    ['reactive-collections', 'ReactiveCollections', 'CollectionViewport']
+  ])('leaves the %s DOM example to the app compiler instead of importing client code on the server', (slug, component, canvas) => {
+    const wrapper = read(`./generated/typegpu-scenes/${slug}/${component}.svelte`);
+    const viewport = read(`./generated/typegpu-scenes/${slug}/${canvas}.typegpu.js`);
     const exports = read('./generated/typegpu-scenes/index.ts');
     expect(wrapper).toContain('<script lang="ts">');
-    expect(wrapper).toContain("import StoreViewport from './StoreViewport.typegpu.js'");
+    expect(wrapper).toContain(`import ${canvas} from './${canvas}.typegpu.js'`);
     expect(wrapper).not.toContain('svelte/internal/init-operations');
     expect(viewport).toContain('$.push_renderer(null)');
     expect(viewport).toContain('$.renderer_snippet($renderer');
-    expect(exports).toContain("from './shared-stores/SharedStores.svelte'");
+    expect(exports).toContain(`from './${slug}/${component}.svelte'`);
   });
 
   it('runs the self-contained native event scene in the standard demand preview', () => {
@@ -133,7 +136,7 @@ describe('docs app source wiring', () => {
     const preview = read('./components/ExamplePreview.svelte');
     expect(preview).not.toContain('NativeEventsPreview');
     expect(preview).toContain('scene={sceneComponents[slug]}');
-    expect(preview).toContain("slug === 'native-events' || slug === 'shared-stores' ? 'demand' : 'always'");
+    expect(preview).toContain("slug === 'native-events' || slug === 'shared-stores' || slug === 'reactive-collections' ? 'demand' : 'always'");
   });
 
   it('hydrates the live preview but keeps the code panel static on the examples route', () => {

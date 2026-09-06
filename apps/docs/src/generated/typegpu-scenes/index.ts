@@ -5,6 +5,7 @@ export { default as TwoBoxes } from './two-boxes/TwoBoxes.typegpu.js';
 export { default as SvelteMotion } from './svelte-motion/SvelteMotion.typegpu.js';
 export { default as NativeEvents } from './native-events/NativeEvents.typegpu.js';
 export { default as SharedStores } from './shared-stores/SharedStores.svelte';
+export { default as ReactiveCollections } from './reactive-collections/ReactiveCollections.svelte';
 export { default as PhongReflection } from './phong-reflection/PhongReflection.typegpu.js';
 export { default as SimpleShadow } from './simple-shadow/SimpleShadow.typegpu.js';
 export { default as DiscoShaderPass } from './disco-shader-pass/DiscoShaderPass.typegpu.js';

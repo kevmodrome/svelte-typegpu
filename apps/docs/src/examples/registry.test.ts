@@ -27,6 +27,7 @@ describe('docs example registry', () => {
       'svelte-motion',
       'native-events',
       'shared-stores',
+      'reactive-collections',
       'phong-reflection',
       'simple-shadow',
       'disco-shader-pass',
@@ -102,6 +103,21 @@ describe('docs example registry', () => {
     expect(example.sourceFiles[0].source).toContain('bind:value={$position[0]}');
     expect(example.sourceFiles[1].source).toContain('position={$position}');
     expect(example.sourceFiles[1].source).toContain('onclick={() => $selected = !$selected}');
+    expect(example.code).not.toContain('requestAnimationFrame');
+    expect(example.code).not.toContain('sceneProps');
+  });
+
+  it('publishes reactive collections with per-key reads and direct selection events', () => {
+    const example = getExampleBySlug('reactive-collections');
+    expect(example.sourceFiles.map(file => file.filename)).toEqual([
+      'ReactiveCollections.svelte', 'CollectionViewport.typegpu.svelte', 'collection.ts'
+    ]);
+    expect(example.sourceFiles[0].source).toContain('createCollection()');
+    expect(example.sourceFiles[1].source).toContain('{#each objects.keys() as id (id)}');
+    expect(example.sourceFiles[1].source).toContain('objects.get(id)');
+    expect(example.sourceFiles[1].source).toContain('onclick={() => selected.has(id) ? selected.delete(id) : selected.add(id)}');
+    expect(example.sourceFiles[2].source).toContain('new SvelteMap');
+    expect(example.sourceFiles[2].source).toContain('new SvelteSet');
     expect(example.code).not.toContain('requestAnimationFrame');
     expect(example.code).not.toContain('sceneProps');
   });
