@@ -37,6 +37,27 @@ Software WebGPU may run very slowly at these loads; these probes do not establis
 hardware GPU throughput or a monitor's physical refresh rate. See the
 [stress-mode design](../../../docs/asset-world-stress-design.md).
 
+### Hardware GPU diagnosis and movement transitions
+
+```sh
+rtk proxy env TMPDIR=/tmp pnpm --filter svelte-typegpu exec node repros/asset-world-gpu-profile.mjs
+rtk proxy env TMPDIR=/tmp pnpm --filter svelte-typegpu exec node repros/asset-world-input.mjs
+```
+
+These use Apple/Metal rather than SwiftShader. The GPU probe requires a real
+Apple adapter with `timestamp-query`; a four-slot asynchronous readback pool
+measures color-pass execution without waiting in the renderer. It compares 50k
+models at 1x/4x/16x with a one-pixel scissor diagnostic at 16x. Output records GPU
+time separately from JS callback time and submitted frames. The input probe
+measures normal-gait stop/start transitions at 50k models, then verifies continued
+orbit rotation and follow translation during the same held drag and walk.
+
+The same browser environment variables apply. Default reports are under
+`/tmp/typegpu-asset-world-gpu` and `/tmp/typegpu-asset-world-input`. For a historical
+before-fix recording only, `SVELTE_PROBE_EXPECT_BROKEN=1` disables the input probe's
+regression assertions while retaining its measurements. See the
+[investigation and measured results](../../../docs/asset-world-performance-investigation.md).
+
 ## Attachment listener options
 
 ```sh
