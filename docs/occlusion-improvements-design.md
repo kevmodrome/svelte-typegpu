@@ -94,3 +94,11 @@ not needed while existing GPU Hi-Z can consume improved selections.
 No migration. Disable Hi-Z/timing to recover the original paths. HLOD/impostors
 are a separate follow-up for visible distant forests, requiring authored asset
 representation and screen-error contracts rather than occlusion semantics.
+
+## Implementation Review
+
+Coverage and declarative canvas timing are implemented. The cluster spike is
+correct and tested, but stays off in the consumer path: forward/reverse 50k
+measurements showed no consistent selection benefit and a regression in an
+angled LOD view. Keep the constructor option internal to tests/probes; do not
+add an unsupported consumer promise. See `occlusion.md` for measurements.

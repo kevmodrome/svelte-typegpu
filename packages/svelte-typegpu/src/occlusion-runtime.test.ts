@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, onDestroy, unmount } from 'svelte';
 import { Spring, Tween } from 'svelte/motion';
 import * as client from 'svelte/internal/client';
-import tgpu from 'typegpu';
+import tgpu, { type TgpuRoot } from 'typegpu';
 import { createFragment } from './core';
 import renderer, { createTypeGpuRuntimeForTest } from './svelte-renderer';
 import { createTypeGpuRenderer } from './gpu-renderer';
@@ -12,7 +12,13 @@ import { compileViewportSource } from './viewport-test-utils';
 import { settleComponentUpdates } from './component-test-utils';
 
 const captured = vi.hoisted(() => ({ bindings: [] as unknown[][], counts: [] as number[],
-  indirect: [] as { indexed: boolean; buffer: unknown; offset: number }[] }));
+  indirect: [] as { indexed: boolean; buffer: unknown; offset: number }[], clustered: false }));
+vi.mock('./occlusion', async original => {
+  const actual = await original<typeof import('./occlusion')>();
+  return { ...actual, HiZOcclusion: class extends actual.HiZOcclusion {
+    constructor(root: TgpuRoot) { super(root, captured.clustered); }
+  } };
+});
 vi.mock('typegpu', async original => {
   const actual = await original<typeof import('typegpu')>();
   return { ...actual, default: { ...actual.default, init: vi.fn() } };
@@ -23,7 +29,7 @@ vi.mock('./typegpu-pipeline', async () => {
     createShadowPipeline: vi.fn(() => createFakePipeline(captured)),
     createShaderPassPipeline: vi.fn(() => createFakePipeline(captured)) };
 });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); captured.bindings.length = captured.counts.length = captured.indirect.length = 0; });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); captured.clustered = false; captured.bindings.length = captured.counts.length = captured.indirect.length = 0; });
 
 describe('compiled motion with current-frame GPU occlusion', () => {
   it.each(['feature', 'depth', 'writer', 'transparent', 'limit'])('falls back without losing draws: %s', async reason => {
@@ -52,10 +58,11 @@ describe('compiled motion with current-frame GPU occlusion', () => {
     } finally { await unmount(instance); runtime.dispose(); gpuRenderer.dispose(); }
   });
 
-  it.each([60,120,144].flatMap(hz => ['Tween','Spring'].flatMap(kind => [
-    { hz, kind, mode: 'demand' as const, first: false }, { hz, kind, mode: 'demand' as const, first: true },
-    { hz, kind, mode: 'manual' as const, first: false }
-  ])))('delivers $kind at $hz Hz ($mode, renderer first: $first)', async ({ hz, kind, mode, first }) => {
+  it.each([false,true].flatMap(clustered => [60,120,144].flatMap(hz => ['Tween','Spring'].flatMap(kind => [
+    { hz, kind, clustered, mode: 'demand' as const, first: false }, { hz, kind, clustered, mode: 'demand' as const, first: true },
+    { hz, kind, clustered, mode: 'manual' as const, first: false }
+  ]))))('delivers $kind at $hz Hz ($mode, renderer first: $first, clusters: $clustered)', async ({ hz, kind, mode, first, clustered }) => {
+    captured.clustered = clustered;
     let now = 0, id = 0;
     const pending = new Map<number, FrameRequestCallback>(), producers = new WeakSet<FrameRequestCallback>();
     const request = vi.fn((callback: FrameRequestCallback) => { pending.set(++id, callback); return id; });
@@ -132,6 +139,8 @@ describe('compiled motion with current-frame GPU occlusion', () => {
           expect(bytes).toBe(96);
           const bounds = fake.writeBuffer.mock.calls.filter(([buffer]) => buffer.label.startsWith('Occlusion bounds'));
           expect(bounds.map(([, , , , bytes]) => bytes)).toEqual([32]);
+          const clusters = fake.writeBuffer.mock.calls.filter(([buffer]) => buffer.label.startsWith('Occlusion clusters'));
+          expect(clusters.map(([, , , , bytes]) => bytes)).toEqual(clustered ? [32] : []);
         }
       }
       expect(gpu.createBuffer).not.toHaveBeenCalled(); expect(gpu.createBindGroup).not.toHaveBeenCalled();

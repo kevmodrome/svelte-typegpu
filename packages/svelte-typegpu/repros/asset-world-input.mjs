@@ -61,6 +61,7 @@ try {
   await world.getByRole('button', { name: 'Follow camper' }).click();
   if (process.env.SVELTE_PROBE_CULLING === '1') await world.getByRole('checkbox', { name: 'Frustum culling', exact: true }).check();
   if (process.env.SVELTE_PROBE_OCCLUSION === '1') await world.getByRole('checkbox', { name: 'Hi-Z occlusion', exact: true }).check();
+  if (process.env.SVELTE_PROBE_GPU_TIMING === '1') await world.getByRole('checkbox', { name: 'GPU timing', exact: true }).check();
   await page.waitForFunction(() => document.querySelector('[data-metric="models"]')?.textContent === '50,000');
   await idle(); await canvas.scrollIntoViewIfNeeded(); await canvas.focus();
   await page.emulateMedia({ reducedMotion: 'no-preference' });
@@ -96,6 +97,7 @@ try {
   const distance = (a, b, indices) => indices.reduce((sum, i) => sum + Math.abs(a[i] - b[i]), 0);
   const orientation = [0, 1, 2, 4, 5, 6, 8, 9, 10];
   const result = { timings, occlusion: process.env.SVELTE_PROBE_OCCLUSION === '1' ? await world.locator('[data-metric="occlusion"]').textContent() : 'disabled',
+    gpuPassMs: process.env.SVELTE_PROBE_GPU_TIMING === '1' ? Number.parseFloat(await world.locator('[data-gpu-metric="GPU passes"]').innerText()) : null,
     firstRotation: distance(initial, first, orientation), secondRotation: distance(first, second, orientation),
     translation: distance(initial, second, [12, 13, 14]), frames: after.frames - before.frames,
     instanceBytes: after.instanceBytes - before.instanceBytes,
@@ -109,6 +111,7 @@ try {
     assert(timings.every(value => value.ms < 100), 'Movement toggles do not rebuild the large scene');
   }
   for (const resource of ['buffers', 'groups', 'pipelines']) assert.equal(after[resource], before[resource]);
+  if (process.env.SVELTE_PROBE_GPU_TIMING === '1') assert(result.gpuPassMs > 0, 'Declarative profiling delivers actual GPU timings');
   assert(result.instanceBytes < (result.frames + 50) * 13 * 96, 'Movement uploads only camper/canoe instances, not the forest');
   await page.waitForTimeout(200); assert.equal((await metrics()).frames, after.frames);
   assert.deepEqual(errors, []); assert.deepEqual(after.gpuErrors, []);

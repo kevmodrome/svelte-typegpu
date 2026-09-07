@@ -3,7 +3,7 @@ import type { TgpuRoot } from 'typegpu';
 import { createElement, insert, removeAttribute, setAttribute } from './core';
 import { createSceneState, createTypeGpuSceneCache } from './scene-compiler';
 import { createFakeGpuRoot, enableFakeOcclusion } from './gpu-test-utils';
-import { HiZOcclusion, isOcclusionEligible, packOcclusionBounds, pyramidSize } from './occlusion';
+import { HiZOcclusion, isOcclusionEligible, packOcclusionBounds, packOcclusionClusters, pyramidSize } from './occlusion';
 import { MAX_OCCLUDER_DRAWS, MAX_OCCLUDER_TESTS, MAX_OCCLUDER_TRIANGLES, OccluderSelection } from './occluder-selection';
 import { drawTypeGpuMaterialBatch } from './gpu-renderer';
 import { createViewProjectionMatrix } from './camera-math';
@@ -101,7 +101,7 @@ describe('conservative occlusion contracts', () => {
   it('retains metadata and buffers, uploads only changed bounds, prunes and disposes', () => {
     const { root } = createFakeGpuRoot({ bindings: [], counts: [] });
     const fake = enableFakeOcclusion(root);
-    const gpu = root as unknown as TgpuRoot, culler = new HiZOcclusion(gpu);
+    const gpu = root as unknown as TgpuRoot, culler = new HiZOcclusion(gpu, true);
     const { batch, nodes, scene, cache } = fixture();
     const matrix = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
     const selection = { rangeCount: 2, ranges: new Uint32Array([0,129,200,60]) };
@@ -109,8 +109,8 @@ describe('conservative occlusion contracts', () => {
     expect(HiZOcclusion.supported(gpu, 1001, 601)).toBe(true);
     expect(culler.prepare(batch, selection, undefined, {} as GPUBuffer)).toBe(true);
     const r = culler.resources.get(batch.key)!;
-    expect(r.blockCount).toBe(3);
-    expect([...r.blocksData.subarray(0, 12)]).toEqual([0,128,0,0, 128,1,0,0, 200,60,1,0]);
+    expect(r.blockCount).toBe(4);
+    expect([...r.blocksData.subarray(0, 16)]).toEqual([0,128,0,0, 128,1,0,1, 200,56,1,1, 256,4,1,2]);
     expect([...r.rangesData.subarray(0, 8)]).toEqual([0,2,0,129,36,0,0,1]);
     fake.writeBuffer.mockClear(); fake.device.createBuffer.mockClear(); root.createBindGroup.mockClear();
     culler.begin(1001, 601, matrix); culler.prepare(batch, selection, undefined, r.source);
@@ -119,7 +119,7 @@ describe('conservative occlusion contracts', () => {
     setAttribute(nodes[17], 'position', [18, 1, 0]);
     const next = createSceneState(scene, cache).drawBatches[0];
     fake.writeBuffer.mockClear(); culler.updateBounds(next, [{ start: 17, count: 1 }]);
-    expect(fake.writeBuffer.mock.calls.map(([, offset, , , bytes]) => [offset, bytes])).toEqual([[17 * 32, 32]]);
+    expect(fake.writeBuffer.mock.calls.map(([, offset, , , bytes]) => [offset, bytes])).toEqual([[17 * 32, 32], [0, 32]]);
     selection.rangeCount = 1; selection.ranges.set([129, 100]);
     culler.prepare(next, selection, undefined, r.source);
     expect(r.blockCount).toBe(1); expect(r.rangesData[15]).toBe(0);
@@ -131,6 +131,34 @@ describe('conservative occlusion contracts', () => {
     culler.prune(new Set()); expect(culler.resources.size).toBe(0);
     expect(fake.buffers.filter(b => b.label !== 'Occlusion camera').every(b => b.destroy.mock.calls.length === 1)).toBe(true);
     culler.dispose(); expect(fake.buffers.every(b => b.destroy.mock.calls.length === 1)).toBe(true);
+  });
+
+  it('packs enclosing tree clusters, handles unknown/alpha bounds, and never includes unused capacity', () => {
+    const { batch } = fixture(260), clusters = new Float32Array(24), individual = new Float32Array(260 * 8);
+    packOcclusionClusters(batch, clusters, 0, 3); packOcclusionBounds(batch, individual, 0, 260);
+    for (let i = 0; i < 260; i++) {
+      const cluster = Math.floor(i / 128) * 8;
+      for (let axis = 0; axis < 3; axis++) {
+        expect(clusters[cluster + axis]).toBeLessThanOrEqual(individual[i * 8 + axis]);
+        expect(clusters[cluster + axis + 4]).toBeGreaterThanOrEqual(individual[i * 8 + axis + 4]);
+      }
+    }
+    expect([clusters[3], clusters[11], clusters[19]]).toEqual([1, 1, 1]);
+    batch.instances[150 * 24 + 7] = 0.5;
+    packOcclusionClusters(batch, clusters, 1, 1); expect(clusters[11]).toBe(0);
+    const base = batch.visibility!.leafBase * batch.visibility!.leafSize / 128;
+    batch.visibility!.nodes[base * 6] = -Infinity;
+    packOcclusionClusters(batch, clusters, 0, 1); expect(clusters[3]).toBe(0);
+  });
+
+  it('keeps the flat benchmark path free of cluster buffers and uploads', () => {
+    const { root } = createFakeGpuRoot({ bindings: [], counts: [] }), fake = enableFakeOcclusion(root);
+    const culler = new HiZOcclusion(root as unknown as TgpuRoot, false), { batch } = fixture();
+    culler.begin(400, 400, new Float32Array(16));
+    culler.prepare(batch, { ranges: new Uint32Array([200, 60]), rangeCount: 1 }, undefined, {} as GPUBuffer);
+    expect(culler.resources.get(batch.key)!.blockCount).toBe(1);
+    expect(fake.buffers.some(buffer => buffer.label.startsWith('Occlusion clusters'))).toBe(false);
+    culler.dispose();
   });
 
   it.each([false, true])('issues one indirect command per retained range (indexed: %s)', indexed => {

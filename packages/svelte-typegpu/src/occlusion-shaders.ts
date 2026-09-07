@@ -41,14 +41,13 @@ export const visibilityLayout = tgpu.bindGroupLayout({
   params: { uniform: occlusionParams },
   pyramid: { texture: d.texture2d(), sampleType: 'unfilterable-float' },
   bounds: { storage: d.arrayOf(d.vec4f) },
+  clusters: { storage: d.arrayOf(d.vec4f) },
   blocks: { storage: vectors },
   prefix: { storage: words, access: 'mutable' },
   sums: { storage: words, access: 'mutable' }
 });
 
-const visible = tgpu.fn([d.u32], d.u32)/* wgsl */`(index: u32) -> u32 {
-  let lo = bounds[index * 2u];
-  let hi = bounds[index * 2u + 1u];
+const visible = tgpu.fn([d.vec4f, d.vec4f], d.u32)/* wgsl */`(lo: vec4f, hi: vec4f) -> u32 {
   if (lo.w == 0.0) { return 1u; }
   var nearDepth = 1.0;
   var rectMin = vec2f(1e30);
@@ -81,12 +80,18 @@ const visible = tgpu.fn([d.u32], d.u32)/* wgsl */`(index: u32) -> u32 {
 }`.$uses(visibilityLayout.bound).$name('occlusion_visible');
 
 const scan = tgpu.workgroupVar(d.arrayOf(d.u32, OCCLUSION_BLOCK_SIZE)).$name('occlusion_scan');
-export const visibility = tgpu.computeFn({
-  in: { group: d.builtin.workgroupId, lane: d.builtin.localInvocationIndex }, workgroupSize: [OCCLUSION_BLOCK_SIZE]
-})/* wgsl */`{
+const clusterKeep = tgpu.workgroupVar(d.u32).$name('occlusion_cluster_keep');
+const visibilityBody = (clustered: boolean) => /* wgsl */`{
   let block = blocks[group.x];
+  ${clustered ? `
+  if (lane == 0u) { clusterKeep = visible(clusters[block.w * 2u], clusters[block.w * 2u + 1u]); }
+  if (workgroupUniformLoad(&clusterKeep) == 0u) {
+    if (lane < block.y) { prefix[block.x + lane] = 0u; }
+    if (lane == 0u) { sums[group.x] = 0u; }
+    return;
+  }` : ''}
   var keep = 0u;
-  if (lane < block.y) { keep = visible(block.x + lane); }
+  if (lane < block.y) { let index = (block.x + lane) * 2u; keep = visible(bounds[index], bounds[index + 1u]); }
   scan[lane] = keep;
   workgroupBarrier();
   for (var offset = 1u; offset < 128u; offset *= 2u) {
@@ -98,7 +103,13 @@ export const visibility = tgpu.computeFn({
   }
   if (lane < block.y) { prefix[block.x + lane] = select(0u, scan[lane], keep != 0u); }
   if (lane == 127u) { sums[group.x] = scan[lane]; }
-}`.$uses({ ...visibilityLayout.bound, scan, visible }).$name('occlusion_visibility');
+}`;
+export const visibility = tgpu.computeFn({
+  in: { group: d.builtin.workgroupId, lane: d.builtin.localInvocationIndex }, workgroupSize: [OCCLUSION_BLOCK_SIZE]
+})(visibilityBody(false)).$uses({ ...visibilityLayout.bound, scan, visible }).$name('occlusion_visibility');
+export const clusteredVisibility = tgpu.computeFn({
+  in: { group: d.builtin.workgroupId, lane: d.builtin.localInvocationIndex }, workgroupSize: [OCCLUSION_BLOCK_SIZE]
+})(visibilityBody(true)).$uses({ ...visibilityLayout.bound, scan, visible, clusterKeep }).$name('occlusion_clustered_visibility');
 
 export const rangeLayout = tgpu.bindGroupLayout({
   ranges: { storage: vectors },

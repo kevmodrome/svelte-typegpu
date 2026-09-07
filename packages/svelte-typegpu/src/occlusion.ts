@@ -6,7 +6,7 @@ import { shadowPassBindGroupLayout } from './typegpu-layouts';
 import type { GpuTiming } from './gpu-timing';
 import {
   OCCLUSION_BLOCK_SIZE, compact, compactLayout, depthReduce, depthReduceLayout,
-  mipReduce, mipReduceLayout, rangeLayout, rangeScan, visibility, visibilityLayout
+  mipReduce, mipReduceLayout, rangeLayout, rangeScan, visibility, clusteredVisibility, visibilityLayout
 } from './occlusion-shaders';
 
 export const MAX_OCCLUSION_RANGES = 192;
@@ -42,16 +42,29 @@ export function pyramidSize(width: number, height: number) {
 export function packOcclusionBounds(batch: TypeGpuDrawBatch, target: Float32Array, start: number, count: number): void {
   const bounds = batch.visibility!.items;
   for (let index = start; index < start + count; index++) {
-    const source = index * 6, dest = index * 8;
-    let valid = batch.instances[index * 24 + 7] >= 1;
-    for (let axis = 0; axis < 3; axis++) {
-      const lo = bounds[source + axis], hi = bounds[source + axis + 3];
-      const epsilon = Math.max(0.0001, Math.abs(lo) * 0.00001, Math.abs(hi) * 0.00001);
-      target[dest + axis] = lo - epsilon;
-      target[dest + axis + 4] = hi + epsilon;
-      valid &&= Number.isFinite(lo) && Number.isFinite(hi) && Math.abs(lo) < 1e25 && Math.abs(hi) < 1e25 && lo <= hi;
-    }
-    target[dest + 3] = Number(valid);
+    packBound(bounds, index * 6, target, index * 8, batch.instances[index * 24 + 7] >= 1);
+  }
+}
+
+function packBound(bounds: Float64Array, source: number, target: Float32Array, dest: number, valid: boolean): void {
+  for (let axis = 0; axis < 3; axis++) {
+    const lo = bounds[source + axis], hi = bounds[source + axis + 3];
+    const epsilon = Math.max(0.0001, Math.abs(lo) * 0.00001, Math.abs(hi) * 0.00001);
+    target[dest + axis] = lo - epsilon; target[dest + axis + 4] = hi + epsilon;
+    valid &&= Number.isFinite(lo) && Number.isFinite(hi) && Math.abs(lo) < 1e25 && Math.abs(hi) < 1e25 && lo <= hi;
+  }
+  target[dest + 3] = Number(valid);
+}
+
+/** Reuse tree nodes covering canonical 128-slot blocks, independent of the view. */
+export function packOcclusionClusters(batch: TypeGpuDrawBatch, target: Float32Array, first: number, count: number): void {
+  const bounds = batch.visibility!;
+  const base = Math.max(1, bounds.leafBase * bounds.leafSize / OCCLUSION_BLOCK_SIZE);
+  for (let cluster = first; cluster < first + count; cluster++) {
+    let valid = true;
+    const end = Math.min(batch.instanceCount, (cluster + 1) * OCCLUSION_BLOCK_SIZE);
+    for (let i = cluster * OCCLUSION_BLOCK_SIZE; i < end; i++) valid &&= batch.instances[i * 24 + 7] >= 1;
+    packBound(bounds.nodes, (base + cluster) * 6, target, cluster * 8, valid);
   }
 }
 
@@ -62,6 +75,8 @@ interface BatchResource extends OcclusionDraw {
   boundsRevision: number;
   boundsCount: number;
   boundsData: Float32Array;
+  clustersData?: Float32Array;
+  clusters?: GPUBuffer;
   rangesData: Uint32Array;
   blocksData: Uint32Array;
   bounds: GPUBuffer;
@@ -88,6 +103,7 @@ export class HiZOcclusion {
   readonly #depthReduce;
   readonly #mipReduce;
   readonly #visibility;
+  #clusteredVisibility?: ReturnType<TgpuRoot['createComputePipeline']>;
   readonly #rangeScan;
   readonly #compact;
   #depth: GPUTexture | null = null;
@@ -99,7 +115,9 @@ export class HiZOcclusion {
   #height = 0;
   #size = pyramidSize(1, 1);
 
-  constructor(readonly root: TgpuRoot) {
+  // Cluster rejection remains a benchmark option until it beats the flat path
+  // across representative views, including authored LOD and sparse motion.
+  constructor(readonly root: TgpuRoot, readonly clustered = false) {
     this.#params = root.device.createBuffer({ label: 'Occlusion camera', size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.depthGroup = root.createBindGroup(shadowPassBindGroupLayout, { shadow: this.#params });
     this.#depthReduce = root.createComputePipeline({ compute: depthReduce });
@@ -165,6 +183,21 @@ export class HiZOcclusion {
       if (range.count) this.root.device.queue.writeBuffer(resource.bounds, range.start * 32,
         resource.boundsData.buffer, range.start * 32, range.count * 32);
     }
+    if (resource.clusters) {
+      let previous = -1, uploadedEnd = 0;
+      for (const range of ranges) {
+        const first = Math.floor(range.start / OCCLUSION_BLOCK_SIZE);
+        const end = Math.ceil((range.start + range.count) / OCCLUSION_BLOCK_SIZE);
+        if (first < previous) uploadedEnd = 0;
+        previous = first;
+        const start = Math.max(first, uploadedEnd);
+        if (range.count && end > start) {
+          packOcclusionClusters(batch, resource.clustersData!, start, end - start);
+          this.root.device.queue.writeBuffer(resource.clusters, start * 32, resource.clustersData!.buffer, start * 32, (end - start) * 32);
+          uploadedEnd = end;
+        }
+      }
+    }
     resource.boundsOwner = batch.visibility;
     resource.boundsRevision = batch.visibility.revision;
     resource.boundsCount = batch.instanceCount;
@@ -199,19 +232,23 @@ export class HiZOcclusion {
       for (let i = 0; i < selection.rangeCount; i++) {
         const offset = i * 8, first = r.rangesData[offset + 2], count = r.rangesData[offset + 3];
         r.rangesData[offset] = r.blockCount;
-        r.rangesData[offset + 1] = Math.ceil(count / 128);
         r.rangesData[offset + 7] = 1;
-        for (let j = 0; j < count; j += 128) {
+        for (let j = 0; j < count;) {
+          const size = Math.min(r.clusters ? 128 - (first + j) % 128 : 128, count - j);
           const block = r.blockCount++ * 4;
-          r.blocksData[block] = first + j; r.blocksData[block + 1] = Math.min(128, count - j); r.blocksData[block + 2] = i;
+          r.blocksData[block] = first + j; r.blocksData[block + 1] = size; r.blocksData[block + 2] = i;
+          r.blocksData[block + 3] = Math.floor((first + j) / 128);
+          j += size;
         }
+        r.rangesData[offset + 1] = r.blockCount - r.rangesData[offset];
       }
       r.rangesData.fill(0, selection.rangeCount * 8);
       this.root.device.queue.writeBuffer(r.ranges, 0, r.rangesData.buffer as ArrayBuffer);
       this.root.device.queue.writeBuffer(r.blocks, 0, r.blocksData.buffer, 0, r.blockCount * 16);
     }
     r.visibilityGroup ??= this.root.createBindGroup(visibilityLayout, {
-      params: this.#params, pyramid: this.#pyramidView!, bounds: r.bounds, blocks: r.blocks, prefix: r.prefix, sums: r.sums
+      params: this.#params, pyramid: this.#pyramidView!, bounds: r.bounds, clusters: r.clusters ?? r.bounds,
+      blocks: r.blocks, prefix: r.prefix, sums: r.sums
     });
     this.draws.set(batch.key, r);
     return true;
@@ -229,7 +266,8 @@ export class HiZOcclusion {
     for (const key of this.draws.keys()) {
       const r = this.resources.get(key)!;
       const pass = encoder.beginComputePass({ label: 'Occlusion selection', timestampWrites: timing?.writes('selection') });
-      this.#visibility.with(pass).with(r.visibilityGroup!).dispatchWorkgroups(r.blockCount);
+      const pipeline = r.clusters ? this.#clusteredVisibility ??= this.root.createComputePipeline({ compute: clusteredVisibility }) : this.#visibility;
+      pipeline.with(pass).with(r.visibilityGroup!).dispatchWorkgroups(r.blockCount);
       this.#rangeScan.with(pass).with(r.rangeGroup).dispatchWorkgroups(Math.ceil(r.rangeCount / 64));
       this.#compact.with(pass).with(r.compactGroup).dispatchWorkgroups(r.blockCount);
       pass.end();
@@ -254,11 +292,13 @@ export class HiZOcclusion {
     });
     const blockCapacity = Math.ceil(capacity / 128) + MAX_OCCLUSION_RANGES;
     const bounds = make('bounds', capacity * 32), ranges = make('ranges', MAX_OCCLUSION_RANGES * 32);
+    const clusters = this.clustered && capacity >= 256 ? make('clusters', Math.ceil(capacity / 128) * 32) : undefined;
     const blocks = make('blocks', blockCapacity * 16), prefix = make('prefix', capacity * 4);
     const sums = make('sums', blockCapacity * 4), offsets = make('offsets', blockCapacity * 4);
     const args = make('indirect', MAX_OCCLUSION_RANGES * 32, GPUBufferUsage.INDIRECT);
     const instances = make('instances', capacity * 96, GPUBufferUsage.VERTEX);
-    return { capacity, source, bounds, ranges, blocks, prefix, sums, offsets, args, instances,
+    return { capacity, source, bounds, clusters, clustersData: clusters ? new Float32Array(Math.ceil(capacity / 128) * 8) : undefined,
+      ranges, blocks, prefix, sums, offsets, args, instances,
       boundsOwner: undefined, boundsRevision: -1, boundsCount: -1, blockCount: 0, rangeCount: 0,
       boundsData: new Float32Array(capacity * 8), rangesData: new Uint32Array(MAX_OCCLUSION_RANGES * 8),
       blocksData: new Uint32Array(blockCapacity * 4),
@@ -267,6 +307,7 @@ export class HiZOcclusion {
   }
 
   #destroyBatch(r: BatchResource): void {
+    r.clusters?.destroy();
     for (const buffer of [r.bounds, r.ranges, r.blocks, r.prefix, r.sums, r.offsets, r.args, r.instances]) buffer.destroy();
   }
 }

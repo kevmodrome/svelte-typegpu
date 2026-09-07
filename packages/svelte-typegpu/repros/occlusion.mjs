@@ -11,6 +11,10 @@ const require = process.env.SVELTE_PROBE_BROWSER_DEPENDENCIES
   ? createRequire(resolve(process.env.SVELTE_PROBE_BROWSER_DEPENDENCIES, 'package.json')) : createRequire(import.meta.url);
 const { chromium } = require('playwright'), { PNG } = require('pngjs');
 const wallCount = process.env.SVELTE_PROBE_SHARED_OCCLUDERS ? 64 : 2;
+const modelCount = Number(process.env.SVELTE_PROBE_MODELS ?? 6000);
+const clusterBenchmark = process.env.SVELTE_PROBE_CLUSTER_BENCHMARK === '1';
+const burstFrames = clusterBenchmark ? 4 : 1;
+const fieldWidth = modelCount > 6000 ? 100 : 60, fieldDepth = modelCount > 6000 ? 100 : 20;
 const texture = new PNG({ width: 2, height: 2 }); texture.data.fill(255);
 // Opaque blending writes depth even for a sampled zero alpha; the built-in
 // material has no discard. Check that enabling Hi-Z does not change that.
@@ -30,6 +34,7 @@ const source = `<script>
   let { onready } = $props();
   let enabled = $state(false), camera = $state(0), walls = $state(true), lod = $state(false);
   let gpuTiming = $state(false);
+  let nearPlane = $state(false);
   const texture = ${JSON.stringify(textureUrl)};
   const material = createMaterialDescriptor('basic', { color: [0.1,0.7,0.5], map: texture });
   const high = createSphereGeometryData(0.27, 32, 16), low = createSphereGeometryData(0.27, 16, 8);
@@ -38,7 +43,7 @@ const source = `<script>
   const model = geometry => ({ key: geometry.key, meshes: [{ geometry, material,
     transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } }] });
   const asset = model(high), levels = createModelLod(asset, [{ maxScreenHeight: 14, asset: model(low) }]);
-  export function configure(e, c, w = true, l = false) { enabled = e; camera = c; walls = w; lod = l; }
+  export function configure(e, c, w = true, l = false, near = false) { enabled = e; camera = c; walls = w; lod = l; nearPlane = near; }
   export function timing(value) { gpuTiming = value; }
 </script>
 <canvas frameloop="manual" maxDevicePixelRatio={1} {gpuTiming} {onready} style="display:block;width:100vw;height:80vh">
@@ -52,13 +57,21 @@ const source = `<script>
         </mesh>
       {/each}
     {/if}
-    {#each Array(6000) as _, i}
-      <model asset={lod ? levels : asset} position={[(i%60-30)*0.65, Math.floor(i/1200)*1.1, -Math.floor(i/60)%20*1.3-2]} />
+    {#each Array(${modelCount}) as _, i}
+      <model asset={lod ? levels : asset} position={nearPlane && i === 0 ? [0,4,23.65] : [(i%${fieldWidth}-${fieldWidth / 2})*0.65, Math.floor(i/${fieldWidth * fieldDepth})*1.1, -Math.floor(i/${fieldWidth})%${fieldDepth}*1.3-2]} />
     {/each}
   </scene>
 </canvas>`;
 const server = await createServer({ root: app, configFile: false, logLevel: 'error', cacheDir: resolve(temporary, 'vite'),
   plugins: [{ name: 'occlusion-probe', enforce: 'pre',
+    // Only the probe overrides the internal constructor; consumers never select
+    // algorithms or manage GPU cullers. Both variants share the same page/device.
+    transform(code, id) {
+      if (clusterBenchmark && id.endsWith('/src/gpu-renderer.ts')) {
+        assert(code.includes('new HiZOcclusion(this.root)'));
+        return code.replace('new HiZOcclusion(this.root)', 'new HiZOcclusion(this.root, globalThis.__probeClustered !== false)');
+      }
+    },
     resolveId(id) { if (id.endsWith('/__occlusion-probe.js')) return entry; if (id.endsWith('/__OcclusionProbe.typegpu.svelte')) return viewport; },
     load(id) {
       if (id === viewport) return source;
@@ -116,7 +129,10 @@ try {
             result[method] = descriptor => {
               const slot = window.probe.timing;
               let index;
-              if (slot) { index = slot.count; slot.count += 2; }
+              if (slot) {
+                index = slot.count; slot.count += 2;
+                slot.labels.push(descriptor.label ?? (method === 'beginRenderPass' && [...descriptor.colorAttachments].some(Boolean) ? 'color' : 'shadow'));
+              }
               const pass = begin(slot ? { ...descriptor, timestampWrites: { querySet: slot.query, beginningOfPassWriteIndex: index, endOfPassWriteIndex: index + 1 } } : descriptor);
               if (method === 'beginRenderPass' && [...descriptor.colorAttachments].some(Boolean)) {
                 window.probe.frames++;
@@ -174,19 +190,25 @@ try {
       }
       window.probe.indirect = []; return counts;
     };
-    window.measure = async () => {
+    window.measure = async (frames = 1) => {
       const device = window.probe.device;
       const query = device.createQuerySet({ type: 'timestamp', count: 256 });
       const resolve = device.createBuffer({ size: 2048, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC });
       const read = device.createBuffer({ size: 2048, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
-      window.probe.timing = { query, count: 0 };
-      const start = performance.now(); const stats = window.commands.draw(); const cpu = performance.now() - start;
-      const count = window.probe.timing.count; window.probe.timing = null;
+      window.probe.timing = { query, count: 0, labels: [] };
+      const start = performance.now(); let stats;
+      for (let frame = 0; frame < frames; frame++) stats = window.commands.draw();
+      const cpu = (performance.now() - start) / frames;
+      const { count, labels } = window.probe.timing; window.probe.timing = null;
       const encoder = device.createCommandEncoder(); encoder.resolveQuerySet(query, 0, count, resolve, 0);
       encoder.copyBufferToBuffer(resolve, 0, read, 0, count * 8); device.queue.submit([encoder.finish()]);
       await read.mapAsync(GPUMapMode.READ); const values = new BigUint64Array(read.getMappedRange());
-      let gpu = 0; for (let i = 0; i < count; i += 2) gpu += Number(values[i + 1] - values[i]) / 1e6;
-      read.unmap(); read.destroy(); resolve.destroy(); query.destroy(); return { cpu, gpu, stats };
+      let gpu = 0; const passes = {};
+      for (let i = 0; i < count; i += 2) {
+        const ms = Number(values[i + 1] - values[i]) / 1e6 / frames;
+        gpu += ms; passes[labels[i / 2]] = (passes[labels[i / 2]] ?? 0) + ms;
+      }
+      read.unmap(); read.destroy(); resolve.destroy(); query.destroy(); return { cpu, gpu, stats, passes };
     };
   });
   await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/occlusion-probe`);
@@ -195,18 +217,22 @@ try {
   const results = [];
   for (const lod of [false, true]) for (const walls of [true, false]) for (const camera of [0, 28]) {
     const images = [];
-    for (const enabled of [false, true]) {
+    for (const mode of clusterBenchmark ? ['disabled', 'flat', 'clustered', 'clustered', 'flat', 'disabled'] : ['disabled', 'flat']) {
+      const enabled = mode !== 'disabled';
+      await page.evaluate(mode => { window.commands.configure(false, 0); window.commands.draw(); window.__probeClustered = mode !== 'flat'; }, mode);
       await page.evaluate(args => window.commands.configure(...args), [enabled, camera, walls, lod]);
       await page.evaluate(() => { window.commands.draw(); window.probe.indirect = []; });
       await page.waitForTimeout(100);
       const measurements = [];
-      for (let i = 0; i < 8; i++) measurements.push(await page.evaluate(() => window.measure()));
+      for (let i = 0; i < 8; i++) measurements.push(await page.evaluate(frames => window.measure(frames), burstFrames));
       const counts = await page.evaluate(() => window.readCounts());
-      const result = { walls, camera, enabled, lod, gpuMs: measurements.reduce((s, m) => s + m.gpu, 0) / measurements.length,
-        cpuMs: measurements.reduce((s, m) => s + m.cpu, 0) / measurements.length, stats: measurements.at(-1).stats,
-        indirectInstances: counts.reduce((s, c) => s + c.instances, 0) / measurements.length };
+      const result = { walls, camera, enabled, lod, mode, modelCount, gpuMs: measurements.reduce((s, m) => s + m.gpu, 0) / measurements.length,
+        cpuMs: measurements.reduce((s, m) => s + m.cpu, 0) / measurements.length,
+        selectionGpuMs: measurements.reduce((s, m) => s + (m.passes['Occlusion selection'] ?? 0), 0) / measurements.length,
+        stats: measurements.at(-1).stats,
+        indirectInstances: counts.reduce((s, c) => s + c.instances, 0) / (measurements.length * burstFrames) };
       results.push(result); console.log(JSON.stringify(result));
-      images.push(PNG.sync.read(await page.locator('canvas').screenshot({ path: resolve(output, `${walls}-${camera}-${enabled}-${lod}.png`) })));
+      images.push(PNG.sync.read(await page.locator('canvas').screenshot({ path: resolve(output, `${walls}-${camera}-${mode}-${lod}.png`) })));
       assert.deepEqual(await page.evaluate(() => window.probe.errors), []);
       assert.deepEqual(errors, []);
       if (enabled && walls && camera === 0) {
@@ -219,13 +245,15 @@ try {
         }
       }
     }
-    let changed = 0, colored = 0;
-    for (let i = 0; i < images[0].data.length; i += 4) {
-      if ([0,1,2,3].some(c => Math.abs(images[0].data[i+c] - images[1].data[i+c]) > 8)) changed++;
-      if (Math.abs(images[0].data[i] - images[0].data[i+1]) > 30) colored++;
+    for (let variant = 1; variant < images.length; variant++) {
+      let changed = 0, colored = 0;
+      for (let i = 0; i < images[0].data.length; i += 4) {
+        if ([0,1,2,3].some(c => Math.abs(images[0].data[i+c] - images[variant].data[i+c]) > 8)) changed++;
+        if (Math.abs(images[0].data[i] - images[0].data[i+1]) > 30) colored++;
+      }
+      console.log(JSON.stringify({ walls, camera, lod, variant, changed, colored }));
+      assert(colored > 1000); assert.equal(changed, 0, 'Occlusion preserves all visible pixels');
     }
-    console.log(JSON.stringify({ walls, camera, lod, changed, colored }));
-    assert(colored > 1000); assert.equal(changed, 0, 'Occlusion preserves all visible pixels');
   }
   for (const width of [390,1440]) {
     await page.setViewportSize({ width, height: 751 });
@@ -238,6 +266,13 @@ try {
       'Resizing an existing viewport preserves visible pixels on the next frame');
     assert.deepEqual(await page.evaluate(() => window.probe.errors), []);
   }
+  const nearImages = [];
+  for (const enabled of [false, true]) {
+    await page.evaluate(enabled => { window.commands.configure(enabled, 0, true, true, true); window.commands.draw(); }, enabled);
+    nearImages.push(PNG.sync.read(await page.locator('canvas').screenshot()));
+  }
+  assert.equal(nearImages[0].data.some((value, i) => Math.abs(value - nearImages[1].data[i]) > 8), false,
+    'A moved instance crossing the near plane keeps its entire uncertain cluster visible on the next frame');
   await page.evaluate(() => { window.commands.configure(true, 0, true, true); window.commands.timing(true); window.commands.draw(); window.commands.loop(true); });
   await page.waitForTimeout(300);
   const snapshot = () => page.evaluate(() => ({ frames: window.probe.frames, callbacks: window.probe.callbacks,

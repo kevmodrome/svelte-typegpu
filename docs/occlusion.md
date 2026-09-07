@@ -119,3 +119,41 @@ Hi-Z delivered 300 frames for 300 callbacks (about 120 FPS), without steady-stat
 resource creation. These are workload-specific observations, not guarantees or
 proof of the physical display refresh rate. Manual GPU timings vary with load
 and clock state; use sustained workload profiles for capacity planning.
+
+## Cluster Experiment
+
+Flat per-instance Hi-Z remains the default. An internal prototype tests a
+conservative bound for each canonical 128-instance cluster before testing its
+members. It reuses the existing bounds tree, preserves all component and slot
+identities, and adds only a 32-byte cluster upload when one instance moves.
+Camera movement uploads no clusters. Unknown, alpha, or near-plane clusters
+fall through to individual tests. No consumer grouping or algorithm flag is
+required, and the default path allocates no cluster buffers.
+
+Run the browser probe with `SVELTE_PROBE_CLUSTER_BENCHMARK=1` and optionally
+`SVELTE_PROBE_MODELS=50000` to compare disabled, flat, and clustered variants on
+the same device, reversing their order and issuing four-frame GPU bursts.
+The override exists only in the probe's Vite transform. It verifies image
+equivalence, stable compaction, indexed LOD, near-plane motion, resize, timings,
+resource reuse, and frame delivery. Compiled motion tests cover both algorithms.
+
+One local Apple Metal 50,000-model run (means of forward/reverse measurements):
+
+| View | No Hi-Z GPU ms | Flat GPU ms | Clustered GPU ms |
+| --- | ---: | ---: | ---: |
+| Wall opening, full detail | 27.59 | 7.39 | 6.87 |
+| Angled, full detail | 23.27 | 18.83 | 18.80 |
+| Wall opening, authored LOD | 9.09 | 4.26 | 4.38 |
+| Angled, authored LOD | 8.09 | 6.83 | 7.46 |
+
+Both algorithms retained the same 12,811 candidate instances in the blocked
+view, with identical pixels. Selection itself took about 0.044 ms for both in
+that view; the apparent total-time difference is not evidence of faster culling.
+Clustering did not consistently earn its overhead, especially with LOD, so it
+is not enabled for consumers. The live LOD+cluster test delivered 300 frames for
+300 callbacks at approximately 120 Hz, but this is not a monitor refresh claim.
+
+The next asset-world investigation is HLOD/impostors for *visible* distant
+geometry, not another occlusion backend. Its consumer contract should be authored
+representations on reusable asset components, selected by screen-space error,
+without unmounting gameplay state or requiring manual per-frame switching.
