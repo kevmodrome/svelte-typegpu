@@ -86,7 +86,7 @@ parent error boundaries and async pending counts do not span that mount.
 | Controls | `orbitControls`; nested `controls`, `pointerControls`, `keyboardControls` | Orbit and fly mode available; fly is not a collision-aware player controller |
 | Camera decomposition | `cameraPose`, `cameraLens` inside perspective cameras | Optional existing syntax; ordinary camera props usually suffice |
 | Lights | Ambient, hemisphere, directional, point, spot | Maximum 32 collected lights |
-| Shadows | Mesh/model `castShadow` and `receiveShadow`, directional-light shadow settings | Only the first eligible directional light casts shadows; no point/spot shadows |
+| Shadows | Mesh/model `castShadow` and `receiveShadow`; light `shadowDistance`, `shadowLod`, map size and bias | One directional map, camera-local coverage optional; no cascades or point/spot shadows |
 | Assets | `model src`, `model data`, or `model asset`; exported `loadModel` | Static GLB 2.0 subset and OBJ geometry, detailed below |
 | Interaction | Click, double-click, context menu, wheel, pointer and drag events | CPU bounding-box picking, not triangle-accurate or alpha-aware picking |
 | Event composition | Capture, target, bubble; group hover boundaries; stop/cancel methods | Scene events wrap browser events; they are not DOM PointerEvents |
@@ -365,7 +365,8 @@ with those particular assets. `Spin` is the complete component above.
     <hemisphereLight skyColor={[0.8, 0.9, 1]} groundColor={[0.2, 0.25, 0.2]}
       intensity={night ? 0.15 : 0.6} />
     <directionalLight position={[8, 12, 6]} lookAt={[0, 0, 0]}
-      intensity={night ? 0.2 : 1.4} castShadow shadowMapSize={2048} />
+      intensity={night ? 0.2 : 1.4} castShadow shadowMapSize={2048}
+      shadowDistance={80} shadowLod />
     <pointLight position={[0, 3, 2]} color={[1, 0.75, 0.4]}
       intensity={night ? 8 : 0} range={12} />
 
@@ -614,6 +615,42 @@ No camera distance conditions or component unmounts are needed. Simplification
 changes appearance slightly; it is not HLOD or a textured impostor. Unsupported
 textured/alpha meshes keep their original geometry. See the
 [distant-mesh measurements and limitations](./distant-meshes-results.md).
+
+### Camera-local shadows
+
+```svelte
+<directionalLight position={[-8, 14, 8]} lookAt={[0, 0, 0]}
+  castShadow shadowMapSize={2048} shadowDistance={80} shadowLod />
+<Tree {assets} kind="pine" position={[10, 0, -20]} />
+```
+
+`shadowDistance` is camera-forward depth in world units, capped by camera far,
+not distance from the light. The map follows the active perspective or
+orthographic camera and fades shadows over the final 10% of that coverage.
+Omitting it (or supplying an invalid/nonpositive value) fits the entire scene.
+A world overview beyond that distance intentionally has no nearby shadow detail;
+this is one local map, not cascaded shadows.
+
+The map center is aligned to texels and its scale stays stable during camera
+rotation. Casters are culled from the light's view, independently of color
+visibility: offscreen trees can still shadow visible ground. Retained batch
+bounds replace the old per-instance bounds scan. Camera movement does not repack
+instances or remount components. Supplying finite geometry bounds is necessary
+for reliable fitting; unknown bounds keep their draws but cannot guide coverage.
+
+`shadowLod` is opt-in and defaults to false. It selects the existing authored
+geometry levels using shadow-map texels instead of CSS pixels, with separate
+hysteresis from color LOD. Without authored levels it keeps base geometry.
+Increasing map resolution can therefore also increase geometry detail and cost.
+The asset world enables this policy in `WorldLighting`; its LOD control determines
+which shared levels are available. There is no hidden simplification per frame.
+
+`getRenderStats()` exposes `shadowCandidates`, `shadowInstances`, `shadowDraws`,
+`shadowTriangles`, `shadowBoundsTests`, `shadowLodTrianglesSaved`,
+`shadowRangeFallbacks` and `shadowCpuMs`. CPU time measures preparation/encoding;
+use `<canvas gpuTiming>` for actual shadow GPU duration. Highly fragmented ranges
+conservatively fall back to more geometry. One directional shadow light remains
+supported; alpha-cutout shadows, cascades and point/spot shadows are not implemented.
 
 ### Animation costs
 

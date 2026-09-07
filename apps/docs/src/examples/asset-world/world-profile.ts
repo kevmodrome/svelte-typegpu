@@ -5,6 +5,8 @@ type SceneState = Parameters<TypeGpuRoot['gpu']['setScene']>[0];
 export interface WorldProfile {
   models: number; instances: number; colorDraws: number; colorTriangles: number;
   shadowTriangles: number; renderCpuMs: number; maxRenderCpuMs: number;
+  shadowInstances: number; shadowDraws: number; shadowCpuMs: number;
+  shadowLodTrianglesSaved: number; shadowRangeFallbacks: number;
   culledInstances: number; cullingCpuMs: number; rangeFallbacks: number;
   lodInstances: number; lodTrianglesSaved: number; lodCpuMs: number; lodRangeFallbacks: number;
   colorCountsExact: boolean; occlusion: string;
@@ -13,6 +15,7 @@ export interface WorldProfile {
 }
 export const emptyProfile: WorldProfile = { models: 0, instances: 0, colorDraws: 0,
   colorTriangles: 0, shadowTriangles: 0, renderCpuMs: 0, maxRenderCpuMs: 0,
+  shadowInstances: 0, shadowDraws: 0, shadowCpuMs: 0, shadowLodTrianglesSaved: 0, shadowRangeFallbacks: 0,
   culledInstances: 0, cullingCpuMs: 0, rangeFallbacks: 0,
   lodInstances: 0, lodTrianglesSaved: 0, lodCpuMs: 0, lodRangeFallbacks: 0,
   colorCountsExact: true, occlusion: 'disabled', occlusionDepthDraws: 0, occlusionDepthTriangles: 0, gpuTiming: 'disabled' };
@@ -50,6 +53,8 @@ export function profileWorld(root: TypeGpuRoot, publish: (profile: WorldProfile)
       const stats = gpu.getRenderStats?.();
       if (stats) latest = { ...latest, instances: stats.submittedInstances, colorDraws: stats.colorDraws,
         colorTriangles: stats.colorTriangles, shadowTriangles: stats.shadowTriangles,
+        shadowInstances: stats.shadowInstances ?? 0, shadowDraws: stats.shadowDraws ?? 0, shadowCpuMs: stats.shadowCpuMs ?? 0,
+        shadowLodTrianglesSaved: stats.shadowLodTrianglesSaved ?? 0, shadowRangeFallbacks: stats.shadowRangeFallbacks ?? 0,
         culledInstances: stats.culledInstances, cullingCpuMs: stats.cullingCpuMs, rangeFallbacks: stats.rangeFallbacks,
         lodInstances: stats.lodInstances, lodTrianglesSaved: stats.lodTrianglesSaved,
         lodCpuMs: stats.lodCpuMs, lodRangeFallbacks: stats.lodRangeFallbacks,

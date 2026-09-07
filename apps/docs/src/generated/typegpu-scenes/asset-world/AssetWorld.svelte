@@ -119,7 +119,14 @@
     <div><dt>Frustum rejected</dt><dd data-metric="culled">{profile.culledInstances.toLocaleString('en-US')}</dd></div>
     <div><dt>Color draws</dt><dd data-metric="draws">{profile.colorDraws}</dd></div>
     <div><dt>{profile.colorCountsExact ? 'Color triangles' : 'Triangles (upper bound)'}</dt><dd data-metric="triangles">{profile.colorTriangles.toLocaleString('en-US')}</dd></div>
-    <div><dt>Shadow triangles</dt><dd>{profile.shadowTriangles.toLocaleString('en-US')}</dd></div>
+    <div><dt>Shadow triangles</dt><dd data-metric="shadow-triangles">{profile.shadowTriangles.toLocaleString('en-US')}</dd></div>
+    {#if shadows}
+      <div><dt>Shadow instances</dt><dd data-metric="shadow-instances">{profile.shadowInstances.toLocaleString('en-US')}</dd></div>
+      <div><dt>Shadow draws</dt><dd data-metric="shadow-draws">{profile.shadowDraws}</dd></div>
+      <div><dt>Shadow CPU</dt><dd data-metric="shadow-cpu">{profile.shadowCpuMs.toFixed(2)} ms</dd></div>
+      <div><dt>Shadow LOD saved</dt><dd data-metric="shadow-lod-saved">{profile.shadowLodTrianglesSaved.toLocaleString('en-US')}</dd></div>
+      <div><dt>Shadow fallbacks</dt><dd data-metric="shadow-fallbacks">{profile.shadowRangeFallbacks}</dd></div>
+    {/if}
     <div><dt>Render CPU</dt><dd data-metric="cpu">{profile.renderCpuMs.toFixed(2)} ms</dd></div>
     <div><dt>CPU max</dt><dd>{profile.maxRenderCpuMs.toFixed(2)} ms</dd></div>
     <div><dt>Cull CPU</dt><dd data-metric="cull-cpu">{profile.cullingCpuMs.toFixed(2)} ms</dd></div>

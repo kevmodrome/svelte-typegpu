@@ -63,6 +63,7 @@ try {
   if (process.env.SVELTE_PROBE_CULLING === '1') await world.getByRole('checkbox', { name: 'Frustum culling', exact: true }).check();
   if (process.env.SVELTE_PROBE_OCCLUSION === '1') await world.getByRole('checkbox', { name: 'Hi-Z occlusion', exact: true }).check();
   if (process.env.SVELTE_PROBE_GPU_TIMING === '1') await world.getByRole('checkbox', { name: 'GPU timing', exact: true }).check();
+  if (process.env.SVELTE_PROBE_SHADOWS === '1') await world.getByRole('checkbox', { name: 'Shadows', exact: true }).check();
   await page.waitForFunction(() => document.querySelector('[data-metric="models"]')?.textContent === '50,000');
   await idle(); await canvas.scrollIntoViewIfNeeded(); await canvas.focus();
   await page.emulateMedia({ reducedMotion: 'no-preference' });
