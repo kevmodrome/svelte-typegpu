@@ -10,6 +10,7 @@
     scopeClass,
     frameloop = 'demand',
     maxDevicePixelRatio,
+    gpuTiming,
     onready,
     onfps,
     onrenderererror,
@@ -20,6 +21,7 @@
     scopeClass?: string;
     frameloop?: TypeGpuRootOptions['frameloop'];
     maxDevicePixelRatio?: number;
+    gpuTiming?: boolean;
     onready?: (root: TypeGpuRoot) => void;
     onfps?: (fps: number) => void;
     onrenderererror?: (error: unknown) => void;
@@ -30,7 +32,7 @@
   let status = $state<'pending' | 'ready' | 'error'>('pending');
   let ownedRoot = $state.raw<TypeGpuRoot | null>(null);
   function updateOptions(root: TypeGpuRoot) {
-    root.gpu.setOptions({ frameloop, maxDevicePixelRatio });
+    root.gpu.setOptions({ frameloop, maxDevicePixelRatio, gpuTiming });
   }
   $effect(() => { if (ownedRoot) updateOptions(ownedRoot); });
   onMount(() => {
@@ -38,7 +40,7 @@
     // Mount supplies the renderer and owns every scene effect and retained node.
     const content = (children ?? (() => {})) as unknown as Component;
     return startCanvasScene({
-      target: canvas!, canvas, frameloop, maxDevicePixelRatio, scenePolicy: 'single',
+      target: canvas!, canvas, frameloop, maxDevicePixelRatio, gpuTiming, scenePolicy: 'single',
       onFps: (value) => onfps?.(value)
     }, content, {}, context, {
       configure(root) { updateOptions(root); ownedRoot = root; },

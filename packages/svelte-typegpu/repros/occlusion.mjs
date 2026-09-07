@@ -29,6 +29,7 @@ const source = `<script>
   import { createMaterialDescriptor } from '../../../packages/svelte-typegpu/src/material-descriptors';
   let { onready } = $props();
   let enabled = $state(false), camera = $state(0), walls = $state(true), lod = $state(false);
+  let gpuTiming = $state(false);
   const texture = ${JSON.stringify(textureUrl)};
   const material = createMaterialDescriptor('basic', { color: [0.1,0.7,0.5], map: texture });
   const high = createSphereGeometryData(0.27, 32, 16), low = createSphereGeometryData(0.27, 16, 8);
@@ -38,8 +39,9 @@ const source = `<script>
     transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } }] });
   const asset = model(high), levels = createModelLod(asset, [{ maxScreenHeight: 14, asset: model(low) }]);
   export function configure(e, c, w = true, l = false) { enabled = e; camera = c; walls = w; lod = l; }
+  export function timing(value) { gpuTiming = value; }
 </script>
-<canvas frameloop="manual" maxDevicePixelRatio={1} {onready} style="display:block;width:100vw;height:80vh">
+<canvas frameloop="manual" maxDevicePixelRatio={1} {gpuTiming} {onready} style="display:block;width:100vw;height:80vh">
   <scene occlusion={enabled ? 'hi-z' : 'none'} clearColor={[0.04,0.06,0.08,1]}>
     <perspectiveCamera active position={[camera,4,24]} target={[0,2,-12]} fov={55} far={180} />
     <ambientLight intensity={1} />
@@ -65,6 +67,7 @@ const server = await createServer({ root: app, configFile: false, logLevel: 'err
         let root;
         const instance = mount(Viewport, { target: document.body, props: { onready: value => { root = value; window.ready = true; } } });
         window.commands = { configure: (...args) => flushSync(() => instance.configure(...args)),
+          timing: value => flushSync(() => instance.timing(value)), stats: () => root.gpu.getRenderStats(),
           draw: () => { flushSync(); root.gpu.renderFrame(performance.now()); return root.gpu.getRenderStats(); },
           loop: value => root.gpu.setOptions({ frameloop: value ? 'always' : 'demand' }),
           dispose: () => unmount(instance) };`;
@@ -235,7 +238,7 @@ try {
       'Resizing an existing viewport preserves visible pixels on the next frame');
     assert.deepEqual(await page.evaluate(() => window.probe.errors), []);
   }
-  await page.evaluate(() => { window.commands.configure(true, 0, true, true); window.commands.draw(); window.commands.loop(true); });
+  await page.evaluate(() => { window.commands.configure(true, 0, true, true); window.commands.timing(true); window.commands.draw(); window.commands.loop(true); });
   await page.waitForTimeout(300);
   const snapshot = () => page.evaluate(() => ({ frames: window.probe.frames, callbacks: window.probe.callbacks,
     buffers: window.probe.buffers.length, groups: window.probe.groups, pipelines: window.probe.pipelines, time: performance.now() }));
@@ -244,8 +247,16 @@ try {
     frames: after.frames-before.frames, callbacks: after.callbacks-before.callbacks }));
   assert(Math.abs((after.frames-before.frames) - (after.callbacks-before.callbacks)) <= 2);
   for (const key of ['buffers','groups','pipelines']) assert.equal(after[key], before[key], `Steady frames reuse ${key}`);
+  const timing = await page.evaluate(() => window.commands.stats());
+  assert.equal(timing.gpuTiming, 'ready'); assert.equal(timing.gpuTime.occlusion, 'active');
+  assert(timing.gpuTime.totalMs > 0 && timing.gpuTime.colorMs > 0 && timing.gpuTime.depthMs > 0 &&
+    timing.gpuTime.pyramidMs > 0 && timing.gpuTime.selectionMs > 0, 'Declarative GPU timing measures the whole active path');
+  console.log(JSON.stringify({ declarativeGpuTiming: timing.gpuTime }));
   await page.evaluate(() => window.commands.loop(false)); await page.waitForTimeout(150);
   const settled = await snapshot(); await page.waitForTimeout(150); assert.equal((await snapshot()).frames, settled.frames);
+  await page.evaluate(() => window.commands.timing(false));
+  assert.equal((await page.evaluate(() => window.commands.stats())).gpuTiming, 'disabled');
+  assert.deepEqual(await page.evaluate(() => window.probe.errors), []);
   await writeFile(resolve(output, 'results.json'), JSON.stringify(results, null, 2));
   await page.evaluate(() => window.commands.dispose());
 } finally {

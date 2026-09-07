@@ -5,7 +5,7 @@ export const emptyProfile = { models: 0, instances: 0, colorDraws: 0,
     colorTriangles: 0, shadowTriangles: 0, renderCpuMs: 0, maxRenderCpuMs: 0,
     culledInstances: 0, cullingCpuMs: 0, rangeFallbacks: 0,
     lodInstances: 0, lodTrianglesSaved: 0, lodCpuMs: 0, lodRangeFallbacks: 0,
-    colorCountsExact: true, occlusion: 'disabled' };
+    colorCountsExact: true, occlusion: 'disabled', occlusionDepthDraws: 0, occlusionDepthTriangles: 0, gpuTiming: 'disabled' };
 export function sceneWorkload(scene) {
     let instances = 0, colorTriangles = 0, shadowTriangles = 0;
     const shadows = scene.lights.some(light => light.kind === 'directional' && light.castsShadow);
@@ -54,7 +54,9 @@ export function profileWorld(root, publish, now = () => performance.now()) {
                     culledInstances: stats.culledInstances, cullingCpuMs: stats.cullingCpuMs, rangeFallbacks: stats.rangeFallbacks,
                     lodInstances: stats.lodInstances, lodTrianglesSaved: stats.lodTrianglesSaved,
                     lodCpuMs: stats.lodCpuMs, lodRangeFallbacks: stats.lodRangeFallbacks,
-                    colorCountsExact: stats.colorCountsExact !== false, occlusion: stats.occlusion ?? 'disabled' };
+                    colorCountsExact: stats.colorCountsExact !== false, occlusion: stats.occlusion ?? 'disabled',
+                    occlusionDepthDraws: stats.occlusionDepthDraws ?? 0, occlusionDepthTriangles: stats.occlusionDepthTriangles ?? 0,
+                    gpuTiming: stats.gpuTiming ?? 'disabled', gpuTime: stats.gpuTime };
             latest = { ...latest, renderCpuMs: frames ? cpu / frames : 0, maxRenderCpuMs: maxCpu };
             publish(latest);
             frames = cpu = maxCpu = 0;

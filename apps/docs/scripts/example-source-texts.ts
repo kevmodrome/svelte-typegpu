@@ -59,11 +59,12 @@ import occlusion from '../src/examples/occlusion/Occlusion.svelte' with { type: 
 import courtyard from '../src/examples/occlusion/Courtyard.typegpu.svelte' with { type: 'text' };
 import wall from '../src/examples/occlusion/Wall.typegpu.svelte' with { type: 'text' };
 import sculpture from '../src/examples/occlusion/Sculpture.typegpu.svelte' with { type: 'text' };
+import gpuTimings from '../src/examples/GpuTimings.svelte' with { type: 'text' };
 
 export const exampleSourceTexts = {
-  occlusion: [occlusion, courtyard, wall, sculpture, worldProfile],
+  occlusion: [occlusion, courtyard, wall, sculpture, worldProfile, gpuTimings],
   'asset-world': [assetWorld, worldViewport, campsite, canoe, player, movementPad, playerController, playerInput, world,
-    landscapeModels, worldCamera, landscape, modelDetail, worldProfile,
+    landscapeModels, worldCamera, landscape, modelDetail, worldProfile, gpuTimings,
     tree, rock, log, tent, campfire, bridge, sign, selectionMarker, terrain, worldLighting],
   'native-events': [nativeEvents],
   'shared-stores': [sharedStores, storeViewport],

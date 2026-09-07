@@ -41,7 +41,7 @@ describe('Svelte Canvas boundary', () => {
     let resolve!: (root: TypeGpuRoot) => void;
     vi.mocked(createTypeGpuRoot).mockReturnValue(new Promise(yes => { resolve = yes; }));
     const root = gpuRoot(), foreign = gpuRoot();
-    const onready = vi.fn(() => expect(root.gpu.setOptions).toHaveBeenLastCalledWith({ frameloop: 'manual', maxDevicePixelRatio: 0.5 }));
+    const onready = vi.fn(() => expect(root.gpu.setOptions).toHaveBeenLastCalledWith({ frameloop: 'manual', maxDevicePixelRatio: 0.5, gpuTiming: undefined }));
     const setup = vi.fn(() => expect(root.gpu.setOptions).toHaveBeenCalled());
     const Scene = compileTypeGpuSource('<script>let { setup } = $props();</script><mesh {@attach setup} />');
     const instance = mount(CanvasHost, { target: document.body, props: {
@@ -65,9 +65,9 @@ describe('Svelte Canvas boundary', () => {
     flushSync(() => instance.replaceRoot(foreign));
     vi.mocked(root.gpu.setOptions).mockClear();
     flushSync(() => instance.updateOptions('always', 1));
-    expect(root.gpu.setOptions).toHaveBeenCalledExactlyOnceWith({ frameloop: 'always', maxDevicePixelRatio: 1 });
+    expect(root.gpu.setOptions).toHaveBeenCalledExactlyOnceWith({ frameloop: 'always', maxDevicePixelRatio: 1, gpuTiming: undefined });
     flushSync(() => instance.updateOptions(undefined, undefined));
-    expect(root.gpu.setOptions).toHaveBeenLastCalledWith({ frameloop: undefined, maxDevicePixelRatio: undefined });
+    expect(root.gpu.setOptions).toHaveBeenLastCalledWith({ frameloop: undefined, maxDevicePixelRatio: undefined, gpuTiming: undefined });
     expect(foreign.gpu.setOptions).not.toHaveBeenCalled();
     expect(sceneNodes(root)[0]).toBe(mesh);
     expect(document.querySelector('canvas')).toBe(canvas);

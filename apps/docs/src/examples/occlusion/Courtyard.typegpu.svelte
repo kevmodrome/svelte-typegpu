@@ -3,12 +3,12 @@
   import Wall from './Wall.typegpu.svelte';
   import Sculpture from './Sculpture.typegpu.svelte';
   let { count = 6000, segments = 32, occlusion = true, walls = true, sweep = false, cameraX = 0,
-    frameloop = 'demand', maxDevicePixelRatio = 1.5, onready, onfps, onrenderererror } = $props();
+    frameloop = 'demand', maxDevicePixelRatio = 1.5, gpuTiming = false, onready, onfps, onrenderererror } = $props();
   let angle = $state(0);
   function update({ delta }: TypeGpuFrameContext) { angle += delta * 0.3; }
 </script>
 
-<canvas aria-label="Occlusion courtyard" {frameloop} {maxDevicePixelRatio} {onready} {onfps} {onrenderererror}>
+<canvas aria-label="Occlusion courtyard" {frameloop} {maxDevicePixelRatio} {gpuTiming} {onready} {onfps} {onrenderererror}>
   <scene occlusion={occlusion ? 'hi-z' : 'none'} clearColor={[0.06, 0.08, 0.1, 1]}>
     <perspectiveCamera active position={[sweep ? Math.sin(angle) * 32 : cameraX, 4, 24]}
       target={[0, 2, -12]} fov={55} far={180}>

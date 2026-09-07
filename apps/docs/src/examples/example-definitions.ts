@@ -44,6 +44,7 @@ export const exampleDefinitions = [
       new URL('./asset-world/landscape.ts', import.meta.url),
       new URL('./asset-world/model-detail.ts', import.meta.url),
       new URL('./asset-world/world-profile.ts', import.meta.url),
+      new URL('./GpuTimings.svelte', import.meta.url),
       new URL('./asset-world/Tree.typegpu.svelte', import.meta.url),
       new URL('./asset-world/Rock.typegpu.svelte', import.meta.url),
       new URL('./asset-world/Log.typegpu.svelte', import.meta.url),
@@ -71,7 +72,8 @@ export const exampleDefinitions = [
       new URL('./occlusion/Courtyard.typegpu.svelte', import.meta.url),
       new URL('./occlusion/Wall.typegpu.svelte', import.meta.url),
       new URL('./occlusion/Sculpture.typegpu.svelte', import.meta.url),
-      new URL('./asset-world/world-profile.ts', import.meta.url)
+      new URL('./asset-world/world-profile.ts', import.meta.url),
+      new URL('./GpuTimings.svelte', import.meta.url)
     ],
     typeGpuSourceFiles: []
   },

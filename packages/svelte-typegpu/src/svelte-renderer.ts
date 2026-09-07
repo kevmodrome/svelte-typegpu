@@ -48,7 +48,7 @@ import type {
 export interface TypeGpuRootOptions
   extends Pick<
     TypeGpuRendererOptions,
-    'frameloop' | 'maxDevicePixelRatio' | 'clearColor' | 'depth' | 'alphaMode'
+    'frameloop' | 'maxDevicePixelRatio' | 'gpuTiming' | 'clearColor' | 'depth' | 'alphaMode'
   > {
   target: HTMLElement;
   canvas?: HTMLCanvasElement;
@@ -154,6 +154,7 @@ export async function createTypeGpuRoot({
   onFps,
   frameloop,
   maxDevicePixelRatio,
+  gpuTiming,
   clearColor,
   depth,
   alphaMode,
@@ -168,6 +169,7 @@ export async function createTypeGpuRoot({
     onFps,
     frameloop,
     maxDevicePixelRatio,
+    gpuTiming,
     clearColor,
     depth,
     alphaMode

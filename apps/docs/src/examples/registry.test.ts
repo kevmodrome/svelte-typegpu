@@ -45,7 +45,7 @@ describe('docs example registry', () => {
       'AssetWorld.svelte', 'WorldViewport.typegpu.svelte', 'Campsite.typegpu.svelte',
       'Canoe.typegpu.svelte', 'Player.typegpu.svelte', 'MovementPad.svelte',
       'player-controller.ts', 'player-input.ts', 'world.ts', 'Landscape.typegpu.svelte',
-      'WorldCamera.typegpu.svelte', 'landscape.ts', 'model-detail.ts', 'world-profile.ts',
+      'WorldCamera.typegpu.svelte', 'landscape.ts', 'model-detail.ts', 'world-profile.ts', 'GpuTimings.svelte',
       'Tree.typegpu.svelte', 'Rock.typegpu.svelte', 'Log.typegpu.svelte', 'Tent.typegpu.svelte',
       'Campfire.typegpu.svelte', 'Bridge.typegpu.svelte', 'Sign.typegpu.svelte',
       'SelectionMarker.typegpu.svelte', 'Terrain.typegpu.svelte', 'WorldLighting.typegpu.svelte'
@@ -61,11 +61,16 @@ describe('docs example registry', () => {
   });
 
   it('publishes composable occlusion walls and a renderer-owned camera sweep', () => {
+    for (const [directory, host] of [['occlusion', 'Occlusion'], ['asset-world', 'AssetWorld']]) {
+      const generated = readFileSync(new URL(`../generated/typegpu-scenes/${directory}/${host}.svelte`, import.meta.url), 'utf8');
+      expect(generated).toContain("from './GpuTimings.svelte'");
+      expect(generated).not.toContain("from '../GpuTimings.svelte'");
+    }
     const example = getExampleBySlug('occlusion');
     expect(example.sourceFiles.map(file => file.filename)).toEqual([
-      'Occlusion.svelte', 'Courtyard.typegpu.svelte', 'Wall.typegpu.svelte', 'Sculpture.typegpu.svelte', 'world-profile.ts'
+      'Occlusion.svelte', 'Courtyard.typegpu.svelte', 'Wall.typegpu.svelte', 'Sculpture.typegpu.svelte', 'world-profile.ts', 'GpuTimings.svelte'
     ]);
-    for (const syntax of ['<Wall', '<Sculpture', '<frameTask', 'occlusion={', 'Triangles (upper bound)']) {
+    for (const syntax of ['<Wall', '<Sculpture', '<frameTask', 'occlusion={', 'Triangles (upper bound)', '{gpuTiming}', '<GpuTimings']) {
       expect(example.code).toContain(syntax);
     }
     expect(example.code).not.toContain('requestAnimationFrame');

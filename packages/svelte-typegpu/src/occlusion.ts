@@ -3,6 +3,7 @@ import type { TypeGpuDrawBatch, TypeGpuInstanceDirtyRange } from './types';
 import { DEPTH_FORMAT } from './render-constants';
 import { createShadowPipeline } from './typegpu-pipeline';
 import { shadowPassBindGroupLayout } from './typegpu-layouts';
+import type { GpuTiming } from './gpu-timing';
 import {
   OCCLUSION_BLOCK_SIZE, compact, compactLayout, depthReduce, depthReduceLayout,
   mipReduce, mipReduceLayout, rangeLayout, rangeScan, visibility, visibilityLayout
@@ -138,8 +139,8 @@ export class HiZOcclusion {
     for (const resource of this.resources.values()) resource.visibilityGroup = undefined;
   }
 
-  depthPass(encoder: GPUCommandEncoder): GPURenderPassEncoder {
-    return encoder.beginRenderPass({ label: 'Occlusion depth', colorAttachments: [], depthStencilAttachment: {
+  depthPass(encoder: GPUCommandEncoder, timestampWrites?: GPURenderPassTimestampWrites): GPURenderPassEncoder {
+    return encoder.beginRenderPass({ label: 'Occlusion depth', timestampWrites, colorAttachments: [], depthStencilAttachment: {
       view: this.#depthView!, depthLoadOp: 'clear', depthStoreOp: 'store', depthClearValue: 1
     } });
   }
@@ -216,10 +217,10 @@ export class HiZOcclusion {
     return true;
   }
 
-  encode(encoder: GPUCommandEncoder): void {
+  encode(encoder: GPUCommandEncoder, timing?: GpuTiming): void {
     let width = this.#size.width, height = this.#size.height;
     for (let i = 0; i < this.#reduceGroups.length; i++) {
-      const pass = encoder.beginComputePass({ label: 'Occlusion pyramid' });
+      const pass = encoder.beginComputePass({ label: 'Occlusion pyramid', timestampWrites: timing?.writes('pyramid') });
       (i === 0 ? this.#depthReduce : this.#mipReduce).with(pass).with(this.#reduceGroups[i])
         .dispatchWorkgroups(Math.ceil(width / 8), Math.ceil(height / 8));
       pass.end();
@@ -227,7 +228,7 @@ export class HiZOcclusion {
     }
     for (const key of this.draws.keys()) {
       const r = this.resources.get(key)!;
-      const pass = encoder.beginComputePass({ label: 'Occlusion selection' });
+      const pass = encoder.beginComputePass({ label: 'Occlusion selection', timestampWrites: timing?.writes('selection') });
       this.#visibility.with(pass).with(r.visibilityGroup!).dispatchWorkgroups(r.blockCount);
       this.#rangeScan.with(pass).with(r.rangeGroup).dispatchWorkgroups(Math.ceil(r.rangeCount / 64));
       this.#compact.with(pass).with(r.compactGroup).dispatchWorkgroups(r.blockCount);

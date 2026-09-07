@@ -58,6 +58,21 @@ export function enableFakeOcclusion(root: ReturnType<typeof createFakeGpuRoot>['
   return { device, buffers, textures, writeBuffer, createComputePipeline, dispatches };
 }
 
+export function enableFakeGpuTiming(fake: ReturnType<typeof enableFakeOcclusion>) {
+  Object.assign(GPUBufferUsage, { QUERY_RESOLVE: 512 });
+  vi.stubGlobal('GPUMapMode', { READ: 1 });
+  fake.device.features.add('timestamp-query');
+  const createBuffer = fake.device.createBuffer.getMockImplementation()!;
+  fake.device.createBuffer.mockImplementation(descriptor => {
+    const buffer = createBuffer(descriptor);
+    return Object.assign(buffer, { mapAsync: vi.fn(async () => {}), getMappedRange: () => buffer.data, unmap: vi.fn() });
+  });
+  Object.assign(fake.device, { createQuerySet: vi.fn(() => ({ destroy: vi.fn() })) });
+  const encode = fake.device.createCommandEncoder, resolveQuerySet = vi.fn();
+  fake.device.createCommandEncoder = () => Object.assign(encode(), { resolveQuerySet, copyBufferToBuffer: vi.fn() });
+  return { resolveQuerySet };
+}
+
 function fakeBuffer() {
   return {
     label: '',

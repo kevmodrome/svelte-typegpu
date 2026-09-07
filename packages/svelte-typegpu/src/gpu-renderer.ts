@@ -14,6 +14,7 @@ import { VisibilitySelection } from './batch-visibility';
 import { LodSelection } from './lod-selection';
 import { HiZOcclusion, isOcclusionEligible, type OcclusionDraw, type OcclusionState } from './occlusion';
 import { OccluderSelection } from './occluder-selection';
+import { GpuTiming, type GpuTimingState, type TypeGpuTimingSample } from './gpu-timing';
 import type { TypeGpuFrameContext } from './frame-tasks';
 import { createViewProjectionMatrix } from './camera-math';
 import { Dirty } from './dirty';
@@ -142,7 +143,7 @@ interface ShaderPassResource {
 
 export interface TypeGpuRenderer {
   /** Update supplied live options; undefined restores that option's default. */
-  setOptions(options: Pick<TypeGpuRendererOptions, 'frameloop' | 'maxDevicePixelRatio'>): void;
+  setOptions(options: Pick<TypeGpuRendererOptions, 'frameloop' | 'maxDevicePixelRatio' | 'gpuTiming'>): void;
   setScene(scene: TypeGpuSceneState): void;
   setCamera(camera: TypeGpuCameraSettings): void;
   invalidate(): void;
@@ -178,6 +179,9 @@ export interface TypeGpuRenderStats {
   occlusionDepthDraws?: number;
   occlusionOccluderInstances?: number;
   occlusionSelectionTests?: number;
+  gpuTiming?: GpuTimingState;
+  /** Delayed diagnostic sample, identified by its own frame and configuration. */
+  gpuTime?: TypeGpuTimingSample;
 }
 
 export interface TypeGpuRendererOptions {
@@ -186,6 +190,8 @@ export interface TypeGpuRendererOptions {
   onFps?: (fps: number) => void;
   frameloop?: 'always' | 'demand' | 'manual';
   maxDevicePixelRatio?: number;
+  /** Opt-in asynchronous pass timings; does not schedule additional frames. */
+  gpuTiming?: boolean;
   clearColor?: RgbaTuple;
   depth?: boolean;
   alphaMode?: GPUCanvasAlphaMode;
@@ -196,6 +202,7 @@ export async function createTypeGpuRenderer({
   onFps,
   frameloop = FRAMELOOP_OPTIONS.always.frameloop,
   maxDevicePixelRatio = MAX_DEVICE_PIXEL_RATIO,
+  gpuTiming = false,
   clearColor = [0, 0, 0, 1],
   depth = true,
   alphaMode = 'premultiplied'
@@ -204,13 +211,14 @@ export async function createTypeGpuRenderer({
     throw new Error('WebGPU is not available in this browser.');
   }
 
-  const root = await tgpu.init({ unstable_names: 'strict', device: { optionalFeatures: ['indirect-first-instance'] } });
+  const root = await tgpu.init({ unstable_names: 'strict', device: { optionalFeatures: ['indirect-first-instance', 'timestamp-query'] } });
 
   return new TypeGpuSceneRenderer(root, {
     canvas,
     onFps,
     frameloop,
     maxDevicePixelRatio,
+    gpuTiming,
     clearColor,
     depth,
     alphaMode
@@ -229,6 +237,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #lodRange = { ranges: new Uint32Array(2), rangeCount: 1 };
   #occlusion: HiZOcclusion | null = null;
   #occluders = new OccluderSelection();
+  #gpuTiming: GpuTiming | null = null;
   #retainedInstances = 0;
   #renderStats: TypeGpuRenderStats = {
     retainedInstances: 0, candidateInstances: 0, submittedInstances: 0, culledInstances: 0,
@@ -279,11 +288,12 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
   constructor(
     private readonly root: TgpuRoot,
-    private readonly options: Required<Omit<TypeGpuRendererOptions, 'onFps'>> & Pick<TypeGpuRendererOptions, 'onFps'>
+    private readonly options: Required<Omit<TypeGpuRendererOptions, 'onFps' | 'gpuTiming'>> & Pick<TypeGpuRendererOptions, 'onFps' | 'gpuTiming'>
   ) {
     this.#format = navigator.gpu.getPreferredCanvasFormat();
     this.#frameloop = normalizeFrameloop(options.frameloop);
     this.#maxDevicePixelRatio = normalizePixelRatio(options.maxDevicePixelRatio);
+    if (options.gpuTiming) this.#gpuTiming = new GpuTiming(root.device);
     this.#displaySize = { width: options.canvas.width || 1, height: options.canvas.height || 1 };
     this.#renderSettings = {
       clearColor: options.clearColor,
@@ -358,8 +368,12 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     });
   }
 
-  setOptions(options: Pick<TypeGpuRendererOptions, 'frameloop' | 'maxDevicePixelRatio'>): void {
+  setOptions(options: Pick<TypeGpuRendererOptions, 'frameloop' | 'maxDevicePixelRatio' | 'gpuTiming'>): void {
     if (this.#disposed) return;
+    if ('gpuTiming' in options) {
+      if (options.gpuTiming) this.#gpuTiming ??= new GpuTiming(this.root.device);
+      else { this.#gpuTiming?.dispose(); this.#gpuTiming = null; }
+    }
     const frameloop = 'frameloop' in options ? normalizeFrameloop(options.frameloop) : this.#frameloop;
     const ratio = 'maxDevicePixelRatio' in options ? normalizePixelRatio(options.maxDevicePixelRatio) : this.#maxDevicePixelRatio;
     const modeChanged = frameloop !== this.#frameloop;
@@ -550,6 +564,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     try {
       this.#drawFrame(timestamp);
     } finally {
+      this.#gpuTiming?.cancelFrame();
       this.#rendering = false;
       if (this.#needsFollowUpFrame && this.#frame === null) {
         this.#needsFollowUpFrame = false;
@@ -574,6 +589,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#resize();
     this.#writeUniforms();
     this.#frustum.setMatrix(this.#uniformData);
+    this.#gpuTiming?.beginFrame(now, this.#renderSettings.occlusion ?? 'none');
     const stats = this.#renderStats;
     stats.retainedInstances = this.#retainedInstances;
     stats.candidateInstances = stats.submittedInstances = stats.culledInstances = 0;
@@ -590,6 +606,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
       beginTypeGpuShadowPass({
         root: this.root,
+        timestampWrites: this.#gpuTiming?.writes('shadow'),
         shadowTexture: this.#shadowTexture,
         draw: (pass) => {
           for (const batch of this.#drawBatches) {
@@ -618,6 +635,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
     beginTypeGpuRenderPass({
       root: this.root,
+      timestampWrites: this.#gpuTiming?.writes('color'),
       context: this.#context,
       clearColor: this.#renderSettings.clearColor,
       depthTexture: this.#renderSettings.depth ? this.#depthTexture : null,
@@ -700,6 +718,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       }
     });
 
+    this.#gpuTiming?.endFrame(stats.occlusion ?? 'disabled');
     this.#fpsMeter?.record(now);
   }
 
@@ -708,7 +727,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   }
 
   getRenderStats(): TypeGpuRenderStats {
-    return { ...this.#renderStats };
+    return { ...this.#renderStats, gpuTiming: this.#gpuTiming?.state ?? 'disabled', gpuTime: this.#gpuTiming?.sample };
   }
 
   dispose(): void {
@@ -716,6 +735,8 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
     this.#disposed = true;
     this.#fpsMeter?.dispose();
+    this.#gpuTiming?.dispose();
+    this.#gpuTiming = null;
     this.#needsFollowUpFrame = false;
     this.#frameHandler = null;
     this.#continueFrame = false;
@@ -845,7 +866,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     }
     if (!occlusion.draws.size) { stats.occlusionCpuMs = performance.now() - start; return; }
     const encoder = this.root.device.createCommandEncoder({ label: 'Occlusion current-frame visibility' });
-    const pass = occlusion.depthPass(encoder);
+    const pass = occlusion.depthPass(encoder, this.#gpuTiming?.writes('depth'));
     try {
       for (let i = 0; i < occluders.count; i++) {
         const { batch, first, count } = occluders.entries[i];
@@ -859,7 +880,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
           shadowPassBindGroup: occlusion.depthGroup, geometryResource, instanceResource, batch, firstInstance: first, instanceCount: count });
       }
     } finally { pass.end(); }
-    occlusion.encode(encoder);
+    occlusion.encode(encoder, this.#gpuTiming ?? undefined);
     this.root.device.queue.submit([encoder.finish()]);
     stats.occlusion = 'active';
     stats.colorCountsExact = false;
@@ -1086,16 +1107,19 @@ function beginTypeGpuRenderPass({
   context,
   clearColor,
   depthTexture,
-  draw
+  draw,
+  timestampWrites
 }: {
   root: TgpuRoot;
   context: GPUCanvasContext;
   clearColor: RgbaTuple;
   depthTexture: TypeGpuDepthTexture | null;
   draw(pass: GPURenderPassEncoder): void;
+  timestampWrites?: GPURenderPassTimestampWrites;
 }): void {
   const commandEncoder = root.device.createCommandEncoder();
   const descriptor: GPURenderPassDescriptor = {
+    timestampWrites,
     colorAttachments: [
       {
         view: context.getCurrentTexture().createView(),
@@ -1141,14 +1165,17 @@ function beginTypeGpuRenderPass({
 function beginTypeGpuShadowPass({
   root,
   shadowTexture,
-  draw
+  draw,
+  timestampWrites
 }: {
   root: TgpuRoot;
   shadowTexture: TypeGpuShadowTexture;
   draw(pass: GPURenderPassEncoder): void;
+  timestampWrites?: GPURenderPassTimestampWrites;
 }): void {
   const commandEncoder = root.device.createCommandEncoder();
   const pass = commandEncoder.beginRenderPass({
+    timestampWrites,
     colorAttachments: [],
     depthStencilAttachment: {
       view: root.unwrap(shadowTexture).createView(),

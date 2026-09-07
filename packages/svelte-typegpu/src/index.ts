@@ -13,6 +13,7 @@ export type {
 } from './core';
 export type { TypeGpuFrameContext, TypeGpuFrameCallback } from './frame-tasks';
 export type { TypeGpuRenderStats } from './gpu-renderer';
+export type { GpuTimingState, TypeGpuTimingSample } from './gpu-timing';
 export {
   createTypeGpuRoot,
   type TypeGpuRoot,

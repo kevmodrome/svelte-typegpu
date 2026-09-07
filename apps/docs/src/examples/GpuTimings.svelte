@@ -1,0 +1,24 @@
+<script lang="ts">
+  import type { GpuTimingState, TypeGpuTimingSample } from 'svelte-typegpu';
+  let { state, sample, occlusion }: { state: GpuTimingState; sample?: TypeGpuTimingSample; occlusion: string } = $props();
+  const current = $derived(sample?.occlusion === occlusion ? sample : undefined);
+  const status = $derived(state === 'ready' && !current ? 'pending' : state);
+  const rows = $derived([
+    ['GPU passes', current?.totalMs], ['Color GPU', current?.colorMs], ['Shadow GPU', current?.shadowMs],
+    ['Hi-Z depth', current?.depthMs], ['Hi-Z pyramid', current?.pyramidMs], ['Hi-Z selection', current?.selectionMs]
+  ] as const);
+</script>
+
+<dl aria-label="Sampled GPU pass timings">
+  {#each rows as [label, value]}
+    <div><dt>{label}</dt><dd data-gpu-metric={label}>{value === undefined ? status : `${value.toFixed(2)} ms`}</dd></div>
+  {/each}
+  <div><dt>Sample frame</dt><dd>{current?.frame ?? status}</dd></div>
+</dl>
+
+<style>
+  dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; margin: 0;
+    padding: 14px 16px; border-top: 1px solid #506059; color: inherit; font-size: 13px; }
+  dt { font-size: 11px; opacity: 0.8; }
+  dd { margin: 5px 0 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+</style>

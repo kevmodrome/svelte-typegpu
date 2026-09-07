@@ -7,7 +7,7 @@ import tgpu from 'typegpu';
 import { createFragment } from './core';
 import renderer, { createTypeGpuRuntimeForTest } from './svelte-renderer';
 import { createTypeGpuRenderer } from './gpu-renderer';
-import { createFakeGpuRoot, enableFakeOcclusion } from './gpu-test-utils';
+import { createFakeGpuRoot, enableFakeGpuTiming, enableFakeOcclusion } from './gpu-test-utils';
 import { compileViewportSource } from './viewport-test-utils';
 import { settleComponentUpdates } from './component-test-utils';
 
@@ -65,9 +65,10 @@ describe('compiled motion with current-frame GPU occlusion', () => {
     vi.spyOn(raf, 'tick').mockImplementation(callback => { producers.add(callback); requestAnimationFrame(callback); });
     vi.stubGlobal('navigator', { gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
     const { root: gpu, buffers, submissions } = createFakeGpuRoot(captured), fake = enableFakeOcclusion(gpu);
+    const timing = enableFakeGpuTiming(fake);
     vi.mocked(tgpu.init).mockResolvedValue(gpu as never);
     const canvas = Object.assign(new EventTarget(), { width: 400, height: 400, clientWidth: 400, clientHeight: 400 }) as HTMLCanvasElement;
-    const gpuRenderer = await createTypeGpuRenderer({ canvas, frameloop: mode });
+    const gpuRenderer = await createTypeGpuRenderer({ canvas, frameloop: mode, gpuTiming: true });
     const changed = vi.spyOn(gpuRenderer, 'setScene');
     const root = createFragment(), runtime = createTypeGpuRuntimeForTest(root, canvas, gpuRenderer); root.runtime = runtime;
     const Scene = compileViewportSource<{ animate(): void; stop(): void; toggle(value: boolean): void }>(`<script>
@@ -113,11 +114,12 @@ describe('compiled motion with current-frame GPU occlusion', () => {
       if (!first) gpuRenderer.invalidate();
       for (let frame = 0; frame < hz / 2; frame++) {
         const before = rendered.mock.calls.length, passes = submissions.length;
+        const samples = timing.resolveQuerySet.mock.calls.length;
         fake.writeBuffer.mockClear(); captured.indirect.length = 0;
         for (const buffer of instanceBuffers) buffer.write.mockClear();
         await step(); if (mode === 'manual') gpuRenderer.renderFrame(now);
         expect(rendered.mock.calls.length - before).toBe(1);
-        expect(submissions.length - passes).toBe(3);
+        expect(submissions.length - passes).toBe(3 + timing.resolveQuerySet.mock.calls.length - samples);
         expect(captured.indirect).toHaveLength(1);
         if (frame === 0) expect(order).toEqual(mode === 'manual' ? ['motion'] : first ? ['render','motion'] : ['motion','render']);
         // A demand renderer can naturally swap order once the external producer
@@ -141,6 +143,7 @@ describe('compiled motion with current-frame GPU occlusion', () => {
       flushSync(() => instance.toggle(false)); await settleComponentUpdates();
       await step(); if (mode === 'manual') gpuRenderer.renderFrame(now);
       expect(gpuRenderer.getRenderStats!()).toMatchObject({ occlusion: 'disabled', colorCountsExact: true });
+      gpuRenderer.setOptions({ gpuTiming: false });
       expect(fake.buffers.every(b => b.destroy.mock.calls.length === 1)).toBe(true);
       gpuRenderer.invalidate();
     } finally {

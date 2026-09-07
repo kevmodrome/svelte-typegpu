@@ -42,7 +42,7 @@
   let ownedRoot = $state.raw<TypeGpuRoot | null>(null);
 
   function updateOptions(nextRoot: TypeGpuRoot) {
-    nextRoot.gpu.setOptions({ frameloop: options.frameloop, maxDevicePixelRatio: options.maxDevicePixelRatio });
+    nextRoot.gpu.setOptions({ frameloop: options.frameloop, maxDevicePixelRatio: options.maxDevicePixelRatio, gpuTiming: options.gpuTiming });
   }
   $effect(() => { if (ownedRoot) updateOptions(ownedRoot); });
 

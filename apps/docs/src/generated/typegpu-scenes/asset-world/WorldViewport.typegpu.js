@@ -42,7 +42,8 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 		view = $.prop($$props, 'view', 3, 'camp'),
 		onselect = $.prop($$props, 'onselect', 3, (_key) => {}),
 		frameloop = $.prop($$props, 'frameloop', 3, 'demand'),
-		maxDevicePixelRatio = $.prop($$props, 'maxDevicePixelRatio', 3, 1.5);
+		maxDevicePixelRatio = $.prop($$props, 'maxDevicePixelRatio', 3, 1.5),
+		gpuTiming = $.prop($$props, 'gpuTiming', 3, false);
 
 	let width = $.state(0);
 	let height = $.state(0);
@@ -74,7 +75,7 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 	}));
 
 	TypeGpuViewportCanvas($$anchor, {
-		scopeClass: 'typegpu-376b4da9ce',
+		scopeClass: 'typegpu-4a90adc12d',
 		'aria-label': 'Pinewater campsite',
 		get frameloop() {
 			return frameloop();
@@ -82,6 +83,10 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 
 		get maxDevicePixelRatio() {
 			return maxDevicePixelRatio();
+		},
+
+		get gpuTiming() {
+			return gpuTiming();
 		},
 		tabindex: 0,
 		'aria-keyshortcuts': 'W A S D ArrowUp ArrowDown ArrowLeft ArrowRight Shift Escape',

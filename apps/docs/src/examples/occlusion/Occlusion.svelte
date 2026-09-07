@@ -3,22 +3,25 @@
   import { prefersReducedMotion } from 'svelte/motion';
   import type { TypeGpuRoot } from 'svelte-typegpu';
   import Courtyard from './Courtyard.typegpu.svelte';
+  import GpuTimings from '../GpuTimings.svelte';
   import { emptyProfile, profileWorld } from '../asset-world/world-profile';
   let { frameloop = 'demand', maxDevicePixelRatio = 1.5, onready, onfps, onrenderererror } = $props();
   let count = $state(6000), segments = $state(32), occlusion = $state(true), walls = $state(true), sweep = $state(false), cameraX = $state(0);
   let profile = $state.raw(emptyProfile), profiler: ReturnType<typeof profileWorld> | undefined;
+  let gpuTiming = $state(true);
   function ready(root: TypeGpuRoot) { profiler?.dispose(); profiler = profileWorld(root, value => profile = value); onready?.(root); }
   function fps(value: number) { profiler?.sample(); onfps?.(value); }
   onDestroy(() => profiler?.dispose());
 </script>
 
 <div class="occlusion-example">
-  <Courtyard {count} {segments} {occlusion} {walls} sweep={sweep && !prefersReducedMotion.current} {cameraX}
+  <Courtyard {count} {segments} {occlusion} {walls} {gpuTiming} sweep={sweep && !prefersReducedMotion.current} {cameraX}
     {frameloop} {maxDevicePixelRatio} onready={ready} onfps={fps} {onrenderererror} />
   <div class="toolbar" role="group" aria-label="Occlusion controls">
     <label><input type="checkbox" bind:checked={occlusion} /> Hi-Z occlusion</label>
     <label><input type="checkbox" bind:checked={walls} /> Walls</label>
     <label><input type="checkbox" bind:checked={sweep} /> Camera sweep</label>
+    <label><input type="checkbox" bind:checked={gpuTiming} /> GPU timing</label>
     <label>Objects <select aria-label="Object count" bind:value={count}>
       <option value={6000}>6,000</option><option value={20000}>20,000</option><option value={50000}>50,000</option>
     </select></label>
@@ -32,7 +35,10 @@
     <div><dt>Color commands</dt><dd>{profile.colorDraws}</dd></div>
     <div><dt>{profile.colorCountsExact ? 'Color triangles' : 'Triangles (upper bound)'}</dt><dd>{profile.colorTriangles.toLocaleString('en-US')}</dd></div>
     <div><dt>Render CPU</dt><dd>{profile.renderCpuMs.toFixed(2)} ms</dd></div>
+    <div><dt>Occluder draws</dt><dd>{profile.occlusionDepthDraws}</dd></div>
+    <div><dt>Depth triangles</dt><dd>{profile.occlusionDepthTriangles.toLocaleString('en-US')}</dd></div>
   </dl>
+  {#if gpuTiming}<GpuTimings state={profile.gpuTiming} sample={profile.gpuTime} occlusion={profile.occlusion} />{/if}
 </div>
 
 <style>

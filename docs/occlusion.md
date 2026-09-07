@@ -74,6 +74,34 @@ Try `/examples/occlusion` for removable walls and a camera sweep, or enable
 Hi-Z in `/examples/asset-world`. It is not necessarily faster in an open forest.
 Measure total depth + compute + color cost, not just the final color pass.
 
+### Declarative GPU Timing
+
+```svelte
+<canvas gpuTiming={profiling}>
+  <scene occlusion={culling ? 'hi-z' : 'none'}>
+    <Wall />
+    {#each trees as tree (tree.id)}<Tree {...tree} />{/each}
+  </scene>
+</canvas>
+```
+
+`gpuTiming` is a live canvas option, off by default. No registration or frame
+callback is needed. Both examples have a GPU timing checkbox. Renderer statistics
+include `gpuTiming` (`disabled`, `unsupported`, `pending`, `ready`, `error`) and
+an optional delayed `gpuTime` sample with frame, timestamp, occlusion state,
+`totalMs`, `shadowMs`, `depthMs`, `pyramidMs`, `selectionMs`, and `colorMs`.
+
+The total is a sum of pass durations, not end-to-end latency, queue wait, or
+presentation time. Samples normally run at most every 250 ms during existing
+frames; changing the occlusion option permits an immediate sample. A fixed
+three-slot pool skips busy samples, never waits for readback, and never schedules
+RAF. Disabling the option releases its resources. Missing optional timestamp
+support is reported as unavailable, not zero milliseconds. Readback failure
+stops sampling until the option is toggled off/on; rendering is unaffected.
+
+Always associate a sample with its recorded configuration. The live examples
+hide a previous configuration's timing while waiting for a matching sample.
+
 From `packages/svelte-typegpu`, run `node repros/occlusion.mjs` with the same
 `SVELTE_PROBE_BROWSER_DEPENDENCIES` and `SVELTE_PROBE_CHROMIUM` environment
 variables used by the other browser probes. It requires a WebGPU adapter with

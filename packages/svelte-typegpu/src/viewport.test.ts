@@ -55,6 +55,24 @@ const source = `<script>
 type Exports = { reference(): HTMLCanvasElement | null | undefined; toggle(): void; reorder(): void; rename(): void };
 
 describe('declarative canvas', () => {
+  it('updates GPU timing declaratively without remounting or leaking an HTML attribute', async () => {
+    const gpu = root(); vi.mocked(createTypeGpuRoot).mockResolvedValue(gpu);
+    const Viewport = compileViewportSource<{ toggle(value?: boolean): void }>(`<script>
+      let gpuTiming = $state(true); export function toggle(value) { gpuTiming = value; }
+    </script><canvas {gpuTiming}><scene><mesh /></scene></canvas>`);
+    const instance = mount(Viewport, { target: document.body }); mounted.push(instance);
+    await tick(); await tick();
+    const canvas = document.querySelector('canvas'), mesh = nodes(gpu, 'mesh')[0];
+    expect(createTypeGpuRoot).toHaveBeenCalledWith(expect.objectContaining({ gpuTiming: true }));
+    expect(gpu.gpu.setOptions).toHaveBeenLastCalledWith(expect.objectContaining({ gpuTiming: true }));
+    for (const value of [false, true, undefined]) {
+      flushSync(() => instance.toggle(value));
+      expect(gpu.gpu.setOptions).toHaveBeenLastCalledWith(expect.objectContaining({ gpuTiming: value }));
+      expect(nodes(gpu, 'mesh')[0]).toBe(mesh); expect(document.querySelector('canvas')).toBe(canvas);
+    }
+    expect(canvas?.hasAttribute('gputiming')).toBe(false);
+    expect(createTypeGpuRoot).toHaveBeenCalledOnce(); expect(gpu.dispose).not.toHaveBeenCalled();
+  });
   it('resets a keyed scene without replacing its native canvas or GPU root', async () => {
     const gpu = root();
     vi.mocked(createTypeGpuRoot).mockResolvedValue(gpu);
@@ -99,7 +117,7 @@ describe('declarative canvas', () => {
       expect(created.gpu.setOptions).toHaveBeenCalled();
       return cleanup;
     });
-    const onready = vi.fn(() => expect(created.gpu.setOptions).toHaveBeenLastCalledWith({ frameloop: 'manual', maxDevicePixelRatio: 0.5 }));
+    const onready = vi.fn(() => expect(created.gpu.setOptions).toHaveBeenLastCalledWith({ frameloop: 'manual', maxDevicePixelRatio: 0.5, gpuTiming: undefined }));
     const warn = vi.spyOn(console, 'warn');
     const Viewport = compileViewportSource<{ update(mode: string | undefined, ratio: number | undefined): void }>(`
       <script>
@@ -126,9 +144,9 @@ describe('declarative canvas', () => {
     const canvas = document.querySelector('canvas'), mesh = nodes(created, 'mesh')[0];
     vi.mocked(created.gpu.setOptions).mockClear();
     flushSync(() => instance.update('always', 1));
-    expect(created.gpu.setOptions).toHaveBeenCalledExactlyOnceWith({ frameloop: 'always', maxDevicePixelRatio: 1 });
+    expect(created.gpu.setOptions).toHaveBeenCalledExactlyOnceWith({ frameloop: 'always', maxDevicePixelRatio: 1, gpuTiming: undefined });
     flushSync(() => instance.update(undefined, undefined));
-    expect(created.gpu.setOptions).toHaveBeenLastCalledWith({ frameloop: 'demand', maxDevicePixelRatio: undefined });
+    expect(created.gpu.setOptions).toHaveBeenLastCalledWith({ frameloop: 'demand', maxDevicePixelRatio: undefined, gpuTiming: undefined });
     expect(document.querySelector('canvas')).toBe(canvas);
     expect(nodes(created, 'mesh')[0]).toBe(mesh);
     expect(setup).toHaveBeenCalledOnce();

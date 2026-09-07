@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 const require = process.env.SVELTE_PROBE_BROWSER_DEPENDENCIES
   ? createRequire(resolve(process.env.SVELTE_PROBE_BROWSER_DEPENDENCIES, 'package.json')) : createRequire(import.meta.url);
 const { chromium } = require('playwright'), { PNG } = require('pngjs');
-const output = '/tmp/typegpu-occlusion-docs'; await mkdir(output, { recursive: true });
+const output = process.env.SVELTE_PROBE_OUTPUT ?? '/tmp/typegpu-occlusion-docs'; await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true, executablePath: process.env.SVELTE_PROBE_CHROMIUM,
   args: ['--enable-unsafe-webgpu', '--use-angle=metal'] });
 try {
@@ -21,10 +21,12 @@ try {
   });
   for (const width of [1440,390]) {
     await page.setViewportSize({ width, height: 1000 });
-    await page.goto('http://127.0.0.1:3335/examples/occlusion', { waitUntil: 'networkidle' });
+    await page.goto(`${process.env.SVELTE_PROBE_BASE_URL ?? 'http://127.0.0.1:3335'}/examples/occlusion`, { waitUntil: 'networkidle' });
     const example = page.locator('.occlusion-example'), canvas = example.locator('canvas');
     await canvas.waitFor(); await canvas.scrollIntoViewIfNeeded();
     await example.locator('[data-metric="occlusion"]').getByText('active', { exact: true }).waitFor();
+    await example.locator('[data-gpu-metric="GPU passes"]').getByText(/\d+\.\d+ ms/).waitFor();
+    assert(Number.parseFloat(await example.locator('[data-gpu-metric="Hi-Z depth"]').innerText()) > 0);
     const image = PNG.sync.read(await canvas.screenshot({ path: resolve(output, `${width}-canvas.png`) }));
     let colored = 0;
     for (let i = 0; i < image.data.length; i += 4) if (Math.max(image.data[i], image.data[i+1], image.data[i+2]) > 90) colored++;
@@ -42,6 +44,7 @@ try {
     await page.mouse.move(rect.x + rect.width / 2 + 40, rect.y + rect.height / 2, { steps: 8 }); await page.mouse.up();
     await example.getByRole('checkbox', { name: 'Hi-Z occlusion', exact: true }).uncheck();
     await example.locator('[data-metric="occlusion"]').getByText('disabled', { exact: true }).waitFor();
+    await example.locator('[data-gpu-metric="Hi-Z depth"]').getByText('0.00 ms', { exact: true }).waitFor();
     await example.screenshot({ path: resolve(output, `${width}-controls.png`) });
     assert.deepEqual(await page.evaluate(() => window.gpuErrors), []);
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'No horizontal page overflow');

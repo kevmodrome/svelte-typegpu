@@ -4,6 +4,7 @@
   import { prefersReducedMotion } from 'svelte/motion';
   import WorldViewport from './WorldViewport.typegpu.js';
   import MovementPad from './MovementPad.svelte';
+  import GpuTimings from './GpuTimings.svelte';
   import { Map, RotateCcw, Tent, UserRound } from '@lucide/svelte';
   import { idleMovement } from './player-input.js';
   import { assetCount, loadWorldAssets, selectable } from './world.js';
@@ -19,6 +20,7 @@
   let frustumCulling = $state(false);
   let lod = $state(false);
   let occlusion = $state(false);
+  let gpuTiming = $state(false);
   let count = $state(20000), detail = $state(1), preparing = $state(false);
   let view = $state<'camp' | 'follow' | 'overview'>('overview');
   let landscape = $state.raw(compactLandscape), profile = $state.raw(emptyProfile);
@@ -65,7 +67,7 @@
 
 <div class="asset-world" class:dusk>
   <div class="world-stage">
-    <WorldViewport {assets} {landscape} {view} {forest} {dusk} {shadows} {frustumCulling} {occlusion} {selected} {cameraVersion} {playerVersion} {touch} {paused}
+    <WorldViewport {assets} {landscape} {view} {forest} {dusk} {shadows} {frustumCulling} {occlusion} {gpuTiming} {selected} {cameraVersion} {playerVersion} {touch} {paused}
       reducedMotion={prefersReducedMotion.current}
       onselect={(key: string) => selected = key}
       {frameloop} {maxDevicePixelRatio} onready={ready} onfps={fps} {onrenderererror} />
@@ -96,6 +98,7 @@
     <label><input type="checkbox" bind:checked={frustumCulling} /> Frustum culling</label>
     <label><input type="checkbox" checked={lod} onchange={event => { lod = event.currentTarget.checked; void rebuild(); }} /> LOD</label>
     <label><input type="checkbox" bind:checked={occlusion} /> Hi-Z occlusion</label>
+    <label><input type="checkbox" bind:checked={gpuTiming} /> GPU timing</label>
     <div class="view-modes" role="group" aria-label="Camera view">
       {#each [{ key: 'camp', label: 'Campsite view', icon: Tent }, { key: 'follow', label: 'Follow camper', icon: UserRound }, { key: 'overview', label: 'World overview', icon: Map }] as mode}
         <button type="button" aria-label={mode.label} title={mode.label} aria-pressed={view === mode.key}
@@ -120,6 +123,7 @@
     <div><dt>LOD fallbacks</dt><dd data-metric="lod-fallbacks">{profile.lodRangeFallbacks}</dd></div>
     {#if occlusion}<div><dt>Occlusion</dt><dd data-metric="occlusion">{profile.occlusion}</dd></div>{/if}
   </dl>
+  {#if gpuTiming}<GpuTimings state={profile.gpuTiming} sample={profile.gpuTime} occlusion={profile.occlusion} />{/if}
   <div class="world-toolbar" role="group" aria-label="World controls">
     <label><input type="checkbox" bind:checked={dusk} /> Dusk</label>
     <label><input type="checkbox" bind:checked={forest} /> Forest</label>

@@ -45,7 +45,8 @@ export default function Courtyard_typegpu($$anchor, $$props) {
 		sweep = $.prop($$props, 'sweep', 3, false),
 		cameraX = $.prop($$props, 'cameraX', 3, 0),
 		frameloop = $.prop($$props, 'frameloop', 3, 'demand'),
-		maxDevicePixelRatio = $.prop($$props, 'maxDevicePixelRatio', 3, 1.5);
+		maxDevicePixelRatio = $.prop($$props, 'maxDevicePixelRatio', 3, 1.5),
+		gpuTiming = $.prop($$props, 'gpuTiming', 3, false);
 
 	let angle = $.state(0);
 
@@ -54,7 +55,7 @@ export default function Courtyard_typegpu($$anchor, $$props) {
 	}
 
 	TypeGpuViewportCanvas($$anchor, {
-		scopeClass: 'typegpu-390ada621d',
+		scopeClass: 'typegpu-693ba3bda3',
 		'aria-label': 'Occlusion courtyard',
 		get frameloop() {
 			return frameloop();
@@ -62,6 +63,10 @@ export default function Courtyard_typegpu($$anchor, $$props) {
 
 		get maxDevicePixelRatio() {
 			return maxDevicePixelRatio();
+		},
+
+		get gpuTiming() {
+			return gpuTiming();
 		},
 
 		get onready() {
