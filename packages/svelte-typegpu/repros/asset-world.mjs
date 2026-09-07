@@ -8,6 +8,7 @@ const require = process.env.SVELTE_PROBE_BROWSER_DEPENDENCIES
 const { chromium } = require('playwright'), { PNG } = require('pngjs');
 const output = process.env.SVELTE_PROBE_OUTPUT ?? '/tmp/typegpu-asset-world';
 const url = process.env.SVELTE_PROBE_URL ?? 'http://127.0.0.1:3335/examples/asset-world';
+const lod = process.env.SVELTE_PROBE_LOD === '1';
 await mkdir(output, { recursive: true });
 function camperPosition(png) {
   let x = 0, y = 0, count = 0;
@@ -60,7 +61,11 @@ try {
       await page.locator('canvas[data-typegpu-status="ready"]').waitFor({ timeout: 30000 });
       const world = page.locator('.asset-world'), canvas = world.locator('canvas');
       await world.getByRole('combobox', { name: 'Model count', exact: true }).selectOption('29');
-      await world.getByRole('combobox', { name: 'Triangle density', exact: true }).selectOption('0');
+      await world.getByRole('combobox', { name: 'Triangle density', exact: true }).selectOption(lod ? '2' : '0');
+      if (lod) {
+        await world.getByRole('checkbox', { name: 'LOD', exact: true }).check();
+        await world.getByRole('checkbox', { name: 'Frustum culling', exact: true }).check();
+      }
       await world.getByRole('button', { name: 'Campsite view', exact: true }).click();
       await world.getByRole('checkbox', { name: 'Shadows', exact: true }).check();
       await page.waitForFunction(() => document.querySelector('[data-metric="models"]')?.textContent === '29');
@@ -72,6 +77,7 @@ try {
       const before = await metrics();
       await page.waitForTimeout(1100);
       const moving = await metrics();
+      if (lod) assert(Number((await world.locator('[data-metric="lod-saved"]').textContent()).replaceAll(',', '')) > 0, 'LOD is active during gameplay');
       await world.screenshot({ path: resolve(output, `${width}-initial.png`) });
       assert(moving.submissions - before.submissions > 15, 'Canoe delivers continuous frames');
       // One shadow submission and one color submission per rendered frame.

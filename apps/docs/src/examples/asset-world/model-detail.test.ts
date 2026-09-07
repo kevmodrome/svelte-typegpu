@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { loadGlbModel } from '../../../../../packages/svelte-typegpu/src/glb-loader';
 import type { TypeGpuLoadedModel } from 'svelte-typegpu';
 import { assetFiles, type WorldAssets } from './world';
-import { detailWorldAssets, refineGeometry } from './model-detail';
+import { detailWorldAssets, lodWorldAssets, refineGeometry } from './model-detail';
 
 const assets = Object.fromEntries(Object.entries(assetFiles).map(([key, name]) => {
   const bytes = readFileSync(new URL(`../../../public/assets/asset-world/${name}`, import.meta.url));
@@ -11,6 +11,17 @@ const assets = Object.fromEntries(Object.entries(assetFiles).map(([key, name]) =
 })) as WorldAssets;
 
 describe('shared model triangle density', () => {
+  it.each([1, 2])('prepares and caches authored levels for detail %s', detail => {
+    const result = lodWorldAssets(assets, detail);
+    expect(lodWorldAssets(assets, detail)).toBe(result); expect(lodWorldAssets(assets, 0)).toBe(assets);
+    for (const key of Object.keys(assets) as (keyof WorldAssets)[]) {
+      for (const [index, mesh] of result[key].meshes.entries()) {
+        expect(mesh.geometry.vertexData).toBe(detailWorldAssets(assets, detail)[key].meshes[index].geometry.vertexData);
+        expect(mesh.geometry.lod!.levels.length).toBe(detail);
+        expect(mesh.geometry.lod!.levels.at(-1)!.geometry).toBe(assets[key].meshes[index].geometry);
+      }
+    }
+  });
   it.each([1, 2])('multiplies every bundled mesh by 4^%s without changing its bounds or materials', level => {
     const detailed = detailWorldAssets(assets, level);
     expect(detailWorldAssets(assets, level)).toBe(detailed);

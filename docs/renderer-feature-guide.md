@@ -512,10 +512,66 @@ remain visible. `bufferGeometry` bounds must enclose the actual geometry.
 Custom vertex displacement also needs bounds enclosing its full motion, or
 scene-level frustum culling must be disabled.
 
-This is frustum culling, not occlusion culling or LOD. Cluster edges can submit
+This is frustum culling, not occlusion culling. Cluster edges can submit
 some off-screen instances. Highly fragmented selections fall back to a full
 batch rather than unbounded draw calls. An overview containing the entire world
-still processes the entire world; distant visible geometry needs LOD next.
+still submits every visible instance; authored LOD can reduce its geometry cost.
+
+### Authored asset LOD
+
+Prepare one shared asset with `createModelLod`, then use the existing `<model>`
+primitive. This viewport receives already-loaded high/medium/low assets:
+
+```svelte
+<script lang="ts">
+  import { createModelLod, type TypeGpuLoadedModel, type Vector3Tuple } from 'svelte-typegpu';
+  let { high, medium, low, positions }: {
+    high: TypeGpuLoadedModel; medium: TypeGpuLoadedModel; low: TypeGpuLoadedModel;
+    positions: Vector3Tuple[];
+  } = $props();
+  const tree = $derived(createModelLod(high, [
+    { maxScreenHeight: 80, asset: medium },
+    { maxScreenHeight: 28, asset: low }
+  ]));
+</script>
+
+<canvas>
+  <scene>
+    <perspectiveCamera position={[8, 6, 12]} target={[0, 0, 0]} />
+    <ambientLight intensity={0.8} />
+    {#each positions as position, index (index)}
+      <model asset={tree} {position} onclick={() => console.log(index)} />
+    {/each}
+  </scene>
+</canvas>
+```
+
+Thresholds are descending conservative projected heights in CSS pixels, not world
+distances or physical framebuffer pixels. Object scale, field of view and
+orthographic zoom affect selection. The optional third argument sets hysteresis
+(default `0.1`): refine immediately above a threshold, coarsen below 90% of it.
+Up to three alternatives are supported, in addition to the base asset.
+
+Variants must preserve mesh count, names/order, transforms, vertex layout and
+alpha mode. Their triangle counts must not increase. The base materials remain
+active; this is geometry LOD, not material or component-subtree LOD. Geometry
+bounds are unioned across levels. Advanced asset construction can use
+`createGeometryLod` on individual loaded-model mesh geometries.
+
+Levels are prewarmed and resident. Camera movement selects ordered ranges in the
+same instance buffer, without Svelte remounts, transform uploads or resource
+creation. Large batches conservatively choose detail per spatial cluster, so
+some instances retain finer detail than strictly necessary. Fragmented selections
+fall back to full-detail frustum ranges, not missing objects. Shadow geometry and
+picking remain independent of color LOD. There is no built-in simplification,
+crossfade, streaming or automatic generation of low-detail assets.
+
+`getRenderStats()` adds `lodInstances`, `lodTrianglesSaved`, `lodCpuMs` and
+`lodRangeFallbacks`. The asset-world LOD checkbox uses its shared 16x/4x/1x
+flat-subdivision variants, preserving the original appearance. At 1x it has no
+lower level. It does not demonstrate mesh decimation below the original assets.
+
+### Animation costs
 
 1. Animate position/rotation/scale, colors and existing uniform values. Avoid
    rebuilding geometry, replacing shader functions or changing material types
@@ -564,7 +620,7 @@ inventing a second reactive system.
 
 - **Asset reliability:** explicit supported-format diagnostics, visible loading/
   errors/retry, richer materials, animation clips/skinning and compressed assets.
-- **World scale:** no built-in occlusion culling, LOD, world streaming,
+- **World scale:** no built-in occlusion culling, automatic mesh simplification, world streaming,
   terrain system or spatially accelerated/triangle-accurate picking.
 - **Visual rendering:** no environment lighting/HDR pipeline, built-in fog,
   cascaded/multiple shadow lights, full post-processing or built-in MSAA controls.

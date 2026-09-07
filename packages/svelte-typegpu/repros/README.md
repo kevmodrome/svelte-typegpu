@@ -37,7 +37,26 @@ browser/adapter observations, not guarantees about physical display refresh.
 
 The example deliberately defaults to raw mode (`frustumCulling={false}`);
 ordinary scenes enable conservative frustum culling by default. This does not
-implement occlusion culling or LOD.
+implement occlusion culling. Authored asset LOD is a separate opt-in control.
+
+For retained asset-LOD comparisons (50k models, 16x maximum detail):
+
+```sh
+rtk proxy env TMPDIR=/tmp SVELTE_PROBE_LOD=1 pnpm --filter svelte-typegpu exec node repros/asset-world-gpu-profile.mjs
+rtk proxy env TMPDIR=/tmp SVELTE_PROBE_LOD=1 SVELTE_PROBE_WIDTH=390 pnpm --filter svelte-typegpu exec node repros/asset-world-gpu-profile.mjs
+rtk proxy env TMPDIR=/tmp SVELTE_PROBE_LOD=1 SVELTE_PROBE_CULLING=1 pnpm --filter svelte-typegpu exec node repros/asset-world-input.mjs
+rtk proxy env TMPDIR=/tmp SVELTE_PROBE_LOD=1 pnpm --filter svelte-typegpu exec node repros/asset-world.mjs
+```
+
+The LOD sweep compares raw, culling, LOD and combined modes in overview/follow
+views. It checks actual draw counts/triangles, unchanged instance membership,
+zero steady-state resource creation, bounded ranges, callback delivery and frozen
+16x-versus-LOD pixels. The example uses equivalent flat-subdivision geometry, not
+runtime decimation. CSS canvas dimensions remain stable as diagnostics wrap.
+Set `SVELTE_PROBE_VIEW='World overview'` or `SVELTE_PROBE_VIEW='Follow camper'`
+to limit the LOD GPU sweep to one view. The compact gameplay probe enables LOD
+and frustum culling at 16x when `SVELTE_PROBE_LOD=1`. See the
+[LOD design and measured results](../../../docs/lod-results.md).
 
 ```sh
 rtk proxy env TMPDIR=/tmp pnpm --filter svelte-typegpu exec node repros/asset-world-stress.mjs
@@ -49,10 +68,12 @@ arguments for 20,000 models at 1x, 4x and 16x triangle density. It checks instan
 visible world/follow-camera movement, frame/callback delivery, GPU resource reuse,
 idle behavior, and retained asset downloads. Screenshots go to
 `/tmp/typegpu-asset-world-stress` by default. The compact playable probe explicitly
-selects 29 models and original density for its input/picking regression checks.
+selects 29 models and, unless LOD is requested, original density for its
+input/picking regression checks.
 
 The default world submits roughly 16.4 million color-pass triangles in 33 draws;
-16x density submits roughly 65.7 million. There is no distance culling or LOD.
+16x density submits roughly 65.7 million before the optional culling and LOD
+controls are enabled. There is no distance cutoff or occlusion culling.
 Software WebGPU may run very slowly at these loads; these probes do not establish
 hardware GPU throughput or a monitor's physical refresh rate. See the
 [stress-mode design](../../../docs/asset-world-stress-design.md).

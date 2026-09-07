@@ -1,10 +1,12 @@
 import { BufferAttribute, BufferGeometry } from 'three';
 import { LoopSubdivision } from 'three-subdivide';
 import type { TypeGpuLoadedModel } from 'svelte-typegpu';
+import { createModelLod } from 'svelte-typegpu';
 import type { WorldAssets } from './world';
 
 type GeometryData = TypeGpuLoadedModel['meshes'][number]['geometry'];
 const variants = new WeakMap<WorldAssets, Map<number, WorldAssets>>();
+const lodVariants = new WeakMap<WorldAssets, Map<number, WorldAssets>>();
 const attributes = [
   ['position', 0, 3], ['normal', 3, 3], ['uv', 6, 2], ['color', 8, 3], ['alpha', 11, 1]
 ] as const;
@@ -48,6 +50,24 @@ export function detailWorldAssets(source: WorldAssets, level: number): WorldAsse
     key: `${asset.key}:flat-${level}`,
     meshes: asset.meshes.map(mesh => ({ ...mesh, geometry: refineGeometry(mesh.geometry, level) }))
   }])) as WorldAssets;
+  cached.set(level, result);
+  return result;
+}
+
+export function lodWorldAssets(source: WorldAssets, level: number): WorldAssets {
+  const high = detailWorldAssets(source, level);
+  if (!level) return high;
+  let cached = lodVariants.get(source);
+  if (!cached) lodVariants.set(source, cached = new Map());
+  const existing = cached.get(level);
+  if (existing) return existing;
+  const medium = level === 2 ? detailWorldAssets(source, 1) : null;
+  const result = Object.fromEntries((Object.keys(source) as (keyof WorldAssets)[]).map(key => [key,
+    createModelLod(high[key], [
+      ...(medium ? [{ maxScreenHeight: 80, asset: medium[key] }] : []),
+      { maxScreenHeight: 28, asset: source[key] }
+    ])
+  ])) as WorldAssets;
   cached.set(level, result);
   return result;
 }

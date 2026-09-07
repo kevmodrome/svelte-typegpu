@@ -8,7 +8,7 @@
   import { idleMovement } from './player-input.js';
   import { assetCount, loadWorldAssets, selectable } from './world.js';
   import { campsiteModelCount, compactLandscape, createLandscape, worldCounts } from './landscape.js';
-  import { detailWorldAssets } from './model-detail.js';
+  import { detailWorldAssets, lodWorldAssets } from './model-detail.js';
   import { emptyProfile, profileWorld } from './world-profile.js';
   import type { TypeGpuRoot } from 'svelte-typegpu';
 
@@ -17,6 +17,7 @@
   let loaded = $state(0), failure = $state(''), selected = $state('');
   let paused = $state(false), forest = $state(true), dusk = $state(false), shadows = $state(false);
   let frustumCulling = $state(false);
+  let lod = $state(false);
   let count = $state(20000), detail = $state(1), preparing = $state(false);
   let view = $state<'camp' | 'follow' | 'overview'>('overview');
   let landscape = $state.raw(compactLandscape), profile = $state.raw(emptyProfile);
@@ -26,13 +27,13 @@
   let profiler: ReturnType<typeof profileWorld> | undefined;
   async function rebuild() {
     if (!originals) return;
-    const current = ++revision, source = originals, requestedCount = count, requestedDetail = detail;
+    const current = ++revision, source = originals, requestedCount = count, requestedDetail = detail, requestedLod = lod;
     preparing = true; failure = '';
     // Let controls paint before the intentionally large, synchronous scene update.
     await new Promise(resolve => setTimeout(resolve, 0));
     if (current !== revision) return;
     try {
-      const detailed = detailWorldAssets(source, requestedDetail);
+      const detailed = requestedLod ? lodWorldAssets(source, requestedDetail) : detailWorldAssets(source, requestedDetail);
       const layout = landscape.placements.length + campsiteModelCount === requestedCount ? landscape : createLandscape(requestedCount);
       assets = detailed; landscape = layout; touch = idleMovement;
     } catch (error) { failure = error instanceof Error ? error.message : 'Unable to prepare the world'; }
@@ -92,6 +93,7 @@
       <option value={0}>1x / original</option><option value={1}>4x / dense</option><option value={2}>16x / very dense</option>
     </select></label>
     <label><input type="checkbox" bind:checked={frustumCulling} /> Frustum culling</label>
+    <label><input type="checkbox" checked={lod} onchange={event => { lod = event.currentTarget.checked; void rebuild(); }} /> LOD</label>
     <div class="view-modes" role="group" aria-label="Camera view">
       {#each [{ key: 'camp', label: 'Campsite view', icon: Tent }, { key: 'follow', label: 'Follow camper', icon: UserRound }, { key: 'overview', label: 'World overview', icon: Map }] as mode}
         <button type="button" aria-label={mode.label} title={mode.label} aria-pressed={view === mode.key}
@@ -110,6 +112,10 @@
     <div><dt>CPU max</dt><dd>{profile.maxRenderCpuMs.toFixed(2)} ms</dd></div>
     <div><dt>Cull CPU</dt><dd data-metric="cull-cpu">{profile.cullingCpuMs.toFixed(2)} ms</dd></div>
     <div><dt>Range fallbacks</dt><dd data-metric="fallbacks">{profile.rangeFallbacks}</dd></div>
+    <div><dt>LOD instances</dt><dd data-metric="lod-instances">{profile.lodInstances.toLocaleString('en-US')}</dd></div>
+    <div><dt>LOD triangles saved</dt><dd data-metric="lod-saved">{profile.lodTrianglesSaved.toLocaleString('en-US')}</dd></div>
+    <div><dt>LOD CPU</dt><dd data-metric="lod-cpu">{profile.lodCpuMs.toFixed(2)} ms</dd></div>
+    <div><dt>LOD fallbacks</dt><dd data-metric="lod-fallbacks">{profile.lodRangeFallbacks}</dd></div>
   </dl>
   <div class="world-toolbar" role="group" aria-label="World controls">
     <label><input type="checkbox" bind:checked={dusk} /> Dusk</label>
@@ -130,7 +136,7 @@
 </div>
 
 <style>
-  .asset-world { display: grid; grid-template-rows: minmax(0, 1fr) auto auto auto auto; height: 100%; min-width: 0; color: #edf1ee; background: #1c2522; font-size: 13px; letter-spacing: 0; }
+  .asset-world { display: grid; grid-template-rows: 455px auto auto auto auto; height: auto; min-width: 0; color: #edf1ee; background: #1c2522; font-size: 13px; letter-spacing: 0; }
   .world-stage { position: relative; min-height: 0; min-width: 0; }
   .player-controls { position: absolute; left: 14px; bottom: 14px; }
   .world-title { position: absolute; top: 18px; right: 20px; text-align: right; color: #172d2e; pointer-events: none; }

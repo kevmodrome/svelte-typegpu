@@ -6,10 +6,12 @@ export interface WorldProfile {
   models: number; instances: number; colorDraws: number; colorTriangles: number;
   shadowTriangles: number; renderCpuMs: number; maxRenderCpuMs: number;
   culledInstances: number; cullingCpuMs: number; rangeFallbacks: number;
+  lodInstances: number; lodTrianglesSaved: number; lodCpuMs: number; lodRangeFallbacks: number;
 }
 export const emptyProfile: WorldProfile = { models: 0, instances: 0, colorDraws: 0,
   colorTriangles: 0, shadowTriangles: 0, renderCpuMs: 0, maxRenderCpuMs: 0,
-  culledInstances: 0, cullingCpuMs: 0, rangeFallbacks: 0 };
+  culledInstances: 0, cullingCpuMs: 0, rangeFallbacks: 0,
+  lodInstances: 0, lodTrianglesSaved: 0, lodCpuMs: 0, lodRangeFallbacks: 0 };
 
 export function sceneWorkload(scene: SceneState) {
   let instances = 0, colorTriangles = 0, shadowTriangles = 0;
@@ -44,7 +46,9 @@ export function profileWorld(root: TypeGpuRoot, publish: (profile: WorldProfile)
       const stats = gpu.getRenderStats?.();
       if (stats) latest = { ...latest, instances: stats.submittedInstances, colorDraws: stats.colorDraws,
         colorTriangles: stats.colorTriangles, shadowTriangles: stats.shadowTriangles,
-        culledInstances: stats.culledInstances, cullingCpuMs: stats.cullingCpuMs, rangeFallbacks: stats.rangeFallbacks };
+        culledInstances: stats.culledInstances, cullingCpuMs: stats.cullingCpuMs, rangeFallbacks: stats.rangeFallbacks,
+        lodInstances: stats.lodInstances, lodTrianglesSaved: stats.lodTrianglesSaved,
+        lodCpuMs: stats.lodCpuMs, lodRangeFallbacks: stats.lodRangeFallbacks };
       latest = { ...latest, renderCpuMs: frames ? cpu / frames : 0, maxRenderCpuMs: maxCpu };
       publish(latest); frames = cpu = maxCpu = 0;
     },

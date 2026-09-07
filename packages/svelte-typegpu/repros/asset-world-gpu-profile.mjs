@@ -8,6 +8,9 @@ const require = process.env.SVELTE_PROBE_BROWSER_DEPENDENCIES
 const { chromium } = require('playwright');
 const { PNG } = require('pngjs');
 const cullingSweep = process.env.SVELTE_PROBE_CULLING === '1';
+const lodSweep = process.env.SVELTE_PROBE_LOD === '1';
+const views = process.env.SVELTE_PROBE_VIEW ? [process.env.SVELTE_PROBE_VIEW] : ['World overview', 'Follow camper'];
+assert(views.every(view => ['World overview', 'Follow camper'].includes(view)), 'Unknown probe camera view');
 const width = Number(process.env.SVELTE_PROBE_WIDTH ?? 1440);
 const output = process.env.SVELTE_PROBE_OUTPUT ?? '/tmp/typegpu-asset-world-gpu';
 await mkdir(output, { recursive: true });
@@ -101,14 +104,17 @@ try {
   await canvas.scrollIntoViewIfNeeded();
   await world.getByRole('combobox', { name: 'Model count' }).selectOption('50000');
   await page.waitForFunction(() => document.querySelector('[data-metric="models"]')?.textContent === '50,000');
-  const cases = cullingSweep
+  const cases = lodSweep
+    ? views.flatMap(view => [false, true].flatMap(culling => [false, true].map(lod => ({ view, detail: 2, culling, lod, tinyScissor: false }))))
+    : cullingSweep
     ? ['World overview', 'Follow camper'].flatMap(view => [0, 2].flatMap(detail => [false, true].map(culling => ({ view, detail, culling, tinyScissor: false }))))
     : [[0, false], [1, false], [2, false], [2, true]].map(([detail, tinyScissor]) => ({ view: 'World overview', detail, tinyScissor, culling: false }));
-  for (const { detail, tinyScissor, view, culling } of cases) {
+  for (const { detail, tinyScissor, view, culling, lod = false } of cases) {
     await world.getByRole('combobox', { name: 'Triangle density' }).selectOption(String(detail));
-    if (cullingSweep) {
+    if (cullingSweep || lodSweep) {
       await world.getByRole('button', { name: view, exact: true }).click();
       await world.getByRole('checkbox', { name: 'Frustum culling', exact: true }).setChecked(culling);
+      await world.getByRole('checkbox', { name: 'LOD', exact: true }).setChecked(lod);
     }
     await page.evaluate(tiny => window.gpuProfile.tinyScissor = tiny, tinyScissor);
     await page.waitForTimeout(2000);
@@ -128,18 +134,52 @@ try {
         workload: p.lastDraws, resources: p.resources,
         metrics: Object.fromEntries([...document.querySelectorAll('[data-metric]')].map(element => [element.dataset.metric, element.textContent])), errors: p.errors };
     }, start);
+    results.push({ detail, tinyScissor, view, culling, lod, ...result }); console.log(JSON.stringify(results.at(-1)));
+    await writeFile(resolve(output, 'results.json'), JSON.stringify(results, null, 2));
+    if (cullingSweep || lodSweep) await world.screenshot({ path: resolve(output, `${width}-${view.replaceAll(' ', '-')}-${detail}-${culling ? 'culled' : 'raw'}${lod ? '-lod' : ''}.png`) });
     assert(result.samples > 5); assert.deepEqual(result.errors, []);
     assert.deepEqual(result.resources, resources, 'Steady frames reuse GPU resources');
     assert(Math.abs(result.frames - result.callbacks) <= 2, 'Renderer delivers browser callbacks without alternate-frame skips');
-    if (cullingSweep) {
+    if (cullingSweep || lodSweep) {
       assert.equal(Number(result.metrics.triangles.replaceAll(',', '')), result.workload.triangles);
       assert.equal(Number(result.metrics.instances.replaceAll(',', '')), result.workload.instances);
       assert.equal(Number(result.metrics.draws), result.workload.draws);
+      if (culling || view === 'World overview') assert.equal(Number(result.metrics['lod-fallbacks']), 0, 'Visible world LOD stays within its draw-range budget');
+      if (lod) assert(Number(result.metrics['lod-instances'].replaceAll(',', '')) > 0, 'Visible geometry uses lower levels');
     }
-    results.push({ detail, tinyScissor, view, culling, ...result }); console.log(JSON.stringify(results.at(-1)));
-    if (cullingSweep) await world.screenshot({ path: resolve(output, `${width}-${view.replaceAll(' ', '-')}-${detail}-${culling ? 'culled' : 'raw'}.png`) });
   }
-  if (cullingSweep) {
+  if (lodSweep) {
+    for (const view of views) for (const culling of [false, true]) {
+      const raw = results.find(r => r.view === view && r.culling === culling && !r.lod);
+      const lod = results.find(r => r.view === view && r.culling === culling && r.lod);
+      // Behind-camera/near-plane clusters retain high detail; LOD does not replace frustum rejection.
+      const ratio = view === 'World overview' ? 0.5 : 1;
+      assert(lod.workload.triangles < raw.workload.triangles * ratio, 'LOD reduces dense geometry in the applicable view');
+      assert.equal(lod.workload.instances, raw.workload.instances, 'LOD preserves submitted instance membership');
+      assert.equal(Number(lod.metrics['lod-saved'].replaceAll(',', '')), raw.workload.triangles - lod.workload.triangles);
+    }
+    await world.getByRole('checkbox', { name: 'Pause motion' }).check();
+    await world.getByRole('checkbox', { name: 'Frustum culling', exact: true }).check();
+    for (const view of views) {
+      await world.getByRole('button', { name: view, exact: true }).click();
+      const images = [];
+      for (const lod of [false, true]) {
+        await world.getByRole('checkbox', { name: 'LOD', exact: true }).setChecked(lod);
+        await page.waitForTimeout(1000);
+        images.push(PNG.sync.read(await canvas.screenshot({ path: resolve(output, `${width}-${view.replaceAll(' ', '-')}-lod-frozen-${lod}.png`) })));
+      }
+      const [raw, lod] = images; assert.equal(raw.data.length, lod.data.length);
+      let changed = 0, colored = 0;
+      for (let i = 0; i < raw.data.length; i += 4) {
+        if (Math.max(...[0, 1, 2].map(c => Math.abs(raw.data[i + c] - lod.data[i + c]))) > 10) changed++;
+        if (Math.abs(raw.data[i] - raw.data[i + 1]) > 20) colored++;
+      }
+      const changedFraction = changed / (raw.width * raw.height);
+      console.log(JSON.stringify({ view, width, changedFraction, coloredPixels: colored }));
+      assert(colored > 100, 'Canvas contains rendered scene pixels');
+      assert(changedFraction < 0.005, 'Flat-subdivision LOD preserves the authored shape and appearance');
+    }
+  } else if (cullingSweep) {
     for (const detail of [0, 2]) {
       const raw = results.find(r => r.view === 'Follow camper' && r.detail === detail && !r.culling);
       const culled = results.find(r => r.view === 'Follow camper' && r.detail === detail && r.culling);

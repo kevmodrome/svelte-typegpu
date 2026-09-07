@@ -21,7 +21,8 @@ describe('example workload sampling', () => {
   });
   it('samples actual camera submissions without scanning or publishing on each frame', () => {
     const publish = vi.fn(), getRenderStats = vi.fn(() => ({ submittedInstances: 2, culledInstances: 21,
-      colorDraws: 1, colorTriangles: 8, shadowTriangles: 80, cullingCpuMs: 0.12, rangeFallbacks: 0 }));
+      colorDraws: 1, colorTriangles: 8, shadowTriangles: 80, cullingCpuMs: 0.12, rangeFallbacks: 0,
+      lodInstances: 1, lodTrianglesSaved: 24, lodCpuMs: 0.2, lodRangeFallbacks: 0 }));
     const root = { gpu: { renderFrame() {}, setScene() {}, getRenderStats } } as unknown as TypeGpuRoot;
     const profiler = profileWorld(root, publish);
     root.gpu.setScene(scene());
@@ -30,7 +31,8 @@ describe('example workload sampling', () => {
     profiler.sample();
     expect(getRenderStats).toHaveBeenCalledOnce();
     expect(publish.mock.lastCall![0]).toMatchObject({ models: 2, instances: 2, culledInstances: 21,
-      colorDraws: 1, colorTriangles: 8, shadowTriangles: 80, cullingCpuMs: 0.12, rangeFallbacks: 0 });
+      colorDraws: 1, colorTriangles: 8, shadowTriangles: 80, cullingCpuMs: 0.12, rangeFallbacks: 0,
+      lodInstances: 1, lodTrianglesSaved: 24, lodCpuMs: 0.2, lodRangeFallbacks: 0 });
     profiler.dispose();
   });
   it('does not rescan batches on transform-only frames and restores wrapped methods', () => {
