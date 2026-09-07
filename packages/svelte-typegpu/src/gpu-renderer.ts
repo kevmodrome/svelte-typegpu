@@ -12,6 +12,7 @@ import { createFpsMeter } from './fps-meter';
 import { Frustum } from './frustum';
 import { VisibilitySelection } from './batch-visibility';
 import { LodSelection } from './lod-selection';
+import { HiZOcclusion, isOcclusionEligible, isUsefulOccluder, type OcclusionDraw, type OcclusionState } from './occlusion';
 import type { TypeGpuFrameContext } from './frame-tasks';
 import { createViewProjectionMatrix } from './camera-math';
 import { Dirty } from './dirty';
@@ -147,7 +148,7 @@ export interface TypeGpuRenderer {
   renderFrame(timestamp?: number): void;
   setFrameHandler?(handler: ((frame: TypeGpuFrameContext) => boolean) | null): void;
   getRenderSize(): { width: number; height: number };
-  /** Last delivered frame, not estimates from the retained scene. */
+  /** Last delivered frame; indirect counts are upper bounds when colorCountsExact is false. */
   getRenderStats?(): TypeGpuRenderStats;
   dispose(): void;
 }
@@ -167,6 +168,12 @@ export interface TypeGpuRenderStats {
   lodTrianglesSaved: number;
   lodCpuMs: number;
   lodRangeFallbacks: number;
+  /** False means submittedInstances/colorTriangles are pre-occlusion upper bounds. */
+  colorCountsExact?: boolean;
+  occlusion?: OcclusionState;
+  occlusionCandidates?: number;
+  occlusionDepthTriangles?: number;
+  occlusionCpuMs?: number;
 }
 
 export interface TypeGpuRendererOptions {
@@ -193,7 +200,7 @@ export async function createTypeGpuRenderer({
     throw new Error('WebGPU is not available in this browser.');
   }
 
-  const root = await tgpu.init({ unstable_names: 'strict' });
+  const root = await tgpu.init({ unstable_names: 'strict', device: { optionalFeatures: ['indirect-first-instance'] } });
 
   return new TypeGpuSceneRenderer(root, {
     canvas,
@@ -216,6 +223,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #visibility = new Map<string, VisibilitySelection>();
   #lod = new Map<string, { selection: LodSelection; batches: TypeGpuDrawBatch[] }>();
   #lodRange = { ranges: new Uint32Array(2), rangeCount: 1 };
+  #occlusion: HiZOcclusion | null = null;
   #retainedInstances = 0;
   #renderStats: TypeGpuRenderStats = {
     retainedInstances: 0, candidateInstances: 0, submittedInstances: 0, culledInstances: 0,
@@ -398,6 +406,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       }
       for (const batch of scene.instanceUpdates ?? []) {
         this.#instanceBuffers.upload(batch, batch.dirtyRanges);
+        this.#occlusion?.updateBounds(batch, batch.dirtyRanges);
       }
     }
     if (scene.drawBatchesChanged || depthChanged) this.#syncPipelines(scene);
@@ -422,6 +431,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
   #syncMeshResources(scene: TypeGpuSceneState): void {
     const activeBatches = new Set(scene.drawBatches.map(batch => batch.key));
+    this.#occlusion?.prune(activeBatches);
     for (const key of this.#visibility.keys()) if (!activeBatches.has(key)) this.#visibility.delete(key);
     for (const key of this.#lod.keys()) if (!activeBatches.has(key)) this.#lod.delete(key);
     for (const batch of scene.drawBatches) {
@@ -461,6 +471,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       } else {
         instanceResource.instanceCount = batch.instanceCount;
       }
+      this.#occlusion?.updateBounds(batch, batch.dirtyRanges);
     }
 
     this.#geometryResources.prune(scene.liveResourceKeys.geometries);
@@ -597,6 +608,8 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       });
     }
 
+    this.#prepareOcclusion();
+
     beginTypeGpuRenderPass({
       root: this.root,
       context: this.#context,
@@ -617,6 +630,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
             const instanceResource = this.#instanceBuffers.getOrCreate(batch);
             const materialResource = this.#materialResources.getOrCreate(batch.material);
             const pipeline = this.#pipelines.getOrCreate(batch, this.#renderSettings.depth);
+            const indirect = this.#occlusion?.draws.get(batch.key);
 
             if (!instanceResource.buffer || instanceResource.instanceCount === 0) return;
             stats.submittedInstances += selection.instanceCount;
@@ -640,7 +654,8 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
                 this.#lodRange.ranges[1] = count;
                 drawTypeGpuMaterialBatch({ pipeline, pass, sceneBindGroup: this.#sceneBindGroup,
                   lightingBindGroup: this.#lightingBindGroup, shadowBindGroup: this.#shadowBindGroup,
-                  geometryResource, instanceResource, materialResource, batch: variant, selection: this.#lodRange });
+                  geometryResource, instanceResource, materialResource, batch: variant, selection: this.#lodRange,
+                  indirect, indirectRange: range });
               }
               return;
             }
@@ -658,7 +673,8 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
               instanceResource,
               materialResource,
               batch,
-              selection
+              selection,
+              indirect
             });
           },
           drawShaderPass: (shaderPass) => {
@@ -704,6 +720,8 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     }
 
     this.#resizeObserver?.disconnect();
+    this.#occlusion?.dispose();
+    this.#occlusion = null;
     this.#depthTexture?.destroy();
     this.#shadowTexture?.destroy();
     this.#geometryResources.dispose();
@@ -757,6 +775,10 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     const depthChanged = this.#renderSettings.depth !== settings.depth;
 
     this.#renderSettings = settings;
+    if (settings.occlusion !== 'hi-z' && this.#occlusion) {
+      this.#occlusion.dispose();
+      this.#occlusion = null;
+    }
 
     if (alphaModeChanged) {
       this.#context = this.#configureContext();
@@ -767,6 +789,70 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
       this.#depthTexture = null;
       this.#projectionDirty = true;
     }
+  }
+
+  #prepareOcclusion(): void {
+    const stats = this.#renderStats;
+    this.#occlusion?.draws.clear();
+    stats.colorCountsExact = true;
+    stats.occlusion = 'disabled';
+    stats.occlusionCandidates = stats.occlusionDepthTriangles = stats.occlusionCpuMs = 0;
+    if (this.#renderSettings.occlusion !== 'hi-z') return;
+    stats.occlusion = 'unsupported';
+    const { width, height } = this.#renderSize;
+    if (!this.#renderSettings.depth || !HiZOcclusion.supported(this.root, width, height) ||
+      this.#renderQueue.some(item => item.kind === 'shaderPass') ||
+      this.#drawBatches.some(batch => batch.material.depthTest === false && batch.material.depthWrite !== false)) return;
+    const start = performance.now();
+    // Selections are cached by camera/bounds revision, so the color pass reuses
+    // exactly these ranges without rebuilding or repacking canonical instances.
+    for (const batch of this.#drawBatches) {
+      const selection = this.#visibility.get(batch.key)!;
+      selection.select(this.#frustum, this.#renderSettings.frustumCulling !== false ? batch.visibility : undefined, batch.instanceCount);
+      const lod = this.#lod.get(batch.key);
+      lod?.selection.select(this.#uniformData, this.#frustum.revision, this.#displaySize.height, batch.visibility!, selection);
+    }
+    let occluderCount = 0;
+    this.#occlusion?.occluders.clear();
+    for (const batch of this.#drawBatches) {
+      if (occluderCount === 16) break;
+      if (!this.#visibility.get(batch.key)!.instanceCount || !isUsefulOccluder(batch, this.#uniformData)) continue;
+      this.#occlusion ??= new HiZOcclusion(this.root);
+      this.#occlusion.occluders.add(batch.key);
+      occluderCount++;
+    }
+    stats.occlusion = 'no-occluders';
+    if (!occluderCount) { stats.occlusionCpuMs = performance.now() - start; return; }
+    const occlusion = this.#occlusion!;
+    occlusion.begin(width, height, this.#uniformData);
+    for (const batch of this.#drawBatches) {
+      if (occlusion.occluders.has(batch.key) || !isOcclusionEligible(batch)) continue;
+      const buffer = this.#instanceBuffers.getOrCreate(batch).buffer;
+      const lod = this.#lod.get(batch.key);
+      const selection = lod?.selection ?? this.#visibility.get(batch.key)!;
+      if (buffer && occlusion.prepare(batch, selection, lod?.batches, buffer.buffer)) {
+        stats.occlusionCandidates! += this.#visibility.get(batch.key)!.instanceCount;
+      }
+    }
+    if (!occlusion.draws.size) { stats.occlusionCpuMs = performance.now() - start; return; }
+    const encoder = this.root.device.createCommandEncoder({ label: 'Occlusion current-frame visibility' });
+    const pass = occlusion.depthPass(encoder);
+    try {
+      for (const batch of this.#drawBatches) {
+        if (!occlusion.occluders.has(batch.key)) continue;
+        const geometryResource = this.#geometryResources.getOrCreate(batch);
+        const instanceResource = this.#instanceBuffers.getOrCreate(batch);
+        if (!instanceResource.buffer) continue;
+        stats.occlusionDepthTriangles! += (batch.geometry.indexCount ?? batch.geometry.vertexCount) / 3 * batch.instanceCount;
+        drawTypeGpuShadowBatch({ pipeline: occlusion.depthPipeline(batch.material.cullMode), pass,
+          shadowPassBindGroup: occlusion.depthGroup, geometryResource, instanceResource, batch });
+      }
+    } finally { pass.end(); }
+    occlusion.encode(encoder);
+    this.root.device.queue.submit([encoder.finish()]);
+    stats.occlusion = 'active';
+    stats.colorCountsExact = false;
+    stats.occlusionCpuMs = performance.now() - start;
   }
 
   #activeShadow(): TypeGpuActiveShadow | null {
@@ -1084,7 +1170,9 @@ export function drawTypeGpuMaterialBatch({
   instanceResource,
   materialResource,
   batch,
-  selection
+  selection,
+  indirect,
+  indirectRange = 0
 }: {
   pipeline: TypeGpuMeshPipeline;
   pass: GPURenderPassEncoder;
@@ -1096,6 +1184,8 @@ export function drawTypeGpuMaterialBatch({
   materialResource: TypeGpuMaterialResource;
   batch: TypeGpuDrawBatch;
   selection: Pick<VisibilitySelection, 'ranges' | 'rangeCount'>;
+  indirect?: OcclusionDraw;
+  indirectRange?: number;
 }): void {
   if (!instanceResource.buffer) return;
 
@@ -1103,18 +1193,20 @@ export function drawTypeGpuMaterialBatch({
   const materialPipeline = passPipeline
     .with(materialResource.bindGroup)
     .with(meshVertexLayout, geometryResource.vertexBuffer.buffer)
-    .with(meshInstanceLayout, instanceResource.buffer.buffer);
+    .with(meshInstanceLayout, indirect?.instances ?? instanceResource.buffer.buffer);
 
   if (geometryResource.indexBuffer && geometryResource.indexCount && geometryResource.indexFormat) {
     const indexed = materialPipeline.withIndexBuffer(geometryResource.indexBuffer.buffer, geometryResource.indexFormat);
     for (let i = 0; i < selection.rangeCount * 2; i += 2) {
-      indexed.drawIndexed(geometryResource.indexCount, selection.ranges[i + 1], 0, 0, selection.ranges[i]);
+      if (indirect) indexed.drawIndexedIndirect(indirect.args, (indirectRange + i / 2) * 32);
+      else indexed.drawIndexed(geometryResource.indexCount, selection.ranges[i + 1], 0, 0, selection.ranges[i]);
     }
     return;
   }
 
   for (let i = 0; i < selection.rangeCount * 2; i += 2) {
-    materialPipeline.draw(batch.geometry.vertexCount, selection.ranges[i + 1], 0, selection.ranges[i]);
+    if (indirect) materialPipeline.drawIndirect(indirect.args, (indirectRange + i / 2) * 32);
+    else materialPipeline.draw(batch.geometry.vertexCount, selection.ranges[i + 1], 0, selection.ranges[i]);
   }
 }
 

@@ -303,6 +303,8 @@ export interface TypeGpuRenderSettings {
   alphaMode: GPUCanvasAlphaMode;
   /** Conservative camera visibility selection. Defaults to true. */
   frustumCulling?: boolean;
+  /** Optional current-frame GPU occlusion. Defaults to 'none'. */
+  occlusion?: 'none' | 'hi-z';
 }
 
 export interface TypeGpuMeshDrawItem {

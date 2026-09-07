@@ -165,7 +165,7 @@ export function createSceneState(
   const drawBatches = recomputeDrawBatches
     ? cache.drawBatchCache.read(
         (drawItems = collectMeshDrawItems(root, cache)).filter((item) => item.visible !== false),
-        sceneSettings.renderSettings.frustumCulling !== false,
+        sceneSettings.renderSettings.frustumCulling !== false || sceneSettings.renderSettings.occlusion === 'hi-z',
         sceneSettings.renderSettings.depth
       )
     : cache.drawBatchCache.updateInstances([]).batches;
@@ -567,6 +567,9 @@ function readRenderSettings(
           : (defaults.depth ?? true),
       frustumCulling: typeof scene?.attributes.frustumCulling === 'boolean'
         ? scene.attributes.frustumCulling : (defaults.frustumCulling ?? true),
+      ...(scene?.attributes.occlusion === 'hi-z' || scene?.attributes.occlusion === 'none'
+        ? { occlusion: scene.attributes.occlusion }
+        : defaults.occlusion ? { occlusion: defaults.occlusion } : {}),
       alphaMode:
         scene?.attributes.alphaMode === 'opaque' || scene?.attributes.alphaMode === 'premultiplied'
           ? scene.attributes.alphaMode

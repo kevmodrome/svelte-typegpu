@@ -747,6 +747,9 @@ function createAndUploadBuffer(
     .$usage('vertex')
     .$name(label);
 
+  // Hi-Z reads canonical instances without another CPU upload or staging copy.
+  if (layout === meshInstanceLayout) buffer.$usage('storage');
+
   if (data.length > 0) {
     buffer.write(arrayBufferFor(data), { startOffset: 0, endOffset: data.byteLength });
   }
