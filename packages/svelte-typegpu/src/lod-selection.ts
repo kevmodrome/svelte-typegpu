@@ -1,12 +1,12 @@
-import type { BatchBounds, VisibilitySelection } from './batch-visibility';
+import { MAX_VISIBILITY_RANGES, type BatchBounds, type VisibilitySelection } from './batch-visibility';
 import type { TypeGpuGeometryLod } from './types';
 
 export const MAX_LOD_RANGES = 192;
 
 /** Ordered canonical ranges; crossing a threshold never repacks instance data. */
 export class LodSelection {
-  readonly ranges = new Uint32Array(MAX_LOD_RANGES * 2);
-  readonly levels = new Uint8Array(MAX_LOD_RANGES);
+  readonly ranges: Uint32Array;
+  readonly levels: Uint8Array;
   readonly clusterLevels: Uint8Array;
   rangeCount = 0;
   fallback = false;
@@ -17,7 +17,10 @@ export class LodSelection {
   #bounds?: BatchBounds;
   #visible?: VisibilitySelection;
 
-  constructor(capacity: number, readonly policy: TypeGpuGeometryLod) {
+  constructor(capacity: number, readonly policy: TypeGpuGeometryLod, rangeCapacity = MAX_LOD_RANGES) {
+    if (!Number.isSafeInteger(rangeCapacity) || rangeCapacity < MAX_VISIBILITY_RANGES) throw new RangeError('LOD ranges must hold a full visibility fallback');
+    this.ranges = new Uint32Array(rangeCapacity * 2);
+    this.levels = new Uint8Array(rangeCapacity);
     this.clusterLevels = new Uint8Array(capacity);
   }
 
@@ -55,7 +58,7 @@ export class LodSelection {
       this.ranges[previous * 2] + this.ranges[previous * 2 + 1] === start) {
       this.ranges[previous * 2 + 1] += count;
     } else {
-      if (this.rangeCount === MAX_LOD_RANGES) return false;
+      if (this.rangeCount === this.levels.length) return false;
       const offset = this.rangeCount++;
       this.ranges[offset * 2] = start; this.ranges[offset * 2 + 1] = count;
       this.levels[offset] = level;

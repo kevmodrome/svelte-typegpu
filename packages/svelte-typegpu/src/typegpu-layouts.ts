@@ -78,14 +78,15 @@ export const lightingBindGroupLayout = tgpu
   })
   .$name('TypeGPU lighting bind group layout');
 
-export const TYPEGPU_SHADOW_UNIFORM_FLOATS = 20;
+export const TYPEGPU_SHADOW_UNIFORM_FLOATS = 24;
 export const TYPEGPU_SHADOW_UNIFORM_BYTES =
   TYPEGPU_SHADOW_UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT;
 
 export const typegpuShadowSchema = d
   .struct({
     view_projection: d.mat4x4f,
-    params: d.vec4f
+    params: d.vec4f,
+    camera_depth: d.vec4f
   })
   .$name('TypeGpuShadow');
 

@@ -39,6 +39,8 @@ export default function WorldLighting_typegpu($$anchor, $$props) {
 	$.set_attribute(directionalLight, 'position', [-8, 14, 8]);
 	$.set_attribute(directionalLight, 'lookAt', [0, 0, 0]);
 	$.set_attribute(directionalLight, 'shadowMapSize', 2048);
+	$.set_attribute(directionalLight, 'shadowDistance', 80);
+	$.set_attribute(directionalLight, 'shadowLod', true);
 
 	var pointLight = $.sibling(directionalLight, 2);
 

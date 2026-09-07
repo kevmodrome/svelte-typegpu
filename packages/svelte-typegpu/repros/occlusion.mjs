@@ -13,6 +13,7 @@ const { chromium } = require('playwright'), { PNG } = require('pngjs');
 const wallCount = process.env.SVELTE_PROBE_SHARED_OCCLUDERS ? 64 : 2;
 const modelCount = Number(process.env.SVELTE_PROBE_MODELS ?? 6000);
 const clusterBenchmark = process.env.SVELTE_PROBE_CLUSTER_BENCHMARK === '1';
+const withShadows = process.env.SVELTE_PROBE_SHADOWS === '1';
 const burstFrames = clusterBenchmark ? 4 : 1;
 const fieldWidth = modelCount > 6000 ? 100 : 60, fieldDepth = modelCount > 6000 ? 100 : 20;
 const texture = new PNG({ width: 2, height: 2 }); texture.data.fill(255);
@@ -36,7 +37,7 @@ const source = `<script>
   let gpuTiming = $state(false);
   let nearPlane = $state(false);
   const texture = ${JSON.stringify(textureUrl)};
-  const material = createMaterialDescriptor('basic', { color: [0.1,0.7,0.5], map: texture });
+  const material = createMaterialDescriptor('${withShadows ? 'standard' : 'basic'}', { color: [0.1,0.7,0.5], map: texture });
   const high = createSphereGeometryData(0.27, 32, 16), low = createSphereGeometryData(0.27, 16, 8);
   low.indexData = Uint32Array.from({ length: low.vertexCount }, (_, i) => i);
   low.indexCount = low.vertexCount; low.indexFormat = 'uint32'; low.key += ':indexed';
@@ -49,16 +50,17 @@ const source = `<script>
 <canvas frameloop="manual" maxDevicePixelRatio={1} {gpuTiming} {onready} style="display:block;width:100vw;height:80vh">
   <scene occlusion={enabled ? 'hi-z' : 'none'} clearColor={[0.04,0.06,0.08,1]}>
     <perspectiveCamera active position={[camera,4,24]} target={[0,2,-12]} fov={55} far={180} />
-    <ambientLight intensity={1} />
+    <ambientLight intensity={${withShadows ? 0.3 : 1}} />
+    ${withShadows ? '<directionalLight position={[-8,14,8]} lookAt={[0,0,0]} castShadow shadowDistance={60} shadowLod shadowMapSize={1024} />' : ''}
     {#if walls}
       {#each Array(${wallCount}) as _, i}
-        <mesh position={[i === 0 ? -9 : i === 1 ? 9 : 1000 + i * 20,5,3]} scale={[15,12,1]}>
+        <mesh position={[i === 0 ? -9 : i === 1 ? 9 : 1000 + i * 20,5,3]} scale={[15,12,1]} castShadow={${withShadows}} receiveShadow={${withShadows}}>
           <boxGeometry /><basicMaterial color={[0.6,0.2,0.1]} map={texture} />
         </mesh>
       {/each}
     {/if}
     {#each Array(${modelCount}) as _, i}
-      <model asset={lod ? levels : asset} position={nearPlane && i === 0 ? [0,4,23.65] : [(i%${fieldWidth}-${fieldWidth / 2})*0.65, Math.floor(i/${fieldWidth * fieldDepth})*1.1, -Math.floor(i/${fieldWidth})%${fieldDepth}*1.3-2]} />
+      <model asset={lod ? levels : asset} castShadow={${withShadows}} receiveShadow={${withShadows}} position={nearPlane && i === 0 ? [0,4,23.65] : [(i%${fieldWidth}-${fieldWidth / 2})*0.65, Math.floor(i/${fieldWidth * fieldDepth})*1.1, -Math.floor(i/${fieldWidth})%${fieldDepth}*1.3-2]} />
     {/each}
   </scene>
 </canvas>`;
@@ -232,6 +234,7 @@ try {
         stats: measurements.at(-1).stats,
         indirectInstances: counts.reduce((s, c) => s + c.instances, 0) / (measurements.length * burstFrames) };
       results.push(result); console.log(JSON.stringify(result));
+      if (withShadows) assert(result.stats.shadowTriangles > 0);
       images.push(PNG.sync.read(await page.locator('canvas').screenshot({ path: resolve(output, `${walls}-${camera}-${mode}-${lod}.png`) })));
       assert.deepEqual(await page.evaluate(() => window.probe.errors), []);
       assert.deepEqual(errors, []);
@@ -286,6 +289,7 @@ try {
   assert.equal(timing.gpuTiming, 'ready'); assert.equal(timing.gpuTime.occlusion, 'active');
   assert(timing.gpuTime.totalMs > 0 && timing.gpuTime.colorMs > 0 && timing.gpuTime.depthMs > 0 &&
     timing.gpuTime.pyramidMs > 0 && timing.gpuTime.selectionMs > 0, 'Declarative GPU timing measures the whole active path');
+  if (withShadows) assert(timing.gpuTime.shadowMs > 0, 'Active Hi-Z and shadows share the depth layout without interfering');
   console.log(JSON.stringify({ declarativeGpuTiming: timing.gpuTime }));
   await page.evaluate(() => window.commands.loop(false)); await page.waitForTimeout(150);
   const settled = await snapshot(); await page.waitForTimeout(150); assert.equal((await snapshot()).frames, settled.frames);

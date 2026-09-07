@@ -199,12 +199,16 @@ const evaluateShadow = tgpu
     let surface_facing = max(dot(normal, normalize(-lightingBindGroupLayout_light.direction_angle.xyz)), 0.0);
     let normal_bias = bias * (1.0 + (1.0 - surface_facing));
 
-    return textureSampleCompare(
+    let sampled = textureSampleCompare(
       shadowBindGroupLayout.$.shadowMap,
       shadowBindGroupLayout.$.shadowSampler,
       coords,
       depth - normal_bias
     );
+    let distance = shadowBindGroupLayout.$.shadow.params.w;
+    let camera_depth = dot(shadowBindGroupLayout.$.shadow.camera_depth, vec4(world_position, 1.0));
+    let fade = select(0.0, smoothstep(distance * 0.9, max(distance, 0.0001), camera_depth), distance > 0.0);
+    return mix(sampled, 1.0, fade);
   }`
   .$uses({ lightingBindGroupLayout, shadowBindGroupLayout })
   .$name('evaluate_shadow');
@@ -412,7 +416,10 @@ export const meshFragmentMain = tgpu
           light.shadowIndex == 0u &&
           shadow_in_bounds;
 
-        shadow_factor = select(1.0, sampled_shadow, shadow_enabled);
+        let shadow_distance = shadowBindGroupLayout.$.shadow.params.w;
+        let camera_depth = dot(shadowBindGroupLayout.$.shadow.camera_depth, vec4(in.world_position, 1.0));
+        let distance_fade = select(0.0, smoothstep(shadow_distance * 0.9, max(shadow_distance, 0.0001), camera_depth), shadow_distance > 0.0);
+        shadow_factor = select(1.0, mix(sampled_shadow, 1.0, distance_fade), shadow_enabled);
 
         lit_color = lit_color + (base_color * diffuse + vec3(specular)) * light_color * shadow_factor;
       } else if (light.kind == 4u || light.kind == 5u) {

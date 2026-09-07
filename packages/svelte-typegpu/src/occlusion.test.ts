@@ -7,6 +7,7 @@ import { HiZOcclusion, isOcclusionEligible, packOcclusionBounds, packOcclusionCl
 import { MAX_OCCLUDER_DRAWS, MAX_OCCLUDER_TESTS, MAX_OCCLUDER_TRIANGLES, OccluderSelection } from './occluder-selection';
 import { drawTypeGpuMaterialBatch } from './gpu-renderer';
 import { createViewProjectionMatrix } from './camera-math';
+import { TYPEGPU_SHADOW_UNIFORM_BYTES } from './typegpu-layouts';
 
 afterEach(() => vi.unstubAllGlobals());
 function fixture(count = 260) {
@@ -102,6 +103,7 @@ describe('conservative occlusion contracts', () => {
     const { root } = createFakeGpuRoot({ bindings: [], counts: [] });
     const fake = enableFakeOcclusion(root);
     const gpu = root as unknown as TgpuRoot, culler = new HiZOcclusion(gpu, true);
+    expect(fake.device.createBuffer).toHaveBeenCalledWith(expect.objectContaining({ label: 'Occlusion camera', size: TYPEGPU_SHADOW_UNIFORM_BYTES }));
     const { batch, nodes, scene, cache } = fixture();
     const matrix = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
     const selection = { rangeCount: 2, ranges: new Uint32Array([0,129,200,60]) };

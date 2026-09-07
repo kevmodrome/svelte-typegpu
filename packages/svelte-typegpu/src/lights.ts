@@ -123,7 +123,10 @@ function readLight(node: TypeGpuNode, context: LightWalkContext): TypeGpuLight {
     shadowIndex: -1,
     shadowMapSize: shadowMapSizeArg(node.attributes.shadowMapSize),
     shadowBias: numberArg(node.attributes.shadowBias, DEFAULT_SHADOW_BIAS),
-    shadowSlopeBias: numberArg(node.attributes.shadowSlopeBias, DEFAULT_SHADOW_SLOPE_BIAS)
+    shadowSlopeBias: numberArg(node.attributes.shadowSlopeBias, DEFAULT_SHADOW_SLOPE_BIAS),
+    shadowDistance: typeof node.attributes.shadowDistance === 'number' && Number.isFinite(node.attributes.shadowDistance) && node.attributes.shadowDistance > 0
+      ? node.attributes.shadowDistance : undefined,
+    shadowLod: node.attributes.shadowLod === true
   };
 }
 

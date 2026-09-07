@@ -344,6 +344,10 @@ export interface TypeGpuLight {
   shadowMapSize: number;
   shadowBias: number;
   shadowSlopeBias: number;
+  /** Camera-forward world-space coverage; undefined fits the entire scene. */
+  shadowDistance?: number;
+  /** Select authored geometry LOD using shadow-map texels, independently of color. */
+  shadowLod?: boolean;
 }
 
 export interface TypeGpuDrawBatch {

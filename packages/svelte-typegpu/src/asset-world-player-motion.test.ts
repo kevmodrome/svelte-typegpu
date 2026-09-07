@@ -9,7 +9,7 @@ import tgpu from 'typegpu';
 import { createFragment, findFirst } from './core';
 import renderer, { createTypeGpuRuntimeForTest } from './svelte-renderer';
 import { createTypeGpuRenderer } from './gpu-renderer';
-import { createMeshPipeline } from './typegpu-pipeline';
+import { createMeshPipeline, createShadowPipeline } from './typegpu-pipeline';
 import { createFakeGpuRoot } from './gpu-test-utils';
 import { compileViewportSource } from './viewport-test-utils';
 import { settleComponentUpdates } from './component-test-utils';
@@ -44,7 +44,7 @@ const originals = Object.fromEntries(Object.entries(world.assetFiles).map(([key,
 const assets = lodWorldAssets(originals, 1, await prepareDistantWorldAssets(originals));
 const largeLandscape = landscape.createLandscape(20000);
 
-describe('compiled camper frame delivery in a 20,000-model dense world', () => {
+describe('compiled camper frame delivery with local shadows in a 20,000-model dense world', () => {
   it.each([60, 120, 144].flatMap(hz => ['Tween', 'Spring'].flatMap(kind => [
     { hz, kind, mode: 'demand' as const, first: false },
     { hz, kind, mode: 'demand' as const, first: true },
@@ -71,9 +71,10 @@ describe('compiled camper frame delivery in a 20,000-model dense world', () => {
     const Campsite = compileViewportSource(componentSource('Campsite'), { ...world, Canoe, ...objects });
     const LandscapeModels = compileViewportSource(componentSource('Landscape'), objects);
     const WorldCamera = compileViewportSource(componentSource('WorldCamera'));
+    const WorldLighting = compileViewportSource(componentSource('WorldLighting'));
     const Host = compileViewportSource<{ animate(): void; walk(value: boolean): void; stop(): void }>(`<script>
       import { ${kind} } from 'svelte/motion'; import { onDestroy } from 'svelte';
-      let { Player, Campsite, LandscapeModels, WorldCamera, assets, landscape } = $props(); let walking = $state(false);
+      let { Player, Campsite, LandscapeModels, WorldCamera, WorldLighting, assets, landscape } = $props(); let walking = $state(false);
       let focus = $state.raw([-0.9, 0.03, 7]);
       const motion = new ${kind}(0, ${kind === 'Tween' ? '{ duration: 1800 }' : '{ stiffness: 0.02, damping: 0.7, precision: 1e-5 }'});
       export function animate() { void motion.set(10); }
@@ -82,12 +83,13 @@ describe('compiled camper frame delivery in a 20,000-model dense world', () => {
       onDestroy(stop);
     </script><scene>
       <WorldCamera view="follow" extent={landscape.halfWidth} narrow={false} {focus} onchange={() => {}} />
+      <WorldLighting />
       <Campsite {assets} paused />
       <LandscapeModels {assets} {landscape} />
       <Player {landscape} movement={{ x: 0, z: walking ? -1 : 0, run: false }} camera={{ x: 0, z: 1 }} onposition={value => focus = value} />
       <mesh position={[motion.current, 5, 0]}><boxGeometry /><basicMaterial /></mesh>
     </scene>`, { Tween, Spring, onDestroy });
-    const instance = mount(Host, { renderer, target: root, props: { Player, Campsite, LandscapeModels, WorldCamera, assets, landscape: largeLandscape } });
+    const instance = mount(Host, { renderer, target: root, props: { Player, Campsite, LandscapeModels, WorldCamera, WorldLighting, assets, landscape: largeLandscape } });
     const order: string[] = [];
     async function step() {
       now += 1000 / hz; order.length = 0;
@@ -120,6 +122,7 @@ describe('compiled camper frame delivery in a 20,000-model dense world', () => {
         expect(bytes).toBeLessThanOrEqual(12 * 96);
       }
       gpu.createBuffer.mockClear(); gpu.createBindGroup.mockClear(); vi.mocked(createMeshPipeline).mockClear(); request.mockClear();
+      vi.mocked(createShadowPipeline).mockClear();
       if (first) await walk(true);
       instance.animate(); await settleComponentUpdates();
       if (!first) await walk(true);
@@ -127,13 +130,17 @@ describe('compiled camper frame delivery in a 20,000-model dense world', () => {
         for (const buffer of instanceBuffers) buffer.write.mockClear(); reads.mockClear();
         const before = submissions.length;
         await step(); if (mode === 'manual') gpuRenderer.renderFrame(now);
-        expect(submissions.length - before).toBe(1);
+        expect(submissions.length - before).toBe(2);
         const visibility = gpuRenderer.getRenderStats!();
         expect(visibility.culledInstances).toBeGreaterThan(0);
         expect(visibility.submittedInstances).toBeLessThan(visibility.candidateInstances);
         expect(visibility.lodInstances).toBeGreaterThan(0);
         expect(visibility.lodTrianglesSaved).toBeGreaterThan(0);
         expect(visibility.lodRangeFallbacks).toBe(0);
+        expect(visibility.shadowTriangles).toBeGreaterThan(0);
+        expect(visibility.shadowInstances).toBeLessThan(visibility.shadowCandidates! / 5);
+        expect(visibility.shadowLodTrianglesSaved).toBeGreaterThan(0);
+        expect(visibility.shadowRangeFallbacks).toBe(0);
         expect(order).toEqual(mode === 'manual' ? ['motion'] : first ? ['render', 'motion'] : ['motion', 'render']);
         const writes = instanceBuffers.flatMap(buffer => buffer.write.mock.calls);
         if (frame > 0) {
@@ -151,6 +158,7 @@ describe('compiled camper frame delivery in a 20,000-model dense world', () => {
       }
       expect(gpu.createBuffer).not.toHaveBeenCalled(); expect(gpu.createBindGroup).not.toHaveBeenCalled();
       expect(createMeshPipeline).not.toHaveBeenCalled();
+      expect(createShadowPipeline).not.toHaveBeenCalled();
       if (mode === 'manual') expect(request.mock.calls.every(([callback]) => producers.has(callback))).toBe(true);
       await walk(false);
       flushSync(() => instance.stop()); await settleComponentUpdates();

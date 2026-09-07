@@ -2,7 +2,7 @@ import type { TgpuBindGroup, TgpuRoot } from 'typegpu';
 import type { TypeGpuDrawBatch, TypeGpuInstanceDirtyRange } from './types';
 import { DEPTH_FORMAT } from './render-constants';
 import { createShadowPipeline } from './typegpu-pipeline';
-import { shadowPassBindGroupLayout } from './typegpu-layouts';
+import { shadowPassBindGroupLayout, TYPEGPU_SHADOW_UNIFORM_BYTES, TYPEGPU_SHADOW_UNIFORM_FLOATS } from './typegpu-layouts';
 import type { GpuTiming } from './gpu-timing';
 import {
   OCCLUSION_BLOCK_SIZE, compact, compactLayout, depthReduce, depthReduceLayout,
@@ -97,7 +97,7 @@ export class HiZOcclusion {
   readonly resources = new Map<string, BatchResource>();
   readonly draws = new Map<string, OcclusionDraw>();
   readonly #params: GPUBuffer;
-  readonly #paramsData = new Float32Array(20);
+  readonly #paramsData = new Float32Array(TYPEGPU_SHADOW_UNIFORM_FLOATS);
   readonly depthGroup;
   readonly #depthPipelines = new Map<GPUCullMode, ReturnType<typeof createShadowPipeline>>();
   readonly #depthReduce;
@@ -118,7 +118,8 @@ export class HiZOcclusion {
   // Cluster rejection remains a benchmark option until it beats the flat path
   // across representative views, including authored LOD and sparse motion.
   constructor(readonly root: TgpuRoot, readonly clustered = false) {
-    this.#params = root.device.createBuffer({ label: 'Occlusion camera', size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    // Shared depth vertex layout includes the shadow receiver fade plane; compute reads only its prefix.
+    this.#params = root.device.createBuffer({ label: 'Occlusion camera', size: TYPEGPU_SHADOW_UNIFORM_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     this.depthGroup = root.createBindGroup(shadowPassBindGroupLayout, { shadow: this.#params });
     this.#depthReduce = root.createComputePipeline({ compute: depthReduce });
     this.#mipReduce = root.createComputePipeline({ compute: mipReduce });

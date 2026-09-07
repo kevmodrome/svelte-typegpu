@@ -162,8 +162,9 @@ describe('TypeGPU layout schemas', () => {
   });
 
   it('describes the shadow map bind group with a depth texture and comparison sampler', () => {
-    expect(TYPEGPU_SHADOW_UNIFORM_BYTES).toBe(80);
+    expect(TYPEGPU_SHADOW_UNIFORM_BYTES).toBe(96);
     expect(d.sizeOf(typegpuShadowSchema)).toBe(TYPEGPU_SHADOW_UNIFORM_BYTES);
+    expect(d.memoryLayoutOf(typegpuShadowSchema, shadow => shadow.camera_depth).offset).toBe(80);
     expect(typegpuShadowSchema.propTypes.view_projection).toBeDefined();
     expect(typegpuShadowSchema.propTypes.params).toBeDefined();
     expect(shadowBindGroupLayout.index).toBeUndefined();

@@ -307,6 +307,8 @@ describe('TypeGPU scene compiler', () => {
     setAttribute(first, 'shadowMapSize', 2048);
     setAttribute(first, 'shadowBias', 0.002);
     setAttribute(first, 'shadowSlopeBias', 3);
+    setAttribute(first, 'shadowDistance', 80);
+    setAttribute(first, 'shadowLod', true);
     setAttribute(second, 'castShadow', true);
     setAttribute(second, 'shadowMapSize', 4096);
     setAttribute(point, 'castShadow', true);
@@ -324,7 +326,9 @@ describe('TypeGPU scene compiler', () => {
       shadowIndex: 0,
       shadowMapSize: 2048,
       shadowBias: 0.002,
-      shadowSlopeBias: 3
+      shadowSlopeBias: 3,
+      shadowDistance: 80,
+      shadowLod: true
     });
     expect(state.lights[1]).toMatchObject({
       kind: 'directional',

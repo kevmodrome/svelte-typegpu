@@ -87,6 +87,18 @@ describe('retained LOD selection', () => {
   it('maintains bounds for LOD even with frustum culling disabled', () => {
     const batch = createDrawBatchCache().read([item(-100, 0)], false)[0]; expect(batch.visibility).toBeDefined();
   });
+  it('allows a bounded larger shadow range budget without changing color history or storage', () => {
+    const items = Array.from({ length: 8192 }, (_, i) => item(Math.floor(i / 32) % 2 ? -100 : 0, i));
+    const { selection: color, visible, bounds } = setup(items);
+    const shadow = new LodSelection(bounds.leafBase, geometry.lod!, 384), storage = shadow.ranges;
+    const matrix = createViewProjectionMatrix(1, camera());
+    shadow.select(matrix, 1, 400, bounds, visible);
+    expect(color.fallback).toBe(true); expect(shadow.fallback).toBe(false); expect(shadow.rangeCount).toBe(256);
+    expect([...shadow.ranges.slice(0, shadow.rangeCount * 2)].filter((_, i) => i % 2).reduce((a, b) => a + b, 0)).toBe(8192);
+    shadow.select(matrix, 1, 400, bounds, visible);
+    expect(shadow.tests).toBe(0); expect(shadow.ranges).toBe(storage);
+    expect(() => new LodSelection(1, geometry.lod!, 8)).toThrow(RangeError);
+  });
   it('uses finer LOD groups without changing frustum instance membership', () => {
     const items = Array.from({ length: 8192 }, (_, i) => item(Math.floor(i / 4) % 2 ? -100 : 0, i));
     const coarse = new BatchBounds(8192), fine = new BatchBounds(8192, true);

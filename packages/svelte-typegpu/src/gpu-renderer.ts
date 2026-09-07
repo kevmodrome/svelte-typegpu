@@ -12,6 +12,7 @@ import { createFpsMeter } from './fps-meter';
 import { Frustum } from './frustum';
 import { VisibilitySelection } from './batch-visibility';
 import { LodSelection } from './lod-selection';
+import { createLocalShadowMatrix, localShadowDistance, shadowCameraDepth } from './shadow-camera';
 import { HiZOcclusion, isOcclusionEligible, type OcclusionDraw, type OcclusionState } from './occlusion';
 import { OccluderSelection } from './occluder-selection';
 import { GpuTiming, type GpuTimingState, type TypeGpuTimingSample } from './gpu-timing';
@@ -61,6 +62,7 @@ import {
   shadowBindGroupLayout,
   shadowPassBindGroupLayout,
   TYPEGPU_SCENE_UNIFORM_FLOATS,
+  TYPEGPU_SHADOW_UNIFORM_FLOATS,
   typegpuLightingSchema,
   typegpuShaderPassUniformSchema,
   typegpuShadowSchema,
@@ -83,6 +85,8 @@ export { loadMaterialTextureImageSource, type LoadedTextureImage };
 export const SCENE_UNIFORM_FLOATS = TYPEGPU_SCENE_UNIFORM_FLOATS;
 
 const MAX_DEVICE_PIXEL_RATIO = 1.5;
+// Light-space coverage includes more clusters than the color view. Keep both budgets bounded.
+const MAX_SHADOW_LOD_RANGES = 384;
 const DEFAULT_SHADOW_CAMERA_RADIUS = 10;
 const DEFAULT_TYPEGPU_CAMERA: TypeGpuCameraSettings = {
   projection: 'perspective',
@@ -163,6 +167,13 @@ export interface TypeGpuRenderStats {
   colorDraws: number;
   colorTriangles: number;
   shadowTriangles: number;
+  shadowDraws?: number;
+  shadowCandidates?: number;
+  shadowInstances?: number;
+  shadowBoundsTests?: number;
+  shadowRangeFallbacks?: number;
+  shadowLodTrianglesSaved?: number;
+  shadowCpuMs?: number;
   cullingCpuMs: number;
   boundsTests: number;
   rangeFallbacks: number;
@@ -272,6 +283,10 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #shadowBindGroup: TgpuBindGroup<typeof shadowBindGroupLayout.entries>;
   #shadowBuffer: TypeGpuShadowUniformBuffer;
   #shadowMapSize = 0;
+  #shadowFrustum = new Frustum();
+  #shadowVisibility = new Map<string, VisibilitySelection>();
+  #shadowLod = new Map<string, LodSelection>();
+  #shadowData = new Float32Array(TYPEGPU_SHADOW_UNIFORM_FLOATS);
   #shadowPassBindGroup: TgpuBindGroup<typeof shadowPassBindGroupLayout.entries>;
   #shadowPipeline: TypeGpuShadowPipeline | null = null;
   #shadowPipelineKey = '';
@@ -453,9 +468,12 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     const activeBatches = new Set(scene.drawBatches.map(batch => batch.key));
     this.#occlusion?.prune(activeBatches);
     for (const key of this.#visibility.keys()) if (!activeBatches.has(key)) this.#visibility.delete(key);
+    for (const key of this.#shadowVisibility.keys()) if (!activeBatches.has(key)) this.#shadowVisibility.delete(key);
+    for (const key of this.#shadowLod.keys()) if (!activeBatches.has(key)) this.#shadowLod.delete(key);
     for (const key of this.#lod.keys()) if (!activeBatches.has(key)) this.#lod.delete(key);
     for (const batch of scene.drawBatches) {
       if (!this.#visibility.has(batch.key)) this.#visibility.set(batch.key, new VisibilitySelection());
+      if (!this.#shadowVisibility.has(batch.key)) this.#shadowVisibility.set(batch.key, new VisibilitySelection());
       this.#geometryResources.getOrCreate(batch);
       if (batch.geometry.lod && batch.visibility) {
         const previous = this.#lod.get(batch.key)?.selection;
@@ -465,7 +483,14 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
           geometry: level.geometry, geometryKey: level.geometry.key }))];
         for (const variant of batches) this.#geometryResources.getOrCreate(variant);
         this.#lod.set(batch.key, { selection, batches });
-      } else this.#lod.delete(batch.key);
+        const shadowLod = this.#shadowLod.get(batch.key);
+        if (shadowLod?.policy !== batch.geometry.lod || shadowLod.clusterLevels.length < batch.visibility.leafBase) {
+          this.#shadowLod.set(batch.key, new LodSelection(batch.visibility.leafBase, batch.geometry.lod, MAX_SHADOW_LOD_RANGES));
+        }
+      } else {
+        this.#lod.delete(batch.key);
+        this.#shadowLod.delete(batch.key);
+      }
       this.#textureResources.getOrLoad(batch.material.map ?? batch.material.texture ?? null);
       this.#samplerResources.getOrCreate(batch.material.sampler ?? {
         key: batch.material.samplerKey ?? 'sampler:default',
@@ -596,13 +621,17 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     stats.colorDraws = stats.colorTriangles = stats.shadowTriangles = 0;
     stats.cullingCpuMs = stats.boundsTests = stats.rangeFallbacks = 0;
     stats.lodInstances = stats.lodTrianglesSaved = stats.lodCpuMs = stats.lodRangeFallbacks = 0;
+    stats.shadowDraws = stats.shadowCandidates = stats.shadowInstances = stats.shadowBoundsTests = 0;
+    stats.shadowRangeFallbacks = stats.shadowLodTrianglesSaved = 0;
+    const shadowStart = performance.now();
     const activeShadow = this.#activeShadow();
 
     this.#prepareShadowResources(activeShadow);
-    this.#shadowBuffer.write(packShadowState(activeShadow));
+    this.#shadowBuffer.write(packShadowState(activeShadow, this.#camera, this.#shadowData));
 
     if (activeShadow) {
       const shadowPipeline = this.#shadowPipelineFor(activeShadow.light);
+      this.#shadowFrustum.setMatrix(activeShadow.viewProjection);
 
       beginTypeGpuShadowPass({
         root: this.root,
@@ -612,24 +641,38 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
           for (const batch of this.#drawBatches) {
             if (!batch.castShadow) continue;
 
-            const geometryResource = this.#geometryResources.getOrCreate(batch);
             const instanceResource = this.#instanceBuffers.getOrCreate(batch);
 
             if (!instanceResource.buffer || instanceResource.instanceCount === 0) continue;
-            stats.shadowTriangles += (geometryResource.indexCount ?? batch.geometry.vertexCount) / 3 * instanceResource.instanceCount;
-
-            drawTypeGpuShadowBatch({
-              pipeline: shadowPipeline,
-              pass,
-              shadowPassBindGroup: this.#shadowPassBindGroup,
-              geometryResource,
-              instanceResource,
-              batch
-            });
+            const visible = this.#shadowVisibility.get(batch.key)!;
+            visible.select(this.#shadowFrustum, batch.visibility, batch.instanceCount);
+            stats.shadowCandidates! += batch.instanceCount;
+            stats.shadowInstances! += visible.instanceCount;
+            stats.shadowBoundsTests! += visible.boundsTests;
+            stats.shadowRangeFallbacks! += Number(visible.fallback);
+            const lod = activeShadow.light.shadowLod ? this.#shadowLod.get(batch.key) : undefined;
+            if (lod) {
+              lod.select(activeShadow.viewProjection, this.#shadowFrustum.revision, activeShadow.light.shadowMapSize, batch.visibility!, visible);
+              stats.shadowRangeFallbacks! += Number(lod.fallback);
+            }
+            const selected = lod ?? visible;
+            for (let range = 0; range < selected.rangeCount; range++) {
+              const variant = lod ? this.#lod.get(batch.key)!.batches[lod.levels[range]] : batch;
+              const geometryResource = this.#geometryResources.getOrCreate(variant);
+              const count = selected.ranges[range * 2 + 1];
+              const triangles = (geometryResource.indexCount ?? variant.geometry.vertexCount) / 3 * count;
+              stats.shadowDraws!++;
+              stats.shadowTriangles += triangles;
+              stats.shadowLodTrianglesSaved! += (batch.geometry.indexCount ?? batch.geometry.vertexCount) / 3 * count - triangles;
+              drawTypeGpuShadowBatch({ pipeline: shadowPipeline, pass,
+                shadowPassBindGroup: this.#shadowPassBindGroup, geometryResource, instanceResource,
+                batch: variant, firstInstance: selected.ranges[range * 2], instanceCount: count });
+            }
           }
         }
       });
     }
+    stats.shadowCpuMs = performance.now() - shadowStart;
 
     this.#prepareOcclusion();
 
@@ -764,6 +807,8 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#renderQueue = [];
     this.#visibility.clear();
     this.#lod.clear();
+    this.#shadowVisibility.clear();
+    this.#shadowLod.clear();
     this.#shadowBuffer.destroy();
     this.#uniformBuffer.destroy();
     this.root.destroy();
@@ -899,7 +944,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
 
     return {
       light,
-      viewProjection: createDirectionalShadowViewProjection(light, this.#drawBatches)
+      viewProjection: createDirectionalShadowViewProjection(light, this.#drawBatches, this.#camera, this.#renderSize.width / this.#renderSize.height, true)
     };
   }
 
@@ -1297,23 +1342,27 @@ export function drawTypeGpuShaderPass({
   pipeline.with(pass).with(shaderPassBindGroup).draw(6);
 }
 
-function packShadowState(activeShadow: TypeGpuActiveShadow | null): ArrayBuffer {
-  const data = new Float32Array(20);
+function packShadowState(activeShadow: TypeGpuActiveShadow | null, camera: TypeGpuCameraSettings, data: Float32Array): ArrayBuffer {
 
   data.set(activeShadow?.viewProjection ?? identityMatrix4(), 0);
   data[16] = activeShadow?.light.shadowBias ?? 0;
   data[17] = activeShadow ? 1 : 0;
   data[18] = activeShadow?.light.shadowMapSize ?? 1;
-  data[19] = 0;
+  data[19] = activeShadow ? localShadowDistance(activeShadow.light, camera) : 0;
+  shadowCameraDepth(camera, data, 20);
 
   return arrayBufferFor(data);
 }
 
 export function createDirectionalShadowViewProjection(
   light: TypeGpuLight,
-  drawBatches: TypeGpuDrawBatch[]
+  drawBatches: TypeGpuDrawBatch[],
+  camera?: TypeGpuCameraSettings,
+  aspect = 1,
+  retainedOnly = false
 ): Float32Array {
-  const bounds = shadowBoundsForDrawBatches(drawBatches);
+  const bounds = shadowBoundsForDrawBatches(drawBatches, retainedOnly);
+  if (camera && localShadowDistance(light, camera)) return createLocalShadowMatrix(light, camera, aspect, bounds);
   const center = bounds
     ? ([
         (bounds.min[0] + bounds.max[0]) / 2,
@@ -1332,12 +1381,26 @@ export function createDirectionalShadowViewProjection(
 }
 
 export function shadowBoundsForDrawBatches(
-  drawBatches: TypeGpuDrawBatch[]
+  drawBatches: TypeGpuDrawBatch[],
+  retainedOnly = false
 ): { min: Vector3Tuple; max: Vector3Tuple } | null {
   let min: Vector3Tuple | null = null;
   let max: Vector3Tuple | null = null;
 
   for (const batch of drawBatches) {
+    if (batch.visibility) {
+      if (!batch.instanceCount) continue;
+      const root = batch.visibility.nodes;
+      if (!Number.isFinite(root[6]) || !Number.isFinite(root[7]) || !Number.isFinite(root[8]) ||
+        !Number.isFinite(root[9]) || !Number.isFinite(root[10]) || !Number.isFinite(root[11])) continue;
+      min ??= [Infinity, Infinity, Infinity]; max ??= [-Infinity, -Infinity, -Infinity];
+      for (let axis = 0; axis < 3; axis++) {
+        min[axis] = Math.min(min[axis], root[6 + axis]);
+        max[axis] = Math.max(max[axis], root[9 + axis]);
+      }
+      continue;
+    }
+    if (retainedOnly) continue;
     const localBounds = batch.geometry.bounds ?? {
       min: [-0.5, -0.5, -0.5] as Vector3Tuple,
       max: [0.5, 0.5, 0.5] as Vector3Tuple
