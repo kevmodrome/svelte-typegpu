@@ -1,0 +1,75 @@
+import { BufferAttribute, BufferGeometry } from 'three';
+import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import type { MeshoptSimplifier } from 'meshoptimizer/simplifier';
+import type { TypeGpuGeometryData, TypeGpuLoadedModelMesh } from 'svelte-typegpu';
+import type { WorldAssets } from './world';
+
+const prepared = new WeakMap<WorldAssets, Promise<WorldAssets>>();
+const landscapeAssets = ['pine', 'oak', 'rock', 'log'] as const;
+const attributes = [['position', 0, 3], ['normal', 3, 3], ['uv', 6, 2], ['color', 8, 4]] as const;
+
+/** Prepare shared representations, not individual placements. Never called by a frame task. */
+export function prepareDistantWorldAssets(source: WorldAssets): Promise<WorldAssets> {
+  const cached = prepared.get(source);
+  if (cached) return cached;
+  const pending = (async () => {
+    const { MeshoptSimplifier: simplifier } = await import('meshoptimizer/simplifier');
+    if (!simplifier.supported) throw new Error('Distant mesh preparation requires WebAssembly');
+    await simplifier.ready;
+    const result = { ...source };
+    for (const name of landscapeAssets) {
+      const asset = source[name];
+      result[name] = { ...asset, key: `${asset.key}:distant-v1`, meshes: asset.meshes.map(mesh => ({
+        ...mesh, geometry: simplifyMesh(mesh, simplifier)
+      })) };
+    }
+    return result;
+  })();
+  prepared.set(source, pending);
+  void pending.catch(() => prepared.delete(source));
+  return pending;
+}
+
+function simplifyMesh(mesh: TypeGpuLoadedModelMesh, simplifier: typeof MeshoptSimplifier): TypeGpuGeometryData {
+  const source = mesh.geometry, material = mesh.material;
+  const count = source.indexCount ?? source.vertexCount;
+  if (count < 36 || source.lod || source.vertexFloats !== 12 || source.hasVertexAlpha || !source.bounds ||
+    material.kind === 'shader' || material.map || material.texture || material.transparent ||
+    material.color[3] !== 1 || material.opacity !== 1 || (material.blendMode && material.blendMode !== 'opaque')) return source;
+  const geometry = new BufferGeometry();
+  let welded: BufferGeometry | undefined;
+  try {
+    for (const [name, offset, size] of attributes) {
+      const array = new Float32Array(source.vertexCount * size);
+      for (let vertex = 0; vertex < source.vertexCount; vertex++) {
+        array.set(source.vertexData.subarray(vertex * 12 + offset, vertex * 12 + offset + size), vertex * size);
+      }
+      geometry.setAttribute(name, new BufferAttribute(array, size));
+    }
+    if (source.indexData) geometry.setIndex(new BufferAttribute(source.indexData, 1));
+    // GLB loading expands triangles. Reconnect identical complete vertices before edge collapse.
+    welded = mergeVertices(geometry, 1e-6);
+    const positions = welded.getAttribute('position').array as Float32Array;
+    const appearance = new Float32Array(positions.length / 3 * 9);
+    for (const [name, offset, size] of attributes.slice(1)) {
+      const array = welded.getAttribute(name).array;
+      for (let vertex = 0; vertex < positions.length / 3; vertex++) {
+        appearance.set(array.subarray(vertex * size, vertex * size + size), vertex * 9 + offset - 3);
+      }
+    }
+    const [indices] = simplifier.simplifyWithAttributes(new Uint32Array(welded.index!.array), positions, 3,
+      appearance, 9, [0.1, 0.1, 0.1, 0, 0, 1, 1, 1, 1], null,
+      Math.max(12, Math.floor(count * 0.2 / 3) * 3), 0.05, ['Permissive']);
+    if (!indices.length || indices.length >= count) return source;
+    const [remap, vertexCount] = simplifier.compactMesh(indices);
+    const vertexData = new Float32Array(vertexCount * 12);
+    for (let vertex = 0; vertex < remap.length; vertex++) {
+      if (remap[vertex] === 0xffffffff) continue;
+      const offset = remap[vertex] * 12;
+      vertexData.set(positions.subarray(vertex * 3, vertex * 3 + 3), offset);
+      vertexData.set(appearance.subarray(vertex * 9, vertex * 9 + 9), offset + 3);
+    }
+    return { ...source, key: `${source.key}:distant-v1`, vertexData, vertexCount,
+      indexData: indices, indexCount: indices.length, indexFormat: 'uint32' };
+  } finally { geometry.dispose(); welded?.dispose(); }
+}
