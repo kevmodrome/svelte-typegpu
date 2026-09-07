@@ -60,6 +60,7 @@ try {
   await world.getByRole('combobox', { name: 'Model count' }).selectOption('50000');
   await world.getByRole('button', { name: 'Follow camper' }).click();
   if (process.env.SVELTE_PROBE_CULLING === '1') await world.getByRole('checkbox', { name: 'Frustum culling', exact: true }).check();
+  if (process.env.SVELTE_PROBE_OCCLUSION === '1') await world.getByRole('checkbox', { name: 'Hi-Z occlusion', exact: true }).check();
   await page.waitForFunction(() => document.querySelector('[data-metric="models"]')?.textContent === '50,000');
   await idle(); await canvas.scrollIntoViewIfNeeded(); await canvas.focus();
   await page.emulateMedia({ reducedMotion: 'no-preference' });
@@ -94,7 +95,8 @@ try {
   const after = await metrics();
   const distance = (a, b, indices) => indices.reduce((sum, i) => sum + Math.abs(a[i] - b[i]), 0);
   const orientation = [0, 1, 2, 4, 5, 6, 8, 9, 10];
-  const result = { timings, firstRotation: distance(initial, first, orientation), secondRotation: distance(first, second, orientation),
+  const result = { timings, occlusion: process.env.SVELTE_PROBE_OCCLUSION === '1' ? await world.locator('[data-metric="occlusion"]').textContent() : 'disabled',
+    firstRotation: distance(initial, first, orientation), secondRotation: distance(first, second, orientation),
     translation: distance(initial, second, [12, 13, 14]), frames: after.frames - before.frames,
     instanceBytes: after.instanceBytes - before.instanceBytes,
     callbackCpuMean: after.callbackCpu.reduce((sum, ms) => sum + ms, 0) / after.callbackCpu.length };

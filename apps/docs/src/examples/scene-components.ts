@@ -2,6 +2,7 @@ import type { Component } from 'svelte';
 import type { ExampleSlug } from './example-definitions';
 import {
   AssetWorld,
+  Occlusion,
   DiscoShaderPass,
   Gravity,
   NativeEvents,
@@ -18,6 +19,7 @@ import {
 type TypeGpuSceneComponent = Component<any>;
 
 export const sceneComponents = {
+  occlusion: Occlusion,
   'asset-world': AssetWorld,
   'native-events': NativeEvents,
   'shared-stores': SharedStores,

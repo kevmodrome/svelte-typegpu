@@ -25,6 +25,7 @@ describe('docs example registry', () => {
     expect(examples.map((example) => example.slug)).toEqual([
       'two-boxes',
       'asset-world',
+      'occlusion',
       'svelte-motion',
       'native-events',
       'shared-stores',
@@ -57,6 +58,17 @@ describe('docs example registry', () => {
     for (const syntax of ['<Tree', '<Rock', '<Log', '<WorldLighting', '<Terrain', '<SelectionMarker']) {
       expect(example.code).toContain(syntax);
     }
+  });
+
+  it('publishes composable occlusion walls and a renderer-owned camera sweep', () => {
+    const example = getExampleBySlug('occlusion');
+    expect(example.sourceFiles.map(file => file.filename)).toEqual([
+      'Occlusion.svelte', 'Courtyard.typegpu.svelte', 'Wall.typegpu.svelte', 'Sculpture.typegpu.svelte', 'world-profile.ts'
+    ]);
+    for (const syntax of ['<Wall', '<Sculpture', '<frameTask', 'occlusion={', 'Triangles (upper bound)']) {
+      expect(example.code).toContain(syntax);
+    }
+    expect(example.code).not.toContain('requestAnimationFrame');
   });
 
   it('keeps metadata complete for every example', () => {

@@ -55,8 +55,13 @@ import sign from '../src/examples/asset-world/Sign.typegpu.svelte' with { type: 
 import selectionMarker from '../src/examples/asset-world/SelectionMarker.typegpu.svelte' with { type: 'text' };
 import terrain from '../src/examples/asset-world/Terrain.typegpu.svelte' with { type: 'text' };
 import worldLighting from '../src/examples/asset-world/WorldLighting.typegpu.svelte' with { type: 'text' };
+import occlusion from '../src/examples/occlusion/Occlusion.svelte' with { type: 'text' };
+import courtyard from '../src/examples/occlusion/Courtyard.typegpu.svelte' with { type: 'text' };
+import wall from '../src/examples/occlusion/Wall.typegpu.svelte' with { type: 'text' };
+import sculpture from '../src/examples/occlusion/Sculpture.typegpu.svelte' with { type: 'text' };
 
 export const exampleSourceTexts = {
+  occlusion: [occlusion, courtyard, wall, sculpture, worldProfile],
   'asset-world': [assetWorld, worldViewport, campsite, canoe, player, movementPad, playerController, playerInput, world,
     landscapeModels, worldCamera, landscape, modelDetail, worldProfile,
     tree, rock, log, tent, campfire, bridge, sign, selectionMarker, terrain, worldLighting],

@@ -32,6 +32,7 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 		dusk = $.prop($$props, 'dusk', 3, false),
 		shadows = $.prop($$props, 'shadows', 3, true),
 		frustumCulling = $.prop($$props, 'frustumCulling', 3, false),
+		occlusion = $.prop($$props, 'occlusion', 3, false),
 		selected = $.prop($$props, 'selected', 3, ''),
 		cameraVersion = $.prop($$props, 'cameraVersion', 3, 0),
 		playerVersion = $.prop($$props, 'playerVersion', 3, 0),
@@ -73,7 +74,7 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 	}));
 
 	TypeGpuViewportCanvas($$anchor, {
-		scopeClass: 'typegpu-c0ae5eadd5',
+		scopeClass: 'typegpu-376b4da9ce',
 		'aria-label': 'Pinewater campsite',
 		get frameloop() {
 			return frameloop();
@@ -266,6 +267,7 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 			$.template_effect(
 				($0) => {
 					$.set_attribute(scene, 'frustumCulling', frustumCulling());
+					$.set_attribute(scene, 'occlusion', occlusion() ? 'hi-z' : 'none');
 					$.set_attribute(scene, 'clearColor', $0);
 				},
 				[

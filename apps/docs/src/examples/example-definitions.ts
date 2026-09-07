@@ -58,6 +58,24 @@ export const exampleDefinitions = [
     typeGpuSourceFiles: []
   },
   {
+    slug: 'occlusion',
+    title: 'Hi-Z Occlusion',
+    category: 'rendering',
+    tags: ['3d', 'performance', 'components', 'occlusion'],
+    description: 'A courtyard of dense geometry behind removable walls, with current-frame GPU visibility.',
+    notes: 'Enable Hi-Z, move around the walls, or remove them entirely. Actual opaque wall triangles supply depth; the opening stays visible. GPU compaction preserves instance order and authored LOD. CPU triangle counters are explicitly upper bounds while indirect drawing is active. The hardware probe measures actual indirect counts and total depth + compute + color GPU time. Occlusion is optional, not a guaranteed improvement in open scenes.',
+    exportName: 'Occlusion',
+    sourceUrl: new URL('./occlusion/Occlusion.svelte', import.meta.url),
+    sourceFiles: [
+      new URL('./occlusion/Occlusion.svelte', import.meta.url),
+      new URL('./occlusion/Courtyard.typegpu.svelte', import.meta.url),
+      new URL('./occlusion/Wall.typegpu.svelte', import.meta.url),
+      new URL('./occlusion/Sculpture.typegpu.svelte', import.meta.url),
+      new URL('./asset-world/world-profile.ts', import.meta.url)
+    ],
+    typeGpuSourceFiles: []
+  },
+  {
     slug: 'svelte-motion',
     title: 'Svelte Motion',
     category: 'animation',

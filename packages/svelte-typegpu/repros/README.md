@@ -36,8 +36,9 @@ orbit gestures while walking, stop/start latency and demand idle. Set
 browser/adapter observations, not guarantees about physical display refresh.
 
 The example deliberately defaults to raw mode (`frustumCulling={false}`);
-ordinary scenes enable conservative frustum culling by default. This does not
-implement occlusion culling. Authored asset LOD is a separate opt-in control.
+ordinary scenes enable conservative frustum culling by default. Frustum culling
+does not reject hidden surfaces. Authored asset LOD and Hi-Z occlusion are
+separate opt-in controls.
 
 For retained asset-LOD comparisons (50k models, 16x maximum detail):
 
@@ -73,7 +74,23 @@ input/picking regression checks.
 
 The default world submits roughly 16.4 million color-pass triangles in 33 draws;
 16x density submits roughly 65.7 million before the optional culling and LOD
-controls are enabled. There is no distance cutoff or occlusion culling.
+controls are enabled. There is no distance cutoff; Hi-Z occlusion is optional.
+
+## Hi-Z occlusion
+
+```sh
+rtk proxy env TMPDIR=/tmp pnpm --filter svelte-typegpu exec node repros/occlusion.mjs
+rtk proxy env TMPDIR=/tmp pnpm --filter svelte-typegpu exec node repros/occlusion-docs.mjs
+rtk proxy env TMPDIR=/tmp SVELTE_PROBE_LOD=1 SVELTE_PROBE_CULLING=1 SVELTE_PROBE_OCCLUSION=1 pnpm --filter svelte-typegpu exec node repros/asset-world-input.mjs
+```
+
+Use the browser dependency/executable environment variables documented above.
+The first probe owns its temporary Vite server and measures all depth, compute,
+and color passes. It checks actual indirect counts, stable full-record
+compaction, indexed LOD ranges, holes, disocclusion, resize, idle behavior,
+steady resource reuse, and delivered frames versus browser callbacks. The
+other probes use the running docs server on port 3335. The older color-only GPU
+profile is not an occlusion benchmark. See [the occlusion guide](../../../docs/occlusion.md).
 Software WebGPU may run very slowly at these loads; these probes do not establish
 hardware GPU throughput or a monitor's physical refresh rate. See the
 [stress-mode design](../../../docs/asset-world-stress-design.md).

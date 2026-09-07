@@ -10,13 +10,13 @@
   import { createPlayerState, initialCameraDirection } from './player-controller';
   import type { WorldAssets } from './world';
   let {
-    assets = null, paused = false, forest = true, dusk = false, shadows = true, frustumCulling = false,
+    assets = null, paused = false, forest = true, dusk = false, shadows = true, frustumCulling = false, occlusion = false,
     selected = '', cameraVersion = 0, playerVersion = 0, touch = idleMovement,
     reducedMotion = false, landscape = compactLandscape, view = 'camp', onselect = (_key: string) => {},
     frameloop = 'demand', maxDevicePixelRatio = 1.5, onready, onfps, onrenderererror
   }: {
     assets?: WorldAssets | null; paused?: boolean; forest?: boolean; dusk?: boolean;
-    shadows?: boolean; frustumCulling?: boolean; selected?: string; cameraVersion?: number; onselect?: (key: string) => void;
+    shadows?: boolean; frustumCulling?: boolean; occlusion?: boolean; selected?: string; cameraVersion?: number; onselect?: (key: string) => void;
     playerVersion?: number; touch?: Movement; reducedMotion?: boolean;
     landscape?: Landscape; view?: 'camp' | 'follow' | 'overview';
     frameloop?: 'always' | 'demand' | 'manual'; maxDevicePixelRatio?: number;
@@ -48,7 +48,7 @@
   onkeydown={event => { if (assets && !paused) keyboard.keydown(event); }} onkeyup={keyboard.keyup}
   bind:clientWidth={width} bind:clientHeight={height}
   {onready} {onfps} {onrenderererror}>
-  <scene {frustumCulling} clearColor={dusk ? [0.11, 0.14, 0.2, 1] : [0.64, 0.77, 0.82, 1]}>
+  <scene {frustumCulling} occlusion={occlusion ? 'hi-z' : 'none'} clearColor={dusk ? [0.11, 0.14, 0.2, 1] : [0.64, 0.77, 0.82, 1]}>
     {#key cameraKey}
       <WorldCamera {view} {narrow} {focus} extent={landscape.halfWidth}
         onchange={({ position, target }) => cameraView = { key: cameraKey,

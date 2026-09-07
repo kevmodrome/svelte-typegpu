@@ -1,0 +1,4 @@
+/* :global {*/ 
+  canvas.typegpu-390ada621d { display: block; width: 100%; height: 455px; touch-action: none; }
+  @media (max-width: 600px) { canvas.typegpu-390ada621d { height: 380px; } }
+ /*}*/

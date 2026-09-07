@@ -35,6 +35,18 @@ describe('example workload sampling', () => {
       lodInstances: 1, lodTrianglesSaved: 24, lodCpuMs: 0.2, lodRangeFallbacks: 0 });
     profiler.dispose();
   });
+  it('preserves the indirect upper-bound flag instead of presenting GPU candidates as exact counts', () => {
+    const publish = vi.fn();
+    const root = { gpu: { renderFrame() {}, setScene() {}, getRenderStats: () => ({
+      submittedInstances: 20000, colorTriangles: 1000000, colorCountsExact: false, occlusion: 'active'
+    }) } } as unknown as TypeGpuRoot;
+    const profiler = profileWorld(root, publish);
+    profiler.sample();
+    expect(publish.mock.lastCall![0]).toMatchObject({ instances: 20000, colorTriangles: 1000000,
+      colorCountsExact: false, occlusion: 'active' });
+    profiler.dispose();
+  });
+
   it('does not rescan batches on transform-only frames and restores wrapped methods', () => {
     let time = 0;
     const renderFrame = vi.fn(() => { time += 2; }), setScene = vi.fn(), publish = vi.fn();

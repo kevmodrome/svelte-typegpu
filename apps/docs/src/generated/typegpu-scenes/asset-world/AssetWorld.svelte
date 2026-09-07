@@ -18,6 +18,7 @@
   let paused = $state(false), forest = $state(true), dusk = $state(false), shadows = $state(false);
   let frustumCulling = $state(false);
   let lod = $state(false);
+  let occlusion = $state(false);
   let count = $state(20000), detail = $state(1), preparing = $state(false);
   let view = $state<'camp' | 'follow' | 'overview'>('overview');
   let landscape = $state.raw(compactLandscape), profile = $state.raw(emptyProfile);
@@ -64,7 +65,7 @@
 
 <div class="asset-world" class:dusk>
   <div class="world-stage">
-    <WorldViewport {assets} {landscape} {view} {forest} {dusk} {shadows} {frustumCulling} {selected} {cameraVersion} {playerVersion} {touch} {paused}
+    <WorldViewport {assets} {landscape} {view} {forest} {dusk} {shadows} {frustumCulling} {occlusion} {selected} {cameraVersion} {playerVersion} {touch} {paused}
       reducedMotion={prefersReducedMotion.current}
       onselect={(key: string) => selected = key}
       {frameloop} {maxDevicePixelRatio} onready={ready} onfps={fps} {onrenderererror} />
@@ -94,6 +95,7 @@
     </select></label>
     <label><input type="checkbox" bind:checked={frustumCulling} /> Frustum culling</label>
     <label><input type="checkbox" checked={lod} onchange={event => { lod = event.currentTarget.checked; void rebuild(); }} /> LOD</label>
+    <label><input type="checkbox" bind:checked={occlusion} /> Hi-Z occlusion</label>
     <div class="view-modes" role="group" aria-label="Camera view">
       {#each [{ key: 'camp', label: 'Campsite view', icon: Tent }, { key: 'follow', label: 'Follow camper', icon: UserRound }, { key: 'overview', label: 'World overview', icon: Map }] as mode}
         <button type="button" aria-label={mode.label} title={mode.label} aria-pressed={view === mode.key}
@@ -103,10 +105,10 @@
   </div>
   <dl class="world-metrics" aria-label="Renderer workload">
     <div><dt>Models in scene</dt><dd data-metric="models">{profile.models.toLocaleString('en-US')}</dd></div>
-    <div><dt>Instances drawn</dt><dd data-metric="instances">{profile.instances.toLocaleString('en-US')}</dd></div>
+    <div><dt>{profile.colorCountsExact ? 'Instances drawn' : 'Instances (upper bound)'}</dt><dd data-metric="instances">{profile.instances.toLocaleString('en-US')}</dd></div>
     <div><dt>Frustum rejected</dt><dd data-metric="culled">{profile.culledInstances.toLocaleString('en-US')}</dd></div>
     <div><dt>Color draws</dt><dd data-metric="draws">{profile.colorDraws}</dd></div>
-    <div><dt>Color triangles</dt><dd data-metric="triangles">{profile.colorTriangles.toLocaleString('en-US')}</dd></div>
+    <div><dt>{profile.colorCountsExact ? 'Color triangles' : 'Triangles (upper bound)'}</dt><dd data-metric="triangles">{profile.colorTriangles.toLocaleString('en-US')}</dd></div>
     <div><dt>Shadow triangles</dt><dd>{profile.shadowTriangles.toLocaleString('en-US')}</dd></div>
     <div><dt>Render CPU</dt><dd data-metric="cpu">{profile.renderCpuMs.toFixed(2)} ms</dd></div>
     <div><dt>CPU max</dt><dd>{profile.maxRenderCpuMs.toFixed(2)} ms</dd></div>
@@ -116,6 +118,7 @@
     <div><dt>LOD triangles saved</dt><dd data-metric="lod-saved">{profile.lodTrianglesSaved.toLocaleString('en-US')}</dd></div>
     <div><dt>LOD CPU</dt><dd data-metric="lod-cpu">{profile.lodCpuMs.toFixed(2)} ms</dd></div>
     <div><dt>LOD fallbacks</dt><dd data-metric="lod-fallbacks">{profile.lodRangeFallbacks}</dd></div>
+    {#if occlusion}<div><dt>Occlusion</dt><dd data-metric="occlusion">{profile.occlusion}</dd></div>{/if}
   </dl>
   <div class="world-toolbar" role="group" aria-label="World controls">
     <label><input type="checkbox" bind:checked={dusk} /> Dusk</label>
