@@ -4,14 +4,9 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
-import * as TypeGpuAttributeValues from 'svelte-typegpu/internal/attribute-values';
-
-var root = $.from_tree([
-	[
-		'model',
-		{ pointerEvents: 'none', castShadow: '', receiveShadow: '' }
-	]
-]);
+import Tree from './Tree.typegpu.js';
+import Rock from './Rock.typegpu.js';
+import Log from './Log.typegpu.js';
 
 export default function Landscape_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
@@ -23,24 +18,87 @@ export default function Landscape_typegpu($$anchor, $$props) {
 	var node = $.first_child(fragment);
 
 	$.each(node, 17, () => $$props.landscape.placements, (item) => item.key, ($$anchor, item) => {
-		var model = root();
+		var fragment_1 = $.comment();
+		var node_1 = $.first_child(fragment_1);
 
-		$.template_effect(
-			($0, $1, $2) => {
-				$.set_attribute(model, 'asset', $$props.assets[$.get(item).asset]);
-				$.set_attribute(model, 'position', $0);
-				$.set_attribute(model, 'scale', $1);
-				$.set_attribute(model, 'rotation', $2);
-				$.set_attribute(model, 'visible', forest() || $.get(item).asset !== 'pine' && $.get(item).asset !== 'oak');
-			},
-			[
-				() => TypeGpuAttributeValues.value("position", $.get(item).position),
-				() => TypeGpuAttributeValues.value("scale", $.get(item).scale),
-				() => TypeGpuAttributeValues.value("rotation", $.get(item).rotation)
-			]
-		);
+		{
+			var consequent = ($$anchor) => {
+				Tree($$anchor, {
+					get assets() {
+						return $$props.assets;
+					},
 
-		$.append($$anchor, model);
+					get kind() {
+						return $.get(item).asset;
+					},
+
+					get position() {
+						return $.get(item).position;
+					},
+
+					get scale() {
+						return $.get(item).scale;
+					},
+
+					get rotation() {
+						return $.get(item).rotation;
+					},
+
+					get visible() {
+						return forest();
+					},
+					pointerEvents: 'none'
+				});
+			};
+
+			var consequent_1 = ($$anchor) => {
+				Rock($$anchor, {
+					get assets() {
+						return $$props.assets;
+					},
+
+					get position() {
+						return $.get(item).position;
+					},
+
+					get scale() {
+						return $.get(item).scale;
+					},
+
+					get rotation() {
+						return $.get(item).rotation;
+					},
+					pointerEvents: 'none'
+				});
+			};
+
+			var alternate = ($$anchor) => {
+				Log($$anchor, {
+					get assets() {
+						return $$props.assets;
+					},
+
+					get position() {
+						return $.get(item).position;
+					},
+
+					get scale() {
+						return $.get(item).scale;
+					},
+
+					get rotation() {
+						return $.get(item).rotation;
+					},
+					pointerEvents: 'none'
+				});
+			};
+
+			$.if(node_1, ($$render) => {
+				if ($.get(item).asset === 'pine' || $.get(item).asset === 'oak') $$render(consequent); else if ($.get(item).asset === 'rock') $$render(consequent_1, 1); else $$render(alternate, -1);
+			});
+		}
+
+		$.append($$anchor, fragment_1);
 	});
 
 	$.append($$anchor, fragment);

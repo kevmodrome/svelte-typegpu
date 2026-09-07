@@ -6,17 +6,7 @@ import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
 import { canoePosition } from './world.js';
 
-var root = $.from_tree(
-	[
-		['frameTask'],
-		' ',
-		[
-			'model',
-			{ name: 'canoe', castShadow: '', receiveShadow: '' }
-		]
-	],
-	1
-);
+var root = $.from_tree([['frameTask'], ' ', ['model', { name: 'canoe' }]], 1);
 
 export default function Canoe_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
@@ -40,6 +30,8 @@ export default function Canoe_typegpu($$anchor, $$props) {
 	var model = $.sibling(frameTask, 2);
 
 	$.set_attribute(model, 'scale', 2.6);
+	$.set_attribute(model, 'castShadow', true);
+	$.set_attribute(model, 'receiveShadow', true);
 
 	$.template_effect(
 		($0, $1) => {

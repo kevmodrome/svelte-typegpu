@@ -12,61 +12,14 @@ import Campsite from './Campsite.typegpu.js';
 import Player from './Player.typegpu.js';
 import LandscapeModels from './Landscape.typegpu.js';
 import WorldCamera from './WorldCamera.typegpu.js';
+import WorldLighting from './WorldLighting.typegpu.js';
+import Terrain from './Terrain.typegpu.js';
 import { compactLandscape } from './landscape.js';
 import { createMovementInput, idleMovement } from './player-input.js';
 import { createPlayerState, initialCameraDirection } from './player-controller.js';
 
-var root = $.from_tree(
-	[
-		[
-			'mesh',
-			{ receiveShadow: '' },
-			['boxGeometry'],
-			['standardMaterial']
-		]
-	],
-	4
-);
-
-var root_1 = $.from_tree([,, ' ',, ' ',,], 1);
-
-var root_2 = $.from_tree([
-	[
-		'scene',
-		null,,
-		' ',
-		['hemisphereLight'],
-		' ',
-		['ambientLight'],
-		' ',
-		['directionalLight'],
-		' ',
-		['pointLight'],
-		' ',
-		[
-			'mesh',
-			{ receiveShadow: '' },
-			['boxGeometry'],
-			['standardMaterial']
-		],
-		' ',,
-		' ',
-		[
-			'mesh',
-			{ receiveShadow: '' },
-			['planeGeometry'],
-			['standardMaterial', { cullMode: 'none' }]
-		],
-		' ',
-		[
-			'mesh',
-			{ receiveShadow: '' },
-			['planeGeometry'],
-			['standardMaterial', { cullMode: 'none' }]
-		],
-		' ',,
-	]
-]);
+var root = $.from_tree([,, ' ',, ' ',,], 1);
+var root_1 = $.from_tree([['scene', null,, ' ',, ' ',, ' ',,]]);
 
 export default function WorldViewport_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer(null);
@@ -120,7 +73,7 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 	}));
 
 	TypeGpuViewportCanvas($$anchor, {
-		scopeClass: 'typegpu-fce6ecb558',
+		scopeClass: 'typegpu-c0ae5eadd5',
 		'aria-label': 'Pinewater campsite',
 		get frameloop() {
 			return frameloop();
@@ -168,7 +121,7 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 		},
 
 		children: $.renderer_snippet($renderer, ($$anchor, $$slotProps) => {
-			var scene = root_2();
+			var scene = root_1();
 			var node = $.child(scene);
 
 			$.key(node, () => $.get(cameraKey), ($$anchor) => {
@@ -196,116 +149,41 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 				});
 			});
 
-			var hemisphereLight = $.sibling(node, 2);
+			var node_1 = $.sibling(node, 2);
 
-			$.set_attribute(hemisphereLight, 'skyColor', [0.85, 0.93, 1]);
-			$.set_attribute(hemisphereLight, 'groundColor', [0.22, 0.28, 0.23]);
+			WorldLighting(node_1, {
+				get dusk() {
+					return dusk();
+				},
 
-			var ambientLight = $.sibling(hemisphereLight, 2);
-			var directionalLight = $.sibling(ambientLight, 2);
-
-			$.set_attribute(directionalLight, 'position', [-8, 14, 8]);
-			$.set_attribute(directionalLight, 'lookAt', [0, 0, 0]);
-			$.set_attribute(directionalLight, 'shadowMapSize', 2048);
-
-			var pointLight = $.sibling(directionalLight, 2);
-
-			$.set_attribute(pointLight, 'position', [-2.8, 0.7, 1.8]);
-			$.set_attribute(pointLight, 'color', [1, 0.45, 0.13]);
-			$.set_attribute(pointLight, 'range', 5);
-
-			var mesh = $.sibling(pointLight, 2);
-
-			$.set_attribute(mesh, 'position', [0, -0.6, 0]);
-
-			var boxGeometry = $.child(mesh);
-
-			$.set_attribute(boxGeometry, 'height', 0.9);
-
-			var standardMaterial = $.sibling(boxGeometry);
-
-			$.set_attribute(standardMaterial, 'color', [0.26, 0.32, 0.28]);
-			$.set_attribute(standardMaterial, 'roughness', 1);
-			$.set_attribute(standardMaterial, 'metalness', 0);
-			$.reset(mesh);
-
-			var node_1 = $.sibling(mesh, 2);
-
-			$.each(
-				node_1,
-				17,
-				() => [
-					[(2 - landscape().halfWidth) / 2, landscape().halfWidth + 2],
-					[(5 + landscape().halfWidth) / 2, landscape().halfWidth - 5]
-				],
-				$.index,
-				($$anchor, $$item, bank, $$array) => {
-					var $$array_1 = $.derived(() => $.to_array($.get($$item), 2));
-					let x = () => $.get($$array_1)[0];
-					let width = () => $.get($$array_1)[1];
-					var mesh_1 = root();
-					var boxGeometry_1 = $.child(mesh_1);
-
-					$.set_attribute(boxGeometry_1, 'height', 0.2);
-
-					var standardMaterial_1 = $.sibling(boxGeometry_1);
-
-					$.set_attribute(standardMaterial_1, 'color', [0.37, 0.58, 0.39]);
-					$.set_attribute(standardMaterial_1, 'roughness', 1);
-					$.set_attribute(standardMaterial_1, 'metalness', 0);
-					$.reset(mesh_1);
-
-					$.template_effect(() => {
-						$.set_attribute(mesh_1, 'position', [x(), -0.1, 0]);
-						$.set_attribute(boxGeometry_1, 'width', width());
-						$.set_attribute(boxGeometry_1, 'depth', landscape().halfDepth * 2);
-					});
-
-					$.append($$anchor, mesh_1);
+				get shadows() {
+					return shadows();
 				}
-			);
+			});
 
-			var mesh_2 = $.sibling(node_1, 2);
+			var node_2 = $.sibling(node_1, 2);
 
-			$.set_attribute(mesh_2, 'position', [3.5, -0.1, 0]);
+			Terrain(node_2, {
+				get landscape() {
+					return landscape();
+				},
 
-			var planeGeometry = $.child(mesh_2);
+				get dusk() {
+					return dusk();
+				}
+			});
 
-			$.set_attribute(planeGeometry, 'width', 3);
-
-			var standardMaterial_2 = $.sibling(planeGeometry);
-
-			$.set_attribute(standardMaterial_2, 'roughness', 0.22);
-			$.set_attribute(standardMaterial_2, 'metalness', 0.05);
-			$.reset(mesh_2);
-
-			var mesh_3 = $.sibling(mesh_2, 2);
-
-			$.set_attribute(mesh_3, 'position', [-2.7, 0.006, 3.9]);
-
-			var planeGeometry_1 = $.child(mesh_3);
-
-			$.set_attribute(planeGeometry_1, 'width', 6.5);
-			$.set_attribute(planeGeometry_1, 'height', 1.25);
-
-			var standardMaterial_3 = $.sibling(planeGeometry_1);
-
-			$.set_attribute(standardMaterial_3, 'color', [0.69, 0.72, 0.56]);
-			$.set_attribute(standardMaterial_3, 'roughness', 1);
-			$.set_attribute(standardMaterial_3, 'metalness', 0);
-			$.reset(mesh_3);
-
-			var node_2 = $.sibling(mesh_3, 2);
+			var node_3 = $.sibling(node_2, 2);
 
 			{
 				var consequent = ($$anchor) => {
-					var fragment_2 = root_1();
-					var node_3 = $.first_child(fragment_2);
+					var fragment_2 = root();
+					var node_4 = $.first_child(fragment_2);
 
 					{
 						let $0 = $.derived(() => paused() || reducedMotion());
 
-						Campsite(node_3, {
+						Campsite(node_4, {
 							get assets() {
 								return assets();
 							},
@@ -328,9 +206,9 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 						});
 					}
 
-					var node_4 = $.sibling(node_3, 2);
+					var node_5 = $.sibling(node_4, 2);
 
-					LandscapeModels(node_4, {
+					LandscapeModels(node_5, {
 						get assets() {
 							return assets();
 						},
@@ -344,9 +222,9 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 						}
 					});
 
-					var node_5 = $.sibling(node_4, 2);
+					var node_6 = $.sibling(node_5, 2);
 
-					$.key(node_5, () => $.get(playerKey), ($$anchor) => {
+					$.key(node_6, () => $.get(playerKey), ($$anchor) => {
 						Player($$anchor, {
 							get movement() {
 								return $.get(movement);
@@ -378,7 +256,7 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 					$.append($$anchor, fragment_2);
 				};
 
-				$.if(node_2, ($$render) => {
+				$.if(node_3, ($$render) => {
 					if (assets()) $$render(consequent);
 				});
 			}
@@ -386,24 +264,12 @@ export default function WorldViewport_typegpu($$anchor, $$props) {
 			$.reset(scene);
 
 			$.template_effect(
-				($0, $1, $2) => {
+				($0) => {
 					$.set_attribute(scene, 'frustumCulling', frustumCulling());
 					$.set_attribute(scene, 'clearColor', $0);
-					$.set_attribute(hemisphereLight, 'intensity', dusk() ? 0.45 : 0.85);
-					$.set_attribute(ambientLight, 'intensity', dusk() ? 0.14 : 0.5);
-					$.set_attribute(directionalLight, 'color', $1);
-					$.set_attribute(directionalLight, 'intensity', dusk() ? 0.65 : 1.1);
-					$.set_attribute(directionalLight, 'castShadow', shadows());
-					$.set_attribute(pointLight, 'intensity', dusk() ? 3 : 0);
-					$.set_attribute(boxGeometry, 'width', landscape().halfWidth * 2);
-					$.set_attribute(boxGeometry, 'depth', landscape().halfDepth * 2);
-					$.set_attribute(planeGeometry, 'height', landscape().halfDepth * 2);
-					$.set_attribute(standardMaterial_2, 'color', $2);
 				},
 				[
-					() => TypeGpuAttributeValues.value("clearColor", dusk() ? [0.11, 0.14, 0.2, 1] : [0.64, 0.77, 0.82, 1]),
-					() => TypeGpuAttributeValues.value("color", dusk() ? [1, 0.65, 0.48] : [1, 0.96, 0.88]),
-					() => TypeGpuAttributeValues.value("color", dusk() ? [0.12, 0.35, 0.46] : [0.2, 0.65, 0.76])
+					() => TypeGpuAttributeValues.value("clearColor", dusk() ? [0.11, 0.14, 0.2, 1] : [0.64, 0.77, 0.82, 1])
 				]
 			);
 

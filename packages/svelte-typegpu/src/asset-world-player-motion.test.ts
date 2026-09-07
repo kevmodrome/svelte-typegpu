@@ -21,6 +21,7 @@ import { detailWorldAssets } from '../../../apps/docs/src/examples/asset-world/m
 import { createModelLod } from './lod';
 import { loadGlbModel } from './glb-loader';
 import * as transforms from './transform';
+import { compileWorldObjects } from './test-fixtures/asset-world-components';
 
 const captured = vi.hoisted(() => ({ bindings: [] as unknown[][], counts: [] as number[] }));
 vi.mock('typegpu', async original => {
@@ -69,8 +70,9 @@ describe('compiled camper frame delivery in a 20,000-model dense world', () => {
     const root = createFragment(), runtime = createTypeGpuRuntimeForTest(root, canvas, gpuRenderer); root.runtime = runtime;
     const Player = compileViewportSource(source, { ...controller, ...input, ...landscape });
     const Canoe = compileViewportSource(componentSource('Canoe'), world);
-    const Campsite = compileViewportSource(componentSource('Campsite'), { ...world, Canoe });
-    const LandscapeModels = compileViewportSource(componentSource('Landscape'));
+    const objects = compileWorldObjects();
+    const Campsite = compileViewportSource(componentSource('Campsite'), { ...world, Canoe, ...objects });
+    const LandscapeModels = compileViewportSource(componentSource('Landscape'), objects);
     const WorldCamera = compileViewportSource(componentSource('WorldCamera'));
     const Host = compileViewportSource<{ animate(): void; walk(value: boolean): void; stop(): void }>(`<script>
       import { ${kind} } from 'svelte/motion'; import { onDestroy } from 'svelte';

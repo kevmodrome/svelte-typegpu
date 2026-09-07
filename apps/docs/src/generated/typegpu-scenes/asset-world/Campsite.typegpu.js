@@ -4,27 +4,18 @@
 import $renderer from 'svelte-typegpu/svelte-renderer';
 import 'svelte/internal/disclose-version';
 import * as $ from 'svelte/internal/client';
-import * as TypeGpuAttributeValues from 'svelte-typegpu/internal/attribute-values';
 import Canoe from './Canoe.typegpu.js';
-import { details, landmarks, trees, selectedPosition } from './world.js';
+import Tree from './Tree.typegpu.js';
+import Rock from './Rock.typegpu.js';
+import Log from './Log.typegpu.js';
+import Tent from './Tent.typegpu.js';
+import Campfire from './Campfire.typegpu.js';
+import Bridge from './Bridge.typegpu.js';
+import Sign from './Sign.typegpu.js';
+import SelectionMarker from './SelectionMarker.typegpu.js';
+import { details, landmarks, trees } from './world.js';
 
-var root = $.from_tree([['model', { castShadow: '', receiveShadow: '' }]]);
-var root_1 = $.from_tree([['model', { castShadow: '', receiveShadow: '' }]]);
-var root_2 = $.from_tree([['model', { castShadow: '', receiveShadow: '' }]]);
-
-var root_3 = $.from_tree(
-	[
-		[
-			'mesh',
-			null,
-			['planeGeometry'],
-			['basicMaterial', { cullMode: 'none' }]
-		]
-	],
-	4
-);
-
-var root_4 = $.from_tree([,, ' ', ['group'], ' ',, ' ',, ' ',,], 1);
+var root = $.from_tree([,, ' ', ['group'], ' ',, ' ',, ' ',,], 1);
 
 export default function Campsite_typegpu($$anchor, $$props) {
 	var $$pop_renderer = $.push_renderer($renderer);
@@ -36,81 +27,105 @@ export default function Campsite_typegpu($$anchor, $$props) {
 		selected = $.prop($$props, 'selected', 3, ''),
 		onselect = $.prop($$props, 'onselect', 3, (_key) => {});
 
-	const marker = $.derived(() => selectedPosition(selected()));
-	var fragment = root_4();
+	const landmarkComponents = { tent: Tent, firepit: Campfire, bridge: Bridge, sign: Sign };
+	const detailComponents = { rock: Rock, log: Log };
+	var fragment = root();
 	var node = $.first_child(fragment);
 
 	$.each(node, 17, () => landmarks, (item) => item.key, ($$anchor, item) => {
-		var model = root();
+		const Landmark = $.derived(() => landmarkComponents[$.get(item).asset]);
+		var fragment_1 = $.comment();
+		var node_1 = $.first_child(fragment_1);
 
-		$.template_effect(
-			($0, $1, $2) => {
-				$.set_attribute(model, 'name', $.get(item).key);
-				$.set_attribute(model, 'asset', $$props.assets[$.get(item).asset]);
-				$.set_attribute(model, 'position', $0);
-				$.set_attribute(model, 'scale', $1);
-				$.set_attribute(model, 'rotation', $2);
-			},
-			[
-				() => TypeGpuAttributeValues.value("position", $.get(item).position),
-				() => TypeGpuAttributeValues.value("scale", $.get(item).scale),
-				() => TypeGpuAttributeValues.value("rotation", $.get(item).rotation)
-			]
-		);
+		$.component(node_1, () => $.get(Landmark), ($$anchor, Landmark_1) => {
+			Landmark_1($$anchor, {
+				get assets() {
+					return $$props.assets;
+				},
 
-		$.event('click', model, () => onselect()($.get(item).key));
-		$.append($$anchor, model);
+				get name() {
+					return $.get(item).key;
+				},
+
+				get position() {
+					return $.get(item).position;
+				},
+
+				get scale() {
+					return $.get(item).scale;
+				},
+
+				get rotation() {
+					return $.get(item).rotation;
+				},
+				onclick: () => onselect()($.get(item).key)
+			});
+		});
+
+		$.append($$anchor, fragment_1);
 	});
 
 	var group = $.sibling(node, 2);
 
 	$.each(group, 21, () => trees, (item) => item.key, ($$anchor, item) => {
-		var model_1 = root_1();
-
-		$.template_effect(
-			($0, $1, $2) => {
-				$.set_attribute(model_1, 'asset', $$props.assets[$.get(item).asset]);
-				$.set_attribute(model_1, 'position', $0);
-				$.set_attribute(model_1, 'scale', $1);
-				$.set_attribute(model_1, 'rotation', $2);
+		Tree($$anchor, {
+			get assets() {
+				return $$props.assets;
 			},
-			[
-				() => TypeGpuAttributeValues.value("position", $.get(item).position),
-				() => TypeGpuAttributeValues.value("scale", $.get(item).scale),
-				() => TypeGpuAttributeValues.value("rotation", $.get(item).rotation)
-			]
-		);
 
-		$.append($$anchor, model_1);
+			get kind() {
+				return $.get(item).asset;
+			},
+
+			get position() {
+				return $.get(item).position;
+			},
+
+			get scale() {
+				return $.get(item).scale;
+			},
+
+			get rotation() {
+				return $.get(item).rotation;
+			}
+		});
 	});
 
 	$.reset(group);
 
-	var node_1 = $.sibling(group, 2);
+	var node_2 = $.sibling(group, 2);
 
-	$.each(node_1, 17, () => details, (item) => item.key, ($$anchor, item) => {
-		var model_2 = root_2();
+	$.each(node_2, 17, () => details, (item) => item.key, ($$anchor, item) => {
+		const Detail = $.derived(() => detailComponents[$.get(item).asset]);
+		var fragment_3 = $.comment();
+		var node_3 = $.first_child(fragment_3);
 
-		$.template_effect(
-			($0, $1, $2) => {
-				$.set_attribute(model_2, 'asset', $$props.assets[$.get(item).asset]);
-				$.set_attribute(model_2, 'position', $0);
-				$.set_attribute(model_2, 'scale', $1);
-				$.set_attribute(model_2, 'rotation', $2);
-			},
-			[
-				() => TypeGpuAttributeValues.value("position", $.get(item).position),
-				() => TypeGpuAttributeValues.value("scale", $.get(item).scale),
-				() => TypeGpuAttributeValues.value("rotation", $.get(item).rotation)
-			]
-		);
+		$.component(node_3, () => $.get(Detail), ($$anchor, Detail_1) => {
+			Detail_1($$anchor, {
+				get assets() {
+					return $$props.assets;
+				},
 
-		$.append($$anchor, model_2);
+				get position() {
+					return $.get(item).position;
+				},
+
+				get scale() {
+					return $.get(item).scale;
+				},
+
+				get rotation() {
+					return $.get(item).rotation;
+				}
+			});
+		});
+
+		$.append($$anchor, fragment_3);
 	});
 
-	var node_2 = $.sibling(node_1, 2);
+	var node_4 = $.sibling(node_2, 2);
 
-	Canoe(node_2, {
+	Canoe(node_4, {
 		get asset() {
 			return $$props.assets.canoe;
 		},
@@ -121,34 +136,13 @@ export default function Campsite_typegpu($$anchor, $$props) {
 		onselect: () => onselect()('canoe')
 	});
 
-	var node_3 = $.sibling(node_2, 2);
+	var node_5 = $.sibling(node_4, 2);
 
-	{
-		var consequent = ($$anchor) => {
-			var mesh = root_3();
-			var planeGeometry = $.child(mesh);
-
-			$.set_attribute(planeGeometry, 'width', 2.4);
-			$.set_attribute(planeGeometry, 'height', 2.4);
-
-			var basicMaterial = $.sibling(planeGeometry);
-
-			$.set_attribute(basicMaterial, 'color', [1, 0.83, 0.25]);
-			$.reset(mesh);
-
-			$.template_effect(() => $.set_attribute(mesh, 'position', [
-				$.get(marker)[0],
-				selected() === 'canoe' ? -0.07 : 0.025,
-				$.get(marker)[2]
-			]));
-
-			$.append($$anchor, mesh);
-		};
-
-		$.if(node_3, ($$render) => {
-			if ($.get(marker)) $$render(consequent);
-		});
-	}
+	SelectionMarker(node_5, {
+		get selected() {
+			return selected();
+		}
+	});
 
 	$.template_effect(() => $.set_attribute(group, 'visible', forest()));
 	$.append($$anchor, fragment);

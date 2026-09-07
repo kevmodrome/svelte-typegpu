@@ -1,4 +1,4 @@
-import { loadModel, type TypeGpuLoadedModel, type Vector3Tuple } from 'svelte-typegpu';
+import { loadModel, type TypeGpuLoadedModel, type TypeGpuNodeEventHandler, type Vector3Tuple } from 'svelte-typegpu';
 
 export const assetFiles = {
   pine: 'tree_pineDefaultA.glb', oak: 'tree_oak.glb', tent: 'tent_detailedOpen.glb',
@@ -7,6 +7,18 @@ export const assetFiles = {
 } as const;
 export type AssetName = keyof typeof assetFiles;
 export type WorldAssets = Record<AssetName, TypeGpuLoadedModel>;
+export interface WorldObjectProps {
+  assets: WorldAssets;
+  name?: string;
+  position?: Vector3Tuple;
+  scale?: number | Vector3Tuple;
+  rotation?: Vector3Tuple;
+  visible?: boolean;
+  pointerEvents?: 'auto' | 'none';
+  castShadow?: boolean;
+  receiveShadow?: boolean;
+  onclick?: TypeGpuNodeEventHandler;
+}
 export const assetCount = Object.keys(assetFiles).length;
 
 export async function loadWorldAssets(signal: AbortSignal, onprogress: (loaded: number) => void): Promise<WorldAssets> {
@@ -21,15 +33,15 @@ export async function loadWorldAssets(signal: AbortSignal, onprogress: (loaded: 
   return Object.fromEntries(entries) as WorldAssets;
 }
 
-export interface Placement {
+export interface Placement<Asset extends AssetName = AssetName> {
   key: string;
-  asset: AssetName;
+  asset: Asset;
   position: Vector3Tuple;
   scale: number | Vector3Tuple;
   rotation?: Vector3Tuple;
 }
 
-export const landmarks: (Placement & { label: string })[] = [
+export const landmarks: (Placement<'tent' | 'firepit' | 'bridge' | 'sign'> & { label: string })[] = [
   { key: 'tent', label: 'Lakeside tent', asset: 'tent', position: [-3.8, 0.15, -1.8], scale: 3, rotation: [0, Math.PI, 0] },
   { key: 'tent-east', label: 'Trail tent', asset: 'tent', position: [-6.1, 0.12, 1.1], scale: 2.4, rotation: [0, Math.PI * 0.7, 0] },
   { key: 'firepit', label: 'Fire circle', asset: 'firepit', position: [-2.8, 0.17, 1.8], scale: 3.4 },
@@ -43,7 +55,7 @@ export function selectedPosition(key: string): Vector3Tuple | undefined {
   return key === 'canoe' ? canoePosition : landmarks.find(item => item.key === key)?.position;
 }
 
-export const trees: Placement[] = [
+export const trees: Placement<'pine' | 'oak'>[] = [
   [-8, -6, 2.6], [-5.4, -6.1, 3], [-2.5, -6.2, 2.7], [0.3, -5.5, 2.1],
   [-8.1, -3.2, 2.3], [-7.8, 0, 2], [-8.2, 3.7, 2.1], [-6.1, 5.8, 2.5],
   [-3.3, 6.1, 2.1], [0.6, 6.2, 1.9], [7.4, -6, 2.8], [8.3, -3.5, 2.4],
@@ -53,10 +65,10 @@ export const trees: Placement[] = [
   position: [x, scale * 0.05, z], scale, rotation: [0, index * 1.7, 0]
 }));
 
-export const details: Placement[] = [
+export const details: Placement<'log' | 'rock'>[] = [
   { key: 'log-a', asset: 'log', position: [-4.4, 0.12, 2.2], scale: 2.4, rotation: [0, 0.3, 0] },
   { key: 'log-b', asset: 'log', position: [-2.4, 0.12, 3.5], scale: 2.4, rotation: [0, 1.6, 0] },
   ...[[-0.2, -6.2, 1.7], [1.7, 0, 1.5], [5.3, 4.8, 1.8], [6, -5.8, 1.5], [-7.2, 5, 1.3]].map(
-    ([x, z, scale], index): Placement => ({ key: `rock-${index}`, asset: 'rock', position: [x, scale * 0.05, z], scale })
+    ([x, z, scale], index): Placement<'rock'> => ({ key: `rock-${index}`, asset: 'rock', position: [x, scale * 0.05, z], scale })
   )
 ];

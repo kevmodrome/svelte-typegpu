@@ -26,7 +26,7 @@ export const exampleDefinitions = [
     category: 'worlds',
     tags: ['3d', 'GLB assets', 'components', 'interaction', 'frame tasks'],
     description: 'A playable forest with up to 50,000 shared GLB models and adjustable triangle density.',
-    notes: 'WASD or arrow keys walk, Shift runs; the movement pad supports touch. Camera modes include camp, follow and overview. Model count and 1x/4x/16x flat subdivision vary independently. All visible models are submitted without distance culling or LOD. Render CPU measures synchronous renderFrame work, not GPU time or all JavaScript. Nine local Kenney CC0 sources are shared; SAT.js collision checks nearby cells. Three.js and three-subdivide prepare geometry only; TypeGPU renders it.',
+    notes: 'WASD or arrow keys walk, Shift runs; the movement pad supports touch. Camera modes include camp, follow and overview. Model count and 1x/4x/16x flat subdivision vary independently, with optional frustum culling and LOD. Tree, Rock, Tent and other scene components share nine local Kenney CC0 assets. Render CPU measures synchronous renderFrame work, not GPU time or all JavaScript. SAT.js collision checks nearby cells. Three.js and three-subdivide prepare geometry only; TypeGPU renders it.',
     exportName: 'AssetWorld',
     sourceUrl: new URL('./asset-world/AssetWorld.svelte', import.meta.url),
     sourceFiles: [
@@ -43,7 +43,17 @@ export const exampleDefinitions = [
       new URL('./asset-world/WorldCamera.typegpu.svelte', import.meta.url),
       new URL('./asset-world/landscape.ts', import.meta.url),
       new URL('./asset-world/model-detail.ts', import.meta.url),
-      new URL('./asset-world/world-profile.ts', import.meta.url)
+      new URL('./asset-world/world-profile.ts', import.meta.url),
+      new URL('./asset-world/Tree.typegpu.svelte', import.meta.url),
+      new URL('./asset-world/Rock.typegpu.svelte', import.meta.url),
+      new URL('./asset-world/Log.typegpu.svelte', import.meta.url),
+      new URL('./asset-world/Tent.typegpu.svelte', import.meta.url),
+      new URL('./asset-world/Campfire.typegpu.svelte', import.meta.url),
+      new URL('./asset-world/Bridge.typegpu.svelte', import.meta.url),
+      new URL('./asset-world/Sign.typegpu.svelte', import.meta.url),
+      new URL('./asset-world/SelectionMarker.typegpu.svelte', import.meta.url),
+      new URL('./asset-world/Terrain.typegpu.svelte', import.meta.url),
+      new URL('./asset-world/WorldLighting.typegpu.svelte', import.meta.url)
     ],
     typeGpuSourceFiles: []
   },

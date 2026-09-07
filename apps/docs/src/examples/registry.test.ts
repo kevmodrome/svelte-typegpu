@@ -44,13 +44,19 @@ describe('docs example registry', () => {
       'AssetWorld.svelte', 'WorldViewport.typegpu.svelte', 'Campsite.typegpu.svelte',
       'Canoe.typegpu.svelte', 'Player.typegpu.svelte', 'MovementPad.svelte',
       'player-controller.ts', 'player-input.ts', 'world.ts', 'Landscape.typegpu.svelte',
-      'WorldCamera.typegpu.svelte', 'landscape.ts', 'model-detail.ts', 'world-profile.ts'
+      'WorldCamera.typegpu.svelte', 'landscape.ts', 'model-detail.ts', 'world-profile.ts',
+      'Tree.typegpu.svelte', 'Rock.typegpu.svelte', 'Log.typegpu.svelte', 'Tent.typegpu.svelte',
+      'Campfire.typegpu.svelte', 'Bridge.typegpu.svelte', 'Sign.typegpu.svelte',
+      'SelectionMarker.typegpu.svelte', 'Terrain.typegpu.svelte', 'WorldLighting.typegpu.svelte'
     ]);
     for (const syntax of ['<canvas', '<model', '<frameTask', 'loadModel(', 'onclick=', 'AbortController']) {
       expect(example.code).toContain(syntax);
     }
     expect(example.code).not.toContain('requestAnimationFrame');
     expect(example.code).not.toContain('sceneProps');
+    for (const syntax of ['<Tree', '<Rock', '<Log', '<WorldLighting', '<Terrain', '<SelectionMarker']) {
+      expect(example.code).toContain(syntax);
+    }
   });
 
   it('keeps metadata complete for every example', () => {

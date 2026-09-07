@@ -27,7 +27,7 @@ var root_2 = $.from_tree([
 		null,
 		[
 			'perspectiveCamera',
-			{ active: '' },
+			null,
 			[
 				'controls',
 				{ mode: 'orbit' },
@@ -86,6 +86,7 @@ export default function CollectionViewport_typegpu($$anchor, $$props) {
 
 			var perspectiveCamera = $.child(scene);
 
+			$.set_attribute(perspectiveCamera, 'active', true);
 			$.set_attribute(perspectiveCamera, 'position', [9, 9, 12]);
 			$.set_attribute(perspectiveCamera, 'target', [0, 0.5, 0]);
 			$.set_attribute(perspectiveCamera, 'fov', 44);

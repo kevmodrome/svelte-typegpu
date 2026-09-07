@@ -4,7 +4,7 @@ export const campsiteModelCount = landmarks.length + trees.length + details.leng
 export const worldCounts = [campsiteModelCount, 1000, 5000, 20000, 50000] as const;
 export const cellSize = 4.4;
 export interface Landscape {
-  placements: Placement[];
+  placements: Placement<'pine' | 'oak' | 'rock' | 'log'>[];
   halfWidth: number;
   halfDepth: number;
 }
@@ -19,7 +19,7 @@ function hash(x: number, z: number) {
 export function createLandscape(count: number): Landscape {
   if (!Number.isInteger(count) || count < campsiteModelCount || count > 50000) throw new RangeError('World count must be between 29 and 50000');
   if (count === campsiteModelCount) return compactLandscape;
-  const placements: Placement[] = [];
+  const placements: Landscape['placements'] = [];
   const required = count - campsiteModelCount;
   let radius = 0;
   function place(cx: number, cz: number) {

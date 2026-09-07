@@ -45,10 +45,21 @@ import worldCamera from '../src/examples/asset-world/WorldCamera.typegpu.svelte'
 import landscape from '../src/examples/asset-world/landscape.ts' with { type: 'text' };
 import modelDetail from '../src/examples/asset-world/model-detail.ts' with { type: 'text' };
 import worldProfile from '../src/examples/asset-world/world-profile.ts' with { type: 'text' };
+import tree from '../src/examples/asset-world/Tree.typegpu.svelte' with { type: 'text' };
+import rock from '../src/examples/asset-world/Rock.typegpu.svelte' with { type: 'text' };
+import log from '../src/examples/asset-world/Log.typegpu.svelte' with { type: 'text' };
+import tent from '../src/examples/asset-world/Tent.typegpu.svelte' with { type: 'text' };
+import campfire from '../src/examples/asset-world/Campfire.typegpu.svelte' with { type: 'text' };
+import bridge from '../src/examples/asset-world/Bridge.typegpu.svelte' with { type: 'text' };
+import sign from '../src/examples/asset-world/Sign.typegpu.svelte' with { type: 'text' };
+import selectionMarker from '../src/examples/asset-world/SelectionMarker.typegpu.svelte' with { type: 'text' };
+import terrain from '../src/examples/asset-world/Terrain.typegpu.svelte' with { type: 'text' };
+import worldLighting from '../src/examples/asset-world/WorldLighting.typegpu.svelte' with { type: 'text' };
 
 export const exampleSourceTexts = {
   'asset-world': [assetWorld, worldViewport, campsite, canoe, player, movementPad, playerController, playerInput, world,
-    landscapeModels, worldCamera, landscape, modelDetail, worldProfile],
+    landscapeModels, worldCamera, landscape, modelDetail, worldProfile,
+    tree, rock, log, tent, campfire, bridge, sign, selectionMarker, terrain, worldLighting],
   'native-events': [nativeEvents],
   'shared-stores': [sharedStores, storeViewport],
   'reactive-collections': [reactiveCollections, collectionViewport, collection],

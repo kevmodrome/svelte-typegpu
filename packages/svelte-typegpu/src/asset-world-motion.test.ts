@@ -15,6 +15,7 @@ import { compileViewportSource } from './viewport-test-utils';
 import { settleComponentUpdates } from './component-test-utils';
 import { loadGlbModel } from './glb-loader';
 import * as world from '../../../apps/docs/src/examples/asset-world/world';
+import { compileWorldObjects } from './test-fixtures/asset-world-components';
 
 const captured = vi.hoisted(() => ({ bindings: [] as unknown[][], counts: [] as number[] }));
 vi.mock('typegpu', async original => {
@@ -60,7 +61,7 @@ describe('real compiled campsite frame delivery', () => {
     const changed = vi.spyOn(gpuRenderer, 'setScene');
     const root = createFragment(), runtime = createTypeGpuRuntimeForTest(root, canvas, gpuRenderer); root.runtime = runtime;
     const Canoe = compileViewportSource(source('Canoe'), { canoePosition: world.canoePosition });
-    const Campsite = compileViewportSource(source('Campsite'), { Canoe, ...world });
+    const Campsite = compileViewportSource(source('Campsite'), { Canoe, ...world, ...compileWorldObjects() });
     const Host = compileViewportSource<{ animate(): void; pause(value: boolean): void; stop(): void }>(`<script>
       import { ${kind} } from 'svelte/motion'; import { onDestroy } from 'svelte';
       let { Campsite, assets } = $props(); let paused = $state(true);

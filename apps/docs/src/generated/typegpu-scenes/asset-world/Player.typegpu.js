@@ -19,30 +19,15 @@ var root = $.from_tree(
 		[
 			'group',
 			null,
-			[
-				'mesh',
-				{ castShadow: '' },
-				['boxGeometry'],
-				['standardMaterial']
-			],
+			['mesh', null, ['boxGeometry'], ['standardMaterial']],
 			' ',
-			[
-				'mesh',
-				{ castShadow: '' },
-				['boxGeometry'],
-				['standardMaterial']
-			]
+			['mesh', null, ['boxGeometry'], ['standardMaterial']]
 		],
 		' ',
 		[
 			'group',
 			null,
-			[
-				'mesh',
-				{ castShadow: '' },
-				['boxGeometry'],
-				['standardMaterial']
-			]
+			['mesh', null, ['boxGeometry'], ['standardMaterial']]
 		]
 	],
 	1
@@ -57,40 +42,15 @@ var root_1 = $.from_tree(
 			{ name: 'camper' },
 			['mesh', null, ['sphereGeometry'], ['basicMaterial']],
 			' ',
-			[
-				'mesh',
-				{ castShadow: '' },
-				['boxGeometry'],
-				['standardMaterial']
-			],
+			['mesh', null, ['boxGeometry'], ['standardMaterial']],
 			' ',
-			[
-				'mesh',
-				{ castShadow: '' },
-				['boxGeometry'],
-				['standardMaterial']
-			],
+			['mesh', null, ['boxGeometry'], ['standardMaterial']],
 			' ',
-			[
-				'mesh',
-				{ castShadow: '' },
-				['sphereGeometry'],
-				['standardMaterial']
-			],
+			['mesh', null, ['sphereGeometry'], ['standardMaterial']],
 			' ',
-			[
-				'mesh',
-				{ castShadow: '' },
-				['boxGeometry'],
-				['standardMaterial']
-			],
+			['mesh', null, ['boxGeometry'], ['standardMaterial']],
 			' ',
-			[
-				'mesh',
-				{ castShadow: '' },
-				['boxGeometry'],
-				['standardMaterial']
-			],
+			['mesh', null, ['boxGeometry'], ['standardMaterial']],
 			' ',,
 		]
 	],
@@ -151,6 +111,7 @@ export default function Player_typegpu($$anchor, $$props) {
 	var mesh_1 = $.sibling(mesh, 2);
 
 	$.set_attribute(mesh_1, 'position', [0, 0.86, 0]);
+	$.set_attribute(mesh_1, 'castShadow', true);
 
 	var boxGeometry = $.child(mesh_1);
 
@@ -167,6 +128,7 @@ export default function Player_typegpu($$anchor, $$props) {
 	var mesh_2 = $.sibling(mesh_1, 2);
 
 	$.set_attribute(mesh_2, 'position', [0, 0.88, -0.25]);
+	$.set_attribute(mesh_2, 'castShadow', true);
 
 	var boxGeometry_1 = $.child(mesh_2);
 
@@ -183,6 +145,7 @@ export default function Player_typegpu($$anchor, $$props) {
 	var mesh_3 = $.sibling(mesh_2, 2);
 
 	$.set_attribute(mesh_3, 'position', [0, 1.36, 0.025]);
+	$.set_attribute(mesh_3, 'castShadow', true);
 
 	var sphereGeometry_1 = $.child(mesh_3);
 
@@ -199,6 +162,7 @@ export default function Player_typegpu($$anchor, $$props) {
 	var mesh_4 = $.sibling(mesh_3, 2);
 
 	$.set_attribute(mesh_4, 'position', [0, 1.54, 0]);
+	$.set_attribute(mesh_4, 'castShadow', true);
 
 	var boxGeometry_2 = $.child(mesh_4);
 
@@ -215,6 +179,7 @@ export default function Player_typegpu($$anchor, $$props) {
 	var mesh_5 = $.sibling(mesh_4, 2);
 
 	$.set_attribute(mesh_5, 'position', [0, 1.48, 0.22]);
+	$.set_attribute(mesh_5, 'castShadow', true);
 
 	var boxGeometry_3 = $.child(mesh_5);
 
@@ -236,6 +201,7 @@ export default function Player_typegpu($$anchor, $$props) {
 		var mesh_6 = $.child(group_1);
 
 		$.set_attribute(mesh_6, 'position', [0, -0.25, 0]);
+		$.set_attribute(mesh_6, 'castShadow', true);
 
 		var boxGeometry_4 = $.child(mesh_6);
 
@@ -252,6 +218,7 @@ export default function Player_typegpu($$anchor, $$props) {
 		var mesh_7 = $.sibling(mesh_6, 2);
 
 		$.set_attribute(mesh_7, 'position', [0, -0.51, 0.07]);
+		$.set_attribute(mesh_7, 'castShadow', true);
 
 		var boxGeometry_5 = $.child(mesh_7);
 
@@ -270,6 +237,7 @@ export default function Player_typegpu($$anchor, $$props) {
 		var mesh_8 = $.child(group_2);
 
 		$.set_attribute(mesh_8, 'position', [0, -0.2, 0]);
+		$.set_attribute(mesh_8, 'castShadow', true);
 
 		var boxGeometry_6 = $.child(mesh_8);
 

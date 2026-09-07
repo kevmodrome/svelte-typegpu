@@ -16,7 +16,7 @@ var root_1 = $.from_tree([
 		null,
 		[
 			'perspectiveCamera',
-			{ active: '' },
+			null,
 			[
 				'controls',
 				{ mode: 'orbit' },
@@ -140,6 +140,7 @@ export default function NativeEvents_typegpu($$anchor, $$props) {
 
 				var perspectiveCamera = $.child(scene);
 
+				$.set_attribute(perspectiveCamera, 'active', true);
 				$.set_attribute(perspectiveCamera, 'position', [7, 6, 12]);
 				$.set_attribute(perspectiveCamera, 'target', [0, 0.5, 0]);
 

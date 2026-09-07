@@ -450,6 +450,31 @@ For a simpler asset path, `<model src="/models/house.glb" />` works. Identical
 URLs share a request within a root. The explicit loader is useful when you need
 Svelte loading/error branches or caller-owned asset retention across unmounts.
 
+### Composing the playable example
+
+The runnable asset world now has `Tree`, `Rock`, `Log`, `Tent`, `Campfire`,
+`Bridge` and `Sign` scene components. Import them from their `.typegpu.svelte`
+files and pass the already-loaded, shared `WorldAssets` object:
+
+```svelte
+<Tree {assets} kind="pine" position={[-8, 0.15, -6]} scale={3} />
+<Tree {assets} kind="oak" position={[-5, 0.12, -6]} scale={2.4} />
+<Rock {assets} position={[1.7, 0.075, 0]} scale={1.5} />
+<Tent {assets} position={[-3.8, 0.15, -1.8]} scale={3}
+  rotation={[0, Math.PI, 0]} onclick={() => selected = 'tent'} />
+```
+
+Each leaf selects its asset and forwards transforms, visibility and click events
+to a single `<model>`, with overridable cast/receive-shadow defaults. `Tree` selects
+pine or oak. `Terrain`, `WorldLighting` and `SelectionMarker` encapsulate other
+world features; `Canoe`, `Player` and `WorldCamera` retain their existing behavior.
+Svelte component boundaries add no scene groups or GPU draws by themselves.
+
+The entry still loads each asset once and prepares LOD families once. Do not
+load models or call `createModelLod` inside every tree. The large landscape uses
+keyed `{#each}` blocks containing the same components as the campsite; geometry
+sharing and renderer instancing cross component boundaries.
+
 ### What GLB/OBJ support actually means
 
 - GLB: static triangle meshes, positions, normals, UV0, supported indices, node

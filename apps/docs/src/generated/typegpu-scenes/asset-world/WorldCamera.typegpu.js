@@ -9,7 +9,7 @@ import * as TypeGpuAttributeValues from 'svelte-typegpu/internal/attribute-value
 var root = $.from_tree([
 	[
 		'perspectiveCamera',
-		{ active: '' },
+		null,
 		[
 			'controls',
 			{ mode: 'orbit' },
@@ -57,6 +57,9 @@ export default function WorldCamera_typegpu($$anchor, $$props) {
 	}
 
 	var perspectiveCamera = root();
+
+	$.set_attribute(perspectiveCamera, 'active', true);
+
 	var controls = $.only_child(perspectiveCamera);
 
 	$.template_effect(
