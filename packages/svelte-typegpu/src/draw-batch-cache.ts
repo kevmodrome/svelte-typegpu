@@ -49,7 +49,9 @@ export function createDrawBatchCache(): TypeGpuDrawBatchCache {
       slots.clear();
       const groups = groupDrawItems(items);
       if (spatialOrder) for (const group of groups) {
-        if (culling || group.items[0]?.geometry.lod) group.items = spatiallyOrderInstances(group.items);
+        if (needsBounds(group.items, culling)) {
+          group.items = spatiallyOrderInstances(group.items, hasShadowParticipants(group.items) ? 256 : undefined);
+        }
       }
       const activeKeys = new Set(groups.map((group) => group.key));
       const batches = groups.map((group, index) =>
@@ -146,7 +148,7 @@ function readDrawBatch(
       ? previous.instances
       : new Float32Array(previous.instances.buffer, 0, requiredFloats);
   const dirtyRanges: TypeGpuInstanceDirtyRange[] = [];
-  const visibility = culling || !!items[0]?.geometry.lod
+  const visibility = needsBounds(items, culling)
     ? previous?.visibility && previous.visibility.capacity >= items.length
       ? previous.visibility
       : new BatchBounds(growInstanceCapacity(items.length), !!items[0]?.geometry.lod)
@@ -173,6 +175,15 @@ function readDrawBatch(
     visibility,
     dirtyRanges
   };
+}
+
+function needsBounds(items: TypeGpuMeshDrawItem[], culling: boolean): boolean {
+  // Retain before a light is enabled, so toggling shadows never repacks a world.
+  return culling || !!items[0]?.geometry.lod || hasShadowParticipants(items);
+}
+
+function hasShadowParticipants(items: TypeGpuMeshDrawItem[]): boolean {
+  return items.some(item => item.castShadow || item.receiveShadow);
 }
 
 function batchBase(

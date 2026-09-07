@@ -108,7 +108,8 @@ describe('retained batch visibility', () => {
   it('bypasses selection in raw mode and handles an empty batch', () => {
     const { batch, selection, frustum, cache } = select([item(10)]);
     selection.select(frustum, undefined, 1); expect(ranges(selection)).toEqual([0, 1]);
-    expect(cache.read([item(10)], false)[0].visibility).toBeUndefined();
+    expect(cache.read([{ ...item(10), castShadow: false, receiveShadow: false }], false)[0].visibility).toBeUndefined();
+    expect(cache.read([item(10)], false)[0].visibility).toBeDefined();
     selection.select(frustum, batch.visibility, 0); expect(selection.rangeCount).toBe(0);
   });
 
@@ -119,12 +120,16 @@ describe('retained batch visibility', () => {
     expect(selection.instanceCount).toBe(items.length);
   });
 
-  it('spatially groups large opaque batches only at structural compilation', () => {
-    const items = Array.from({ length: 4096 }, (_, i) => item(i % 2 ? 10000 + i : i / 4096, `${i}`));
+  it.each([256, 4096])('spatially groups %i opaque instances only at structural compilation', count => {
+    const items = Array.from({ length: count }, (_, i) => item(i % 2 ? 10000 + i : i / count, `${i}`));
     const { batch, selection } = select(items);
     expect(batch.instanceIds).not.toEqual(items.map(item => item.id));
-    expect(selection.instanceCount).toBe(2048); expect(selection.rangeCount).toBe(1);
+    expect(selection.instanceCount).toBe(count / 2); expect(selection.rangeCount).toBe(1);
     expect(items[0].id).toBe('0'); expect(items[1].id).toBe('1');
+  });
+  it('preserves existing canonical order in medium batches that do not participate in shadows', () => {
+    const items = Array.from({ length: 512 }, (_, i) => ({ ...item(512 - i, `${i}`), castShadow: false, receiveShadow: false }));
+    expect(createDrawBatchCache().read(items)[0].instanceIds).toEqual(items.map(item => item.id));
   });
 
   it('never rejects a potentially visible instance across oblique camera views', () => {

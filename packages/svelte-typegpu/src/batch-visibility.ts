@@ -162,9 +162,9 @@ export class VisibilitySelection {
 }
 
 /** Structural-only spatial ordering; animated transforms never change slot identity. */
-export function spatiallyOrderInstances(items: TypeGpuMeshDrawItem[]): TypeGpuMeshDrawItem[] {
+export function spatiallyOrderInstances(items: TypeGpuMeshDrawItem[], minimumCount = SPATIAL_ORDER_THRESHOLD): TypeGpuMeshDrawItem[] {
   const material = items[0]?.material;
-  if (items.length < SPATIAL_ORDER_THRESHOLD || !material || material.transparent ||
+  if (items.length < minimumCount || !material || material.transparent ||
     (material.blendMode ?? 'opaque') !== 'opaque' || material.depthWrite === false ||
     material.depthTest === false || material.opacity < 1 || items.some(item => item.color[3] < 1)) return items;
   const min = [Infinity, Infinity, Infinity], max = [-Infinity, -Infinity, -Infinity];
