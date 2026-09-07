@@ -13,12 +13,14 @@ export class BatchBounds {
   readonly radii: Float64Array;
   readonly leafBase: number;
   readonly leafSize: number;
+  readonly cullLeafSize: number;
   count = 0;
   revision = 0;
   lastRefitNodes = 0;
 
-  constructor(readonly capacity: number) {
-    this.leafSize = capacity < 256 ? 1 : CLUSTER_SIZE;
+  constructor(readonly capacity: number, forLod = false) {
+    this.cullLeafSize = capacity < 256 ? 1 : CLUSTER_SIZE;
+    this.leafSize = forLod ? Math.min(4, this.cullLeafSize) : this.cullLeafSize;
     this.leafBase = growInstanceCapacity(Math.ceil(capacity / this.leafSize));
     this.items = new Float64Array(capacity * 6);
     this.nodes = new Float64Array(this.leafBase * 2 * 6);
@@ -137,7 +139,7 @@ export class VisibilitySelection {
     this.boundsTests++;
     const classification = frustum.classify(bounds.nodes, node * 6);
     if (classification === -1) return;
-    if (classification === 1 || node >= bounds.leafBase) {
+    if (classification === 1 || size <= bounds.cullLeafSize) {
       this.#append(start, Math.min(size, bounds.count - start));
       return;
     }
@@ -172,12 +174,13 @@ export function spatiallyOrderInstances(items: TypeGpuMeshDrawItem[]): TypeGpuMe
     min[axis] = Math.min(min[axis], center);
     max[axis] = Math.max(max[axis], center);
   }
-  const scale = min.map((value, axis) => 1023 / (max[axis] - value || 1));
+  // Preserve world-space aspect ratio; tiny vertical jitter must not separate neighbours.
+  const scale = 1023 / (Math.max(...max.map((value, axis) => value - min[axis])) || 1);
   return items.map(item => {
     let key = 0;
     for (let axis = 0; axis < 3; axis++) {
       const center = (item.bounds.min[axis] + item.bounds.max[axis]) / 2;
-      const coordinate = Math.max(0, Math.min(1023, Math.floor((center - min[axis]) * scale[axis])));
+      const coordinate = Math.max(0, Math.min(1023, Math.floor((center - min[axis]) * scale)));
       key |= spreadBits(coordinate) << axis;
     }
     return { item, key };

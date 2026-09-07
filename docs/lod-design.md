@@ -50,6 +50,13 @@ shadow pass -> unchanged full-detail geometry
   LOD uses that radius and conservative cluster clip-depth limits, not the whole
   cluster's spatial diameter. Unknown bounds/near-plane intersections use high
   detail. Orthographic selection does not depend on camera distance.
+- Large LOD batches retain four-instance leaf bounds, while frustum traversal
+  stops at 32-instance groups as before. A nearby object must not force dozens
+  of distant neighbours to high detail; camera frustum membership stays identical.
+- Morton quantization uses one world-space scale for all axes. Independently
+  normalizing each axis amplified tiny height variation into wide ground-world
+  clusters; the live follow-view probe exposed this and a thin-world regression
+  now checks locality.
 - Renderer-owned selection retains per-cluster hysteresis and bounded ordered
   ranges (192 per batch). Overflow uses full-detail frustum ranges; no holes,
   duplicate instances or transparent-order changes. Cache by view, display size,

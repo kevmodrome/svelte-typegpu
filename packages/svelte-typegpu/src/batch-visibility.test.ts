@@ -28,6 +28,24 @@ function select(items: TypeGpuMeshDrawItem[], spatial = true) {
 function ranges(selection: VisibilitySelection) { return Array.from(selection.ranges.subarray(0, selection.rangeCount * 2)); }
 
 describe('retained batch visibility', () => {
+  it('keeps thin ground-plane worlds spatially local despite small height variation', () => {
+    const items = Array.from({ length: 8192 }, (_, i) => {
+      const value = item(i, `${i}`);
+      value.transform.position = [(i % 128) * 4, ((i * 2654435761) >>> 0) / 2 ** 32 * 0.01, Math.floor(i / 128) * 4];
+      value.bounds = transformBounds(geometry.bounds, value.transform);
+      return value;
+    });
+    const ordered = spatiallyOrderInstances(items);
+    let widest = 0;
+    for (let start = 0; start < ordered.length; start += 32) {
+      const cluster = ordered.slice(start, start + 32);
+      for (const axis of [0, 2]) {
+        const positions = cluster.map(item => item.transform.position[axis]);
+        widest = Math.max(widest, Math.max(...positions) - Math.min(...positions));
+      }
+    }
+    expect(widest).toBeLessThan(100);
+  });
   it('selects disjoint slots without repacking and coalesces adjacent visible slots', () => {
     const { batch, selection, frustum } = select([item(10), item(0), item(0.5), item(20), item(0.3)]);
     expect(ranges(selection)).toEqual([1, 2, 4, 1]); expect(selection.instanceCount).toBe(3);

@@ -49,6 +49,7 @@ export function createGeometryLod(
       (geometry.topology ?? 'triangle-list') !== (source.topology ?? 'triangle-list') ||
       !!geometry.hasVertexAlpha !== !!source.hasVertexAlpha) throw new Error('LOD geometry must retain vertex layout, topology and alpha mode');
     const count = geometry.indexCount ?? geometry.vertexCount;
+    if (!Number.isSafeInteger(count) || count <= 0 || count % 3 !== 0) throw new Error('LOD geometry requires nonempty, complete triangles');
     if (count > previousCount) throw new Error('LOD alternatives must not increase triangle count');
     previousCount = count;
     for (let axis = 0; axis < 3; axis++) {
@@ -61,8 +62,8 @@ export function createGeometryLod(
     }
   }
   const key = `lod:${JSON.stringify([source.key, hysteresis, levels.map(level => [level.maxScreenHeight, level.geometry.key])])}`;
-  return { ...source, key, bounds, lod: { hysteresis,
-    levels: Object.freeze(levels.map(level => Object.freeze({ ...level }))) } };
+  return { ...source, key, bounds, lod: Object.freeze({ hysteresis,
+    levels: Object.freeze(levels.map(level => Object.freeze({ ...level }))) }) };
 }
 
 function validateThresholds(levels: readonly { maxScreenHeight: number }[], hysteresis: number): void {

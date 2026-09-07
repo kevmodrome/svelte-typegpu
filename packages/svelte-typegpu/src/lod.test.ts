@@ -27,6 +27,18 @@ describe('authored LOD assets', () => {
   it('returns the original for no alternatives', () => {
     expect(createGeometryLod(high, [])).toBe(high); const source = model(); expect(createModelLod(source, [])).toBe(source);
   });
+  it('snapshots and freezes selection policy without freezing shared geometry', () => {
+    const input = [{ ...levels[0] }], result = createGeometryLod(high, input);
+    input[0].maxScreenHeight = 100;
+    expect(result.lod!.levels[0].maxScreenHeight).toBe(40);
+    expect(Object.isFrozen(result.lod)).toBe(true); expect(Object.isFrozen(result.lod!.levels)).toBe(true);
+    expect(Object.isFrozen(result.lod!.levels[0])).toBe(true); expect(Object.isFrozen(low)).toBe(false);
+  });
+  it('rejects empty or incomplete levels rather than disappearing at a threshold', () => {
+    for (const vertexCount of [0, 1, 2, NaN, Infinity]) {
+      expect(() => createGeometryLod(high, [{ ...levels[0], geometry: { ...low, vertexCount } }])).toThrow(/triangles/);
+    }
+  });
   it.each([0, -1, Infinity, NaN])('rejects invalid screen height %s', maxScreenHeight => {
     expect(() => createGeometryLod(high, [{ maxScreenHeight, geometry: low }])).toThrow(/screen heights/);
   });

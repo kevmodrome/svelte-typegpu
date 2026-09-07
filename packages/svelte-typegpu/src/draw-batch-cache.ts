@@ -149,7 +149,7 @@ function readDrawBatch(
   const visibility = culling || !!items[0]?.geometry.lod
     ? previous?.visibility && previous.visibility.capacity >= items.length
       ? previous.visibility
-      : new BatchBounds(growInstanceCapacity(items.length))
+      : new BatchBounds(growInstanceCapacity(items.length), !!items[0]?.geometry.lod)
     : undefined;
   visibility?.rebuild(items);
 

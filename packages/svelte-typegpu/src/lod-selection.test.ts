@@ -87,6 +87,18 @@ describe('retained LOD selection', () => {
   it('maintains bounds for LOD even with frustum culling disabled', () => {
     const batch = createDrawBatchCache().read([item(-100, 0)], false)[0]; expect(batch.visibility).toBeDefined();
   });
+  it('uses finer LOD groups without changing frustum instance membership', () => {
+    const items = Array.from({ length: 8192 }, (_, i) => item(Math.floor(i / 4) % 2 ? -100 : 0, i));
+    const coarse = new BatchBounds(8192), fine = new BatchBounds(8192, true);
+    coarse.rebuild(items); fine.rebuild(items);
+    expect(fine.leafSize).toBe(4); expect(fine.cullLeafSize).toBe(32);
+    const matrix = createViewProjectionMatrix(1, camera()), frustum = new Frustum(); frustum.setMatrix(matrix);
+    const a = new VisibilitySelection(), b = new VisibilitySelection();
+    a.select(frustum, coarse, 8192); b.select(frustum, fine, 8192);
+    expect(a.ranges).toEqual(b.ranges); expect(a.instanceCount).toBe(b.instanceCount);
+    expect(projectedHeight(matrix, 400, fine, fine.leafBase + 1)).toBeLessThan(40);
+    expect(projectedHeight(matrix, 400, coarse, coarse.leafBase)).toBeGreaterThan(40);
+  });
   it('bounds projected corner heights under oblique perspective and orthographic views', () => {
     let seed = 17; const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) | 0; return (seed >>> 0) / 2 ** 32; };
     for (const projection of ['perspective', 'orthographic'] as const) {

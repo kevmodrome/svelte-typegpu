@@ -143,13 +143,13 @@ export interface TypeGpuGeometryData {
 }
 
 export interface TypeGpuGeometryLodLevel {
-  maxScreenHeight: number;
-  geometry: TypeGpuGeometryData;
+  readonly maxScreenHeight: number;
+  readonly geometry: TypeGpuGeometryData;
 }
 
 export interface TypeGpuGeometryLod {
-  levels: readonly TypeGpuGeometryLodLevel[];
-  hysteresis: number;
+  readonly levels: readonly TypeGpuGeometryLodLevel[];
+  readonly hysteresis: number;
 }
 
 export interface TypeGpuLoadedModel {
