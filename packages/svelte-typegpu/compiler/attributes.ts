@@ -16,6 +16,11 @@ export function prepareAttributeValues(
           const expression = source.slice(attribute.expression.start, attribute.expression.end);
           output.overwrite(attribute.start, attribute.end, `{...${name()}.props(${expression})}`);
         } else if (attribute.type === 'Attribute') {
+          if (attribute.value === true) {
+            // Static renderer templates otherwise encode bare flags as empty strings.
+            output.overwrite(attribute.start, attribute.end, `${attribute.name}={true}`);
+            continue;
+          }
           const tag = Array.isArray(attribute.value)
             ? attribute.value.length === 1 ? attribute.value[0] : null
             : attribute.value;

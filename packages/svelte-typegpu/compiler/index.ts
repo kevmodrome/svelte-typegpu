@@ -40,8 +40,8 @@ export function prepareTypeGpuSource(source: string, filename: string): Prepared
     else result.prepend(`<script>${code}</script>\n`);
   };
   if (!canvases.length) {
-    if (!values) return { code: source, viewport: false, warnings };
-    addImports(valueImport);
+    if (!result.hasChanged()) return { code: source, viewport: false, warnings };
+    if (values) addImports(valueImport);
     return { code: result.toString(), map: result.generateMap({ source: filename, includeContent: true, hires: true }), viewport: false, warnings };
   }
   const roots = ast.fragment.nodes.filter((node) =>
