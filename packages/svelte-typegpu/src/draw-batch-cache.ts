@@ -48,7 +48,9 @@ export function createDrawBatchCache(): TypeGpuDrawBatchCache {
     read(items, culling = true, spatialOrder = true) {
       slots.clear();
       const groups = groupDrawItems(items);
-      if (culling && spatialOrder) for (const group of groups) group.items = spatiallyOrderInstances(group.items);
+      if (spatialOrder) for (const group of groups) {
+        if (culling || group.items[0]?.geometry.lod) group.items = spatiallyOrderInstances(group.items);
+      }
       const activeKeys = new Set(groups.map((group) => group.key));
       const batches = groups.map((group, index) =>
         readDrawBatch(group, previousBatches.get(group.key), index, culling)
@@ -144,7 +146,7 @@ function readDrawBatch(
       ? previous.instances
       : new Float32Array(previous.instances.buffer, 0, requiredFloats);
   const dirtyRanges: TypeGpuInstanceDirtyRange[] = [];
-  const visibility = culling
+  const visibility = culling || !!items[0]?.geometry.lod
     ? previous?.visibility && previous.visibility.capacity >= items.length
       ? previous.visibility
       : new BatchBounds(growInstanceCapacity(items.length))

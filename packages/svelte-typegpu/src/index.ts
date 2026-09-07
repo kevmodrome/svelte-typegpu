@@ -1,6 +1,8 @@
 export { default } from './svelte-renderer';
 export { onNodeEvent, type TypeGpuAttachment } from './attachments';
 export { loadModel, type TypeGpuModelLoadOptions } from './model-loader';
+export { createGeometryLod, createModelLod, type TypeGpuModelLodLevel } from './lod';
+export type { TypeGpuGeometryData, TypeGpuGeometryLodLevel } from './types';
 export type { TypeGpuLoadedModel } from './types';
 export type {
   TypeGpuEventListenerOptions,

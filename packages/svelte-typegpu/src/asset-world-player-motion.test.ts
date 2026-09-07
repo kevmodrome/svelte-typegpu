@@ -18,6 +18,7 @@ import * as input from '../../../apps/docs/src/examples/asset-world/player-input
 import * as landscape from '../../../apps/docs/src/examples/asset-world/landscape';
 import * as world from '../../../apps/docs/src/examples/asset-world/world';
 import { detailWorldAssets } from '../../../apps/docs/src/examples/asset-world/model-detail';
+import { createModelLod } from './lod';
 import { loadGlbModel } from './glb-loader';
 import * as transforms from './transform';
 
@@ -35,10 +36,14 @@ vi.mock('./typegpu-pipeline', async () => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); captured.bindings.length = 0; captured.counts.length = 0; });
 const source = readFileSync(resolve(process.cwd(), '../../apps/docs/src/examples/asset-world/Player.typegpu.svelte'), 'utf8');
 const componentSource = (name: string) => readFileSync(resolve(process.cwd(), `../../apps/docs/src/examples/asset-world/${name}.typegpu.svelte`), 'utf8');
-const assets = detailWorldAssets(Object.fromEntries(Object.entries(world.assetFiles).map(([key, name]) => {
+const originals = Object.fromEntries(Object.entries(world.assetFiles).map(([key, name]) => {
   const bytes = readFileSync(resolve(process.cwd(), `../../apps/docs/public/assets/asset-world/${name}`));
   return [key, loadGlbModel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), name)];
-})) as world.WorldAssets, 1);
+})) as world.WorldAssets;
+const detailed = detailWorldAssets(originals, 1);
+const assets = Object.fromEntries(Object.entries(detailed).map(([key, asset]) => [key,
+  createModelLod(asset, [{ maxScreenHeight: 80, asset: originals[key as keyof world.WorldAssets] }])
+])) as world.WorldAssets;
 const largeLandscape = landscape.createLandscape(20000);
 
 describe('compiled camper frame delivery in a 20,000-model dense world', () => {
@@ -127,6 +132,9 @@ describe('compiled camper frame delivery in a 20,000-model dense world', () => {
         const visibility = gpuRenderer.getRenderStats!();
         expect(visibility.culledInstances).toBeGreaterThan(0);
         expect(visibility.submittedInstances).toBeLessThan(visibility.candidateInstances);
+        expect(visibility.lodInstances).toBeGreaterThan(0);
+        expect(visibility.lodTrianglesSaved).toBeGreaterThan(0);
+        expect(visibility.lodRangeFallbacks).toBe(0);
         expect(order).toEqual(mode === 'manual' ? ['motion'] : first ? ['render', 'motion'] : ['motion', 'render']);
         const writes = instanceBuffers.flatMap(buffer => buffer.write.mock.calls);
         if (frame > 0) {

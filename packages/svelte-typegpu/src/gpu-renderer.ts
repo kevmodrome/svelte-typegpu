@@ -11,6 +11,7 @@ import tgpu, {
 import { createFpsMeter } from './fps-meter';
 import { Frustum } from './frustum';
 import { VisibilitySelection } from './batch-visibility';
+import { LodSelection } from './lod-selection';
 import type { TypeGpuFrameContext } from './frame-tasks';
 import { createViewProjectionMatrix } from './camera-math';
 import { Dirty } from './dirty';
@@ -162,6 +163,10 @@ export interface TypeGpuRenderStats {
   cullingCpuMs: number;
   boundsTests: number;
   rangeFallbacks: number;
+  lodInstances: number;
+  lodTrianglesSaved: number;
+  lodCpuMs: number;
+  lodRangeFallbacks: number;
 }
 
 export interface TypeGpuRendererOptions {
@@ -209,10 +214,13 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #drawBatches: TypeGpuDrawBatch[] = [];
   #frustum = new Frustum();
   #visibility = new Map<string, VisibilitySelection>();
+  #lod = new Map<string, { selection: LodSelection; batches: TypeGpuDrawBatch[] }>();
+  #lodRange = { ranges: new Uint32Array(2), rangeCount: 1 };
   #retainedInstances = 0;
   #renderStats: TypeGpuRenderStats = {
     retainedInstances: 0, candidateInstances: 0, submittedInstances: 0, culledInstances: 0,
-    colorDraws: 0, colorTriangles: 0, shadowTriangles: 0, cullingCpuMs: 0, boundsTests: 0, rangeFallbacks: 0
+    colorDraws: 0, colorTriangles: 0, shadowTriangles: 0, cullingCpuMs: 0, boundsTests: 0, rangeFallbacks: 0,
+    lodInstances: 0, lodTrianglesSaved: 0, lodCpuMs: 0, lodRangeFallbacks: 0
   };
   #fpsMeter;
   #frame: number | null = null;
@@ -415,9 +423,19 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
   #syncMeshResources(scene: TypeGpuSceneState): void {
     const activeBatches = new Set(scene.drawBatches.map(batch => batch.key));
     for (const key of this.#visibility.keys()) if (!activeBatches.has(key)) this.#visibility.delete(key);
+    for (const key of this.#lod.keys()) if (!activeBatches.has(key)) this.#lod.delete(key);
     for (const batch of scene.drawBatches) {
       if (!this.#visibility.has(batch.key)) this.#visibility.set(batch.key, new VisibilitySelection());
       this.#geometryResources.getOrCreate(batch);
+      if (batch.geometry.lod && batch.visibility) {
+        const previous = this.#lod.get(batch.key)?.selection;
+        const selection = previous?.policy === batch.geometry.lod && previous.clusterLevels.length >= batch.visibility.leafBase
+          ? previous : new LodSelection(batch.visibility.leafBase, batch.geometry.lod);
+        const batches = [batch, ...batch.geometry.lod.levels.map(level => ({ ...batch,
+          geometry: level.geometry, geometryKey: level.geometry.key }))];
+        for (const variant of batches) this.#geometryResources.getOrCreate(variant);
+        this.#lod.set(batch.key, { selection, batches });
+      } else this.#lod.delete(batch.key);
       this.#textureResources.getOrLoad(batch.material.map ?? batch.material.texture ?? null);
       this.#samplerResources.getOrCreate(batch.material.sampler ?? {
         key: batch.material.samplerKey ?? 'sampler:default',
@@ -544,6 +562,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     stats.candidateInstances = stats.submittedInstances = stats.culledInstances = 0;
     stats.colorDraws = stats.colorTriangles = stats.shadowTriangles = 0;
     stats.cullingCpuMs = stats.boundsTests = stats.rangeFallbacks = 0;
+    stats.lodInstances = stats.lodTrianglesSaved = stats.lodCpuMs = stats.lodRangeFallbacks = 0;
     const activeShadow = this.#activeShadow();
 
     this.#prepareShadowResources(activeShadow);
@@ -595,13 +614,37 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
             stats.candidateInstances += batch.instanceCount;
             stats.culledInstances += batch.instanceCount - selection.instanceCount;
             if (!selection.instanceCount) return;
-            const geometryResource = this.#geometryResources.getOrCreate(batch);
             const instanceResource = this.#instanceBuffers.getOrCreate(batch);
             const materialResource = this.#materialResources.getOrCreate(batch.material);
             const pipeline = this.#pipelines.getOrCreate(batch, this.#renderSettings.depth);
 
             if (!instanceResource.buffer || instanceResource.instanceCount === 0) return;
             stats.submittedInstances += selection.instanceCount;
+            const lod = this.#lod.get(batch.key);
+            if (lod) {
+              const start = performance.now();
+              lod.selection.select(this.#uniformData, this.#frustum.revision, this.#displaySize.height, batch.visibility!, selection);
+              stats.lodCpuMs += performance.now() - start;
+              stats.lodRangeFallbacks += Number(lod.selection.fallback);
+              stats.colorDraws += lod.selection.rangeCount;
+              const fullTriangles = (batch.geometry.indexCount ?? batch.geometry.vertexCount) / 3;
+              for (let range = 0; range < lod.selection.rangeCount; range++) {
+                const level = lod.selection.levels[range], variant = lod.batches[level];
+                const geometryResource = this.#geometryResources.getOrCreate(variant);
+                const count = lod.selection.ranges[range * 2 + 1];
+                const triangles = (geometryResource.indexCount ?? variant.geometry.vertexCount) / 3 * count;
+                stats.colorTriangles += triangles;
+                stats.lodTrianglesSaved += fullTriangles * count - triangles;
+                if (level > 0) stats.lodInstances += count;
+                this.#lodRange.ranges[0] = lod.selection.ranges[range * 2];
+                this.#lodRange.ranges[1] = count;
+                drawTypeGpuMaterialBatch({ pipeline, pass, sceneBindGroup: this.#sceneBindGroup,
+                  lightingBindGroup: this.#lightingBindGroup, shadowBindGroup: this.#shadowBindGroup,
+                  geometryResource, instanceResource, materialResource, batch: variant, selection: this.#lodRange });
+              }
+              return;
+            }
+            const geometryResource = this.#geometryResources.getOrCreate(batch);
             stats.colorDraws += selection.rangeCount;
             stats.colorTriangles += (geometryResource.indexCount ?? batch.geometry.vertexCount) / 3 * selection.instanceCount;
 
@@ -674,6 +717,7 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     this.#shaderPassResources.clear();
     this.#renderQueue = [];
     this.#visibility.clear();
+    this.#lod.clear();
     this.#shadowBuffer.destroy();
     this.#uniformBuffer.destroy();
     this.root.destroy();
@@ -1051,7 +1095,7 @@ export function drawTypeGpuMaterialBatch({
   instanceResource: TypeGpuInstanceBufferResource;
   materialResource: TypeGpuMaterialResource;
   batch: TypeGpuDrawBatch;
-  selection: VisibilitySelection;
+  selection: Pick<VisibilitySelection, 'ranges' | 'rangeCount'>;
 }): void {
   if (!instanceResource.buffer) return;
 

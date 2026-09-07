@@ -138,6 +138,18 @@ export interface TypeGpuGeometryData {
   topology?: TypeGpuPrimitiveTopology;
   layoutKey?: string;
   hasVertexAlpha?: boolean;
+  /** Authored color-pass alternatives. Construct with createGeometryLod/createModelLod. */
+  lod?: TypeGpuGeometryLod;
+}
+
+export interface TypeGpuGeometryLodLevel {
+  maxScreenHeight: number;
+  geometry: TypeGpuGeometryData;
+}
+
+export interface TypeGpuGeometryLod {
+  levels: readonly TypeGpuGeometryLodLevel[];
+  hysteresis: number;
 }
 
 export interface TypeGpuLoadedModel {

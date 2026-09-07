@@ -10,6 +10,7 @@ const SPATIAL_ORDER_THRESHOLD = 4096;
 export class BatchBounds {
   readonly items: Float64Array;
   readonly nodes: Float64Array;
+  readonly radii: Float64Array;
   readonly leafBase: number;
   readonly leafSize: number;
   count = 0;
@@ -21,6 +22,7 @@ export class BatchBounds {
     this.leafBase = growInstanceCapacity(Math.ceil(capacity / this.leafSize));
     this.items = new Float64Array(capacity * 6);
     this.nodes = new Float64Array(this.leafBase * 2 * 6);
+    this.radii = new Float64Array(this.leafBase * 2);
   }
 
   rebuild(items: TypeGpuMeshDrawItem[]): void {
@@ -67,6 +69,13 @@ export class BatchBounds {
     const offset = (this.leafBase + leaf) * 6;
     const start = leaf * this.leafSize;
     const end = Math.min(start + this.leafSize, this.count);
+    let radius = 0;
+    for (let i = start; i < end; i++) {
+      const offset = i * 6;
+      radius = Math.max(radius, Math.hypot(this.items[offset + 3] - this.items[offset],
+        this.items[offset + 4] - this.items[offset + 1], this.items[offset + 5] - this.items[offset + 2]) / 2);
+    }
+    this.radii[this.leafBase + leaf] = radius;
     for (let axis = 0; axis < 3; axis++) {
       let min = Infinity, max = -Infinity;
       for (let i = start; i < end; i++) {
@@ -79,7 +88,9 @@ export class BatchBounds {
   }
 
   #refitParent(node: number): boolean {
-    let changed = false;
+    const radius = Math.max(this.radii[node * 2], this.radii[node * 2 + 1]);
+    let changed = this.radii[node] !== radius;
+    this.radii[node] = radius;
     for (let axis = 0; axis < 6; axis++) {
       const left = this.nodes[node * 12 + axis], right = this.nodes[node * 12 + 6 + axis];
       const value = axis < 3 ? Math.min(left, right) : Math.max(left, right);

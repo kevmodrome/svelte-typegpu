@@ -582,6 +582,7 @@ function liveResourceKeysFor(items: TypeGpuMeshDrawItem[]): TypeGpuLiveResourceK
   for (const item of items) {
     const batch = drawBatchKeysForItem(item);
     live.geometries.add(batch.geometryKey);
+    for (const level of item.geometry.lod?.levels ?? []) live.geometries.add(level.geometry.key);
     live.materials.add(batch.materialKey);
     live.pipelines.add(batch.pipelineKey);
     live.textures.add(item.material.textureKey ?? 'solid:white');
