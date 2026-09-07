@@ -593,8 +593,27 @@ crossfade, streaming or automatic generation of low-detail assets.
 
 `getRenderStats()` adds `lodInstances`, `lodTrianglesSaved`, `lodCpuMs` and
 `lodRangeFallbacks`. The asset-world LOD checkbox uses its shared 16x/4x/1x
-flat-subdivision variants, preserving the original appearance. At 1x it has no
-lower level. It does not demonstrate mesh decimation below the original assets.
+flat-subdivision variants, preserving the original appearance. Its separate
+**Distant meshes** checkbox appends an opt-in, simplified level below the original
+GLB at 12 CSS pixels. This also makes LOD useful at 1x density. The example prepares
+trees, rocks and logs once per shared asset with meshoptimizer, before assigning
+the resulting families to existing components:
+
+```ts
+// Asset-world preparation, outside the placement loop and frame tasks.
+const distant = await prepareDistantWorldAssets(originals);
+const assets = lodWorldAssets(originals, 2, distant);
+```
+
+```svelte
+<Tree {assets} kind="pine" position={[10, 0, -20]} />
+```
+
+These two preparation helpers belong to the example, not the renderer package.
+No camera distance conditions or component unmounts are needed. Simplification
+changes appearance slightly; it is not HLOD or a textured impostor. Unsupported
+textured/alpha meshes keep their original geometry. See the
+[distant-mesh measurements and limitations](./distant-meshes-results.md).
 
 ### Animation costs
 

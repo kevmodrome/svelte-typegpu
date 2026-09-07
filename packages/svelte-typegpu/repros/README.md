@@ -59,6 +59,23 @@ to limit the LOD GPU sweep to one view. The compact gameplay probe enables LOD
 and frustum culling at 16x when `SVELTE_PROBE_LOD=1`. See the
 [LOD design and measured results](../../../docs/lod-results.md).
 
+For below-original distant meshes (50k, 16x maximum, frustum and LOD enabled):
+
+```sh
+rtk proxy env TMPDIR=/tmp SVELTE_PROBE_DISTANT=1 pnpm --filter svelte-typegpu exec node repros/asset-world-gpu-profile.mjs
+rtk proxy env TMPDIR=/tmp SVELTE_PROBE_DISTANT=1 SVELTE_PROBE_WIDTH=390 pnpm --filter svelte-typegpu exec node repros/asset-world-gpu-profile.mjs
+rtk proxy env TMPDIR=/tmp SVELTE_PROBE_DISTANT=1 SVELTE_PROBE_LOD=1 SVELTE_PROBE_CULLING=1 SVELTE_PROBE_OCCLUSION=1 SVELTE_PROBE_GPU_TIMING=1 pnpm --filter svelte-typegpu exec node repros/asset-world-input.mjs
+```
+
+This separate sweep compares ordinary LOD with the opt-in Distant meshes level
+in baseline/distant/distant/baseline order. It gives both asset families the same
+camera history to avoid bias from LOD hysteresis. It verifies workload reduction,
+retained instance membership, resources, callbacks, bounded pixel differences
+and nonoverflowing controls. Run it without concurrent builds (which trigger HMR)
+or test workloads. The color-pass benchmark leaves Hi-Z and shadows off; the
+input probe checks their optional integration. See
+[results and scope](../../../docs/distant-meshes-results.md).
+
 ```sh
 rtk proxy env TMPDIR=/tmp pnpm --filter svelte-typegpu exec node repros/asset-world-stress.mjs
 ```

@@ -57,6 +57,7 @@ try {
   const lod = process.env.SVELTE_PROBE_LOD === '1';
   await world.getByRole('combobox', { name: 'Triangle density' }).selectOption(lod ? '2' : '0');
   if (lod) await world.getByRole('checkbox', { name: 'LOD', exact: true }).check();
+  if (process.env.SVELTE_PROBE_DISTANT === '1') await world.getByRole('checkbox', { name: 'Distant meshes', exact: true }).check();
   await world.getByRole('combobox', { name: 'Model count' }).selectOption('50000');
   await world.getByRole('button', { name: 'Follow camper' }).click();
   if (process.env.SVELTE_PROBE_CULLING === '1') await world.getByRole('checkbox', { name: 'Frustum culling', exact: true }).check();

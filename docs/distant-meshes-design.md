@@ -86,3 +86,14 @@ Do not add a runtime dependency to the renderer. If GPU savings or visual qualit
 are poor, keep the option off and use the measurements to guide the next feature.
 
 Algorithm reference: [meshoptimizer simplification](https://meshoptimizer.org/).
+
+## Implementation review
+
+All three slices are complete. No renderer API or scheduling path changed.
+Use the typed docs-only meshoptimizer package rather than untyped declarations
+for Three's bundled copy. The existing compiled 20k-world motion matrix now uses
+the actual prepared assets; additional compiled DOM tests cover async races.
+Real GPU comparisons confirm strong overview savings and a mobile-follow
+triangle/draw/CPU tradeoff. The option remains off by default. True HLOD and
+impostors were not implemented in this first slice. See
+[measured results and the remaining cold-input latency](./distant-meshes-results.md).

@@ -153,7 +153,8 @@ Clustering did not consistently earn its overhead, especially with LOD, so it
 is not enabled for consumers. The live LOD+cluster test delivered 300 frames for
 300 callbacks at approximately 120 Hz, but this is not a monitor refresh claim.
 
-The next asset-world investigation is HLOD/impostors for *visible* distant
-geometry, not another occlusion backend. Its consumer contract should be authored
-representations on reusable asset components, selected by screen-space error,
-without unmounting gameplay state or requiring manual per-frame switching.
+The next asset-world direction is cheaper *visible* distant geometry, not another
+occlusion backend. The first measured step is now the opt-in
+[Distant meshes level](./distant-meshes-results.md): below-original geometry LOD
+on retained reusable components. True HLOD/impostors remain separate features;
+they must preserve gameplay state without manual per-frame component switching.

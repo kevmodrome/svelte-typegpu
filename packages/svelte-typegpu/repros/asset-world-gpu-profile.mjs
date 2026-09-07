@@ -9,6 +9,7 @@ const { chromium } = require('playwright');
 const { PNG } = require('pngjs');
 const cullingSweep = process.env.SVELTE_PROBE_CULLING === '1';
 const lodSweep = process.env.SVELTE_PROBE_LOD === '1';
+const distantSweep = process.env.SVELTE_PROBE_DISTANT === '1';
 const views = process.env.SVELTE_PROBE_VIEW ? [process.env.SVELTE_PROBE_VIEW] : ['World overview', 'Follow camper'];
 assert(views.every(view => ['World overview', 'Follow camper'].includes(view)), 'Unknown probe camera view');
 const width = Number(process.env.SVELTE_PROBE_WIDTH ?? 1440);
@@ -104,17 +105,27 @@ try {
   await canvas.scrollIntoViewIfNeeded();
   await world.getByRole('combobox', { name: 'Model count' }).selectOption('50000');
   await page.waitForFunction(() => document.querySelector('[data-metric="models"]')?.textContent === '50,000');
-  const cases = lodSweep
+  const cases = distantSweep
+    ? views.flatMap(view => [false, true, true, false].map(distant => ({ view, detail: 2, culling: true, lod: true, distant, tinyScissor: false })))
+    : lodSweep
     ? views.flatMap(view => [false, true].flatMap(culling => [false, true].map(lod => ({ view, detail: 2, culling, lod, tinyScissor: false }))))
     : cullingSweep
     ? ['World overview', 'Follow camper'].flatMap(view => [0, 2].flatMap(detail => [false, true].map(culling => ({ view, detail, culling, tinyScissor: false }))))
     : [[0, false], [1, false], [2, false], [2, true]].map(([detail, tinyScissor]) => ({ view: 'World overview', detail, tinyScissor, culling: false }));
-  for (const { detail, tinyScissor, view, culling, lod = false } of cases) {
+  for (const { detail, tinyScissor, view, culling, lod = false, distant = false } of cases) {
     await world.getByRole('combobox', { name: 'Triangle density' }).selectOption(String(detail));
-    if (cullingSweep || lodSweep) {
+    if (cullingSweep || lodSweep || distantSweep) {
       await world.getByRole('button', { name: view, exact: true }).click();
       await world.getByRole('checkbox', { name: 'Frustum culling', exact: true }).setChecked(culling);
       await world.getByRole('checkbox', { name: 'LOD', exact: true }).setChecked(lod);
+      if (distantSweep) await world.getByRole('checkbox', { name: 'Distant meshes', exact: true }).setChecked(distant);
+    }
+    if (distantSweep) {
+      await page.waitForTimeout(1000);
+      // Give both families the same camera history; LOD intentionally retains hysteresis.
+      await world.getByRole('button', { name: view === 'World overview' ? 'Follow camper' : 'World overview', exact: true }).click();
+      await page.waitForTimeout(300);
+      await world.getByRole('button', { name: view, exact: true }).click();
     }
     await page.evaluate(tiny => window.gpuProfile.tinyScissor = tiny, tinyScissor);
     await page.waitForTimeout(2000);
@@ -134,13 +145,13 @@ try {
         workload: p.lastDraws, resources: p.resources,
         metrics: Object.fromEntries([...document.querySelectorAll('[data-metric]')].map(element => [element.dataset.metric, element.textContent])), errors: p.errors };
     }, start);
-    results.push({ detail, tinyScissor, view, culling, lod, ...result }); console.log(JSON.stringify(results.at(-1)));
+    results.push({ detail, tinyScissor, view, culling, lod, distant, ...result }); console.log(JSON.stringify(results.at(-1)));
     await writeFile(resolve(output, 'results.json'), JSON.stringify(results, null, 2));
-    if (cullingSweep || lodSweep) await world.screenshot({ path: resolve(output, `${width}-${view.replaceAll(' ', '-')}-${detail}-${culling ? 'culled' : 'raw'}${lod ? '-lod' : ''}.png`) });
+    if (cullingSweep || lodSweep || distantSweep) await world.screenshot({ path: resolve(output, `${width}-${view.replaceAll(' ', '-')}-${detail}-${culling ? 'culled' : 'raw'}${lod ? '-lod' : ''}${distant ? '-distant' : ''}.png`) });
     assert(result.samples > 5); assert.deepEqual(result.errors, []);
     assert.deepEqual(result.resources, resources, 'Steady frames reuse GPU resources');
     assert(Math.abs(result.frames - result.callbacks) <= 2, 'Renderer delivers browser callbacks without alternate-frame skips');
-    if (cullingSweep || lodSweep) {
+    if (cullingSweep || lodSweep || distantSweep) {
       assert.equal(Number(result.metrics.triangles.replaceAll(',', '')), result.workload.triangles);
       assert.equal(Number(result.metrics.instances.replaceAll(',', '')), result.workload.instances);
       assert.equal(Number(result.metrics.draws), result.workload.draws);
@@ -148,7 +159,38 @@ try {
       if (lod) assert(Number(result.metrics['lod-instances'].replaceAll(',', '')) > 0, 'Visible geometry uses lower levels');
     }
   }
-  if (lodSweep) {
+  if (distantSweep) {
+    for (const view of views) {
+      const baseline = results.find(r => r.view === view && !r.distant), reduced = results.find(r => r.view === view && r.distant);
+      assert(reduced.workload.triangles < baseline.workload.triangles, 'Distant levels reduce original visible geometry');
+      assert.equal(reduced.workload.instances, baseline.workload.instances, 'Distant levels retain canonical membership');
+    }
+    await world.getByRole('checkbox', { name: 'Pause motion' }).check();
+    for (const view of views) {
+      await world.getByRole('button', { name: view, exact: true }).click();
+      const images = [];
+      for (const distant of [false, true]) {
+        await world.getByRole('checkbox', { name: 'Distant meshes', exact: true }).setChecked(distant);
+        await page.waitForTimeout(700);
+        await world.getByRole('button', { name: view === 'World overview' ? 'Follow camper' : 'World overview', exact: true }).click();
+        await page.waitForTimeout(300);
+        await world.getByRole('button', { name: view, exact: true }).click();
+        await page.waitForTimeout(1000);
+        images.push(PNG.sync.read(await canvas.screenshot({ path: resolve(output, `${width}-${view.replaceAll(' ', '-')}-distant-frozen-${distant}.png`) })));
+      }
+      const [base, reduced] = images;
+      let changed = 0, colored = 0;
+      for (let i = 0; i < base.data.length; i += 4) {
+        if (Math.max(...[0, 1, 2].map(c => Math.abs(base.data[i + c] - reduced.data[i + c]))) > 10) changed++;
+        if (Math.abs(reduced.data[i] - reduced.data[i + 1]) > 20) colored++;
+      }
+      const changedFraction = changed / (base.width * base.height);
+      console.log(JSON.stringify({ view, width, changedFraction, coloredPixels: colored }));
+      assert(colored > 100, 'Reduced canvas is nonblank');
+      assert(changedFraction < 0.04, 'Distant approximation remains visually bounded');
+    }
+    assert(await world.evaluate(el => el.scrollWidth <= el.clientWidth), 'Controls do not overflow');
+  } else if (lodSweep) {
     for (const view of views) for (const culling of [false, true]) {
       const raw = results.find(r => r.view === view && r.culling === culling && !r.lod);
       const lod = results.find(r => r.view === view && r.culling === culling && r.lod);
