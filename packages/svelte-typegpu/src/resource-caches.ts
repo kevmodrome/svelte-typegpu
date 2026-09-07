@@ -329,6 +329,9 @@ export class TextureResourceCache {
         .$usage('sampled')
         .$name(`TypeGPU material texture ${textureSourceLabel(source)}`);
 
+      // WebGPU external-image copies require RENDER_ATTACHMENT as well as
+      // COPY_DST. Typed-array uploads do not need this additional usage.
+      if (!ArrayBuffer.isView(image.source)) texture.$usage('render');
       writeLoadedTexture(texture, image);
 
       if (!this.#isLiveResource(resource, generation)) {

@@ -10,6 +10,12 @@ import { typegpuSvelte } from '../compiler/vite.ts';
 const require = process.env.SVELTE_PROBE_BROWSER_DEPENDENCIES
   ? createRequire(resolve(process.env.SVELTE_PROBE_BROWSER_DEPENDENCIES, 'package.json')) : createRequire(import.meta.url);
 const { chromium } = require('playwright'), { PNG } = require('pngjs');
+const wallCount = process.env.SVELTE_PROBE_SHARED_OCCLUDERS ? 64 : 2;
+const texture = new PNG({ width: 2, height: 2 }); texture.data.fill(255);
+// Opaque blending writes depth even for a sampled zero alpha; the built-in
+// material has no discard. Check that enabling Hi-Z does not change that.
+texture.data[3] = 0;
+const textureUrl = process.env.SVELTE_PROBE_TEXTURES ? `data:image/png;base64,${PNG.sync.write(texture).toString('base64')}` : null;
 const workspace = fileURLToPath(new URL('../../../', import.meta.url));
 const app = resolve(workspace, 'apps/example');
 const entry = resolve(app, 'src/__occlusion-probe.js');
@@ -23,7 +29,8 @@ const source = `<script>
   import { createMaterialDescriptor } from '../../../packages/svelte-typegpu/src/material-descriptors';
   let { onready } = $props();
   let enabled = $state(false), camera = $state(0), walls = $state(true), lod = $state(false);
-  const material = createMaterialDescriptor('basic', { color: [0.1,0.7,0.5] });
+  const texture = ${JSON.stringify(textureUrl)};
+  const material = createMaterialDescriptor('basic', { color: [0.1,0.7,0.5], map: texture });
   const high = createSphereGeometryData(0.27, 32, 16), low = createSphereGeometryData(0.27, 16, 8);
   low.indexData = Uint32Array.from({ length: low.vertexCount }, (_, i) => i);
   low.indexCount = low.vertexCount; low.indexFormat = 'uint32'; low.key += ':indexed';
@@ -37,8 +44,11 @@ const source = `<script>
     <perspectiveCamera active position={[camera,4,24]} target={[0,2,-12]} fov={55} far={180} />
     <ambientLight intensity={1} />
     {#if walls}
-      <mesh position={[-9,5,3]} scale={[15,12,1]}><boxGeometry /><basicMaterial color={[0.6,0.2,0.1]} /></mesh>
-      <mesh position={[9,5,3]} scale={[15,12,1]}><boxGeometry /><basicMaterial color={[0.6,0.2,0.1]} /></mesh>
+      {#each Array(${wallCount}) as _, i}
+        <mesh position={[i === 0 ? -9 : i === 1 ? 9 : 1000 + i * 20,5,3]} scale={[15,12,1]}>
+          <boxGeometry /><basicMaterial color={[0.6,0.2,0.1]} map={texture} />
+        </mesh>
+      {/each}
     {/if}
     {#each Array(6000) as _, i}
       <model asset={lod ? levels : asset} position={[(i%60-30)*0.65, Math.floor(i/1200)*1.1, -Math.floor(i/60)%20*1.3-2]} />
@@ -61,7 +71,7 @@ const server = await createServer({ root: app, configFile: false, logLevel: 'err
     },
     configureServer(server) { server.middlewares.use('/occlusion-probe', async (_req, res) => {
       res.setHeader('content-type', 'text/html'); res.end(await server.transformIndexHtml('/occlusion-probe',
-        '<!doctype html><style>body{margin:0}</style><script type="module" src="/src/__occlusion-probe.js"></script>'));
+        '<!doctype html><link rel="icon" href="data:,"><style>body{margin:0}</style><script type="module" src="/src/__occlusion-probe.js"></script>'));
     }); }
   }, typegpuSvelte({ configFile: false })], server: { host: '127.0.0.1', port: 0, watch: null, fs: { allow: [workspace] } } });
 let browser;
@@ -208,7 +218,7 @@ try {
     }
     let changed = 0, colored = 0;
     for (let i = 0; i < images[0].data.length; i += 4) {
-      if ([0,1,2].some(c => Math.abs(images[0].data[i+c] - images[1].data[i+c]) > 8)) changed++;
+      if ([0,1,2,3].some(c => Math.abs(images[0].data[i+c] - images[1].data[i+c]) > 8)) changed++;
       if (Math.abs(images[0].data[i] - images[0].data[i+1]) > 30) colored++;
     }
     console.log(JSON.stringify({ walls, camera, lod, changed, colored }));

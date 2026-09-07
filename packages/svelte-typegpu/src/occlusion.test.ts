@@ -3,7 +3,8 @@ import type { TgpuRoot } from 'typegpu';
 import { createElement, insert, removeAttribute, setAttribute } from './core';
 import { createSceneState, createTypeGpuSceneCache } from './scene-compiler';
 import { createFakeGpuRoot, enableFakeOcclusion } from './gpu-test-utils';
-import { HiZOcclusion, isOcclusionEligible, isUsefulOccluder, packOcclusionBounds, pyramidSize } from './occlusion';
+import { HiZOcclusion, isOcclusionEligible, packOcclusionBounds, pyramidSize } from './occlusion';
+import { MAX_OCCLUDER_DRAWS, MAX_OCCLUDER_TESTS, MAX_OCCLUDER_TRIANGLES, OccluderSelection } from './occluder-selection';
 import { drawTypeGpuMaterialBatch } from './gpu-renderer';
 import { createViewProjectionMatrix } from './camera-math';
 
@@ -52,12 +53,49 @@ describe('conservative occlusion contracts', () => {
     const { batch } = fixture(1);
     expect(isOcclusionEligible(batch)).toBe(true);
     const matrix = createViewProjectionMatrix(1, { projection: 'perspective', position: [0,0,2], target: [0,0,0], fov: 45, near: 0.1, far: 100 });
-    expect(isUsefulOccluder(batch, matrix)).toBe(true);
+    const selection = new OccluderSelection();
+    selection.select([batch], matrix, 0);
+    expect(selection.count).toBe(1);
     for (const patch of [{ transparent: true }, { depthTest: false }, { depthWrite: false }, { opacity: 0.8 }, { blendMode: 'alpha' }]) {
       expect(isOcclusionEligible({ ...batch, material: { ...batch.material, ...patch } } as typeof batch)).toBe(false);
     }
-    expect(isUsefulOccluder({ ...batch, instanceCount: 100000 }, matrix)).toBe(false);
+    expect(isOcclusionEligible({ ...batch, material: { ...batch.material, map: { kind: 'url', src: 'opaque.png' } } })).toBe(true);
     expect(isOcclusionEligible({ ...batch, geometry: { ...batch.geometry, hasVertexAlpha: true } })).toBe(false);
+  });
+
+  it('selects individual walls in large shared batches, caches, and obeys global budgets', () => {
+    const { batch } = fixture(5000);
+    const matrix = createViewProjectionMatrix(1, { projection: 'perspective', position: [0,0,2], target: [0,0,0], fov: 45, near: 0.1, far: 100 });
+    const selection = new OccluderSelection(), batches = [batch];
+    selection.select(batches, matrix, 1);
+    expect(selection.count).toBeGreaterThan(0);
+    expect(selection.count).toBeLessThanOrEqual(MAX_OCCLUDER_DRAWS);
+    expect(selection.triangles).toBeLessThanOrEqual(MAX_OCCLUDER_TRIANGLES);
+    expect(selection.tests).toBeLessThanOrEqual(MAX_OCCLUDER_TESTS);
+    expect(selection.fullBatches.size).toBe(0);
+    expect(selection.entries[0].count).toBe(1);
+    const entries = [...selection.entries];
+    selection.select(batches, matrix, 1);
+    expect(selection.tests).toBe(0);
+    expect(selection.entries.every(entry => entries.includes(entry))).toBe(true);
+    // Alpha can change without changing spatial bounds. The renderer explicitly
+    // invalidates selection on sparse instance or material updates.
+    const first = selection.entries[0].first;
+    batch.instances[first * 24 + 7] = 0.5;
+    selection.invalidate(); selection.select(batches, matrix, 1);
+    expect(selection.tests).toBeGreaterThan(0);
+    expect(selection.entries.slice(0, selection.count).some(entry => entry.first === first)).toBe(false);
+  });
+
+  it('ranks later useful batches instead of accepting the first 16 and bounds total triangles', () => {
+    const { batch } = fixture(1);
+    const matrix = createViewProjectionMatrix(1, { projection: 'perspective', position: [0,0,2], target: [0,0,0], fov: 45, near: 0.1, far: 100 });
+    const batches = Array.from({ length: 40 }, (_, i) => ({ ...batch, key: `batch-${i}`,
+      geometry: { ...batch.geometry, vertexCount: i === 39 ? 3 : 12288 } }));
+    const selection = new OccluderSelection(); selection.select(batches, matrix, 1);
+    expect(selection.entries[0].batch.key).toBe('batch-39');
+    expect(selection.triangles).toBeLessThanOrEqual(MAX_OCCLUDER_TRIANGLES);
+    expect(selection.count).toBeLessThanOrEqual(MAX_OCCLUDER_DRAWS);
   });
 
   it('retains metadata and buffers, uploads only changed bounds, prunes and disposes', () => {

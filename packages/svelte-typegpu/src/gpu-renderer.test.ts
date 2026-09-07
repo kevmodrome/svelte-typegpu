@@ -234,6 +234,7 @@ describe('TypeGPU GPU renderer', () => {
     await settleAsyncTextureLoad();
     expect(resource.status).toBe('ready');
     expect(close).toHaveBeenCalledOnce();
+    expect(root.createdTextures[1].$usage).toHaveBeenCalledWith('render');
     expect(settled).toHaveBeenCalledOnce();
     expect(cache.getOrLoad(source)).toBe(resource);
     cache.prune(new Set());
@@ -263,6 +264,7 @@ describe('TypeGPU GPU renderer', () => {
 
     expect(root.createdTextures).toHaveLength(2);
     expect(root.createdTextures[1].destroy).toHaveBeenCalledOnce();
+    expect(root.createdTextures[1].$usage).not.toHaveBeenCalledWith('render');
     expect(onSettled).not.toHaveBeenCalled();
   });
 
@@ -790,7 +792,7 @@ describe('TypeGPU GPU renderer', () => {
     expect(calls.map((call) => call[0])).toContain(shadowPassBindGroup);
     expect(calls.map((call) => call[0])).not.toContain(sampledShadowBindGroup);
     expect(calls).not.toContainEqual([undefined]);
-    expect(pipeline.draw).toHaveBeenCalledWith(3, 1);
+    expect(pipeline.draw).toHaveBeenCalledWith(3, 1, 0, 0);
   });
 
   it('renders the shadow pass before the main material pass and filters non-casters', () => {

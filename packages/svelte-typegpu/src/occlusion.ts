@@ -25,7 +25,7 @@ export function isOcclusionEligible(batch: TypeGpuDrawBatch): boolean {
   const m = batch.material;
   return !!batch.visibility && batch.floatsPerInstance === 24 && m.kind !== 'shader' &&
     !m.transparent && (m.blendMode ?? 'opaque') === 'opaque' && m.opacity >= 1 && m.color[3] >= 1 &&
-    m.depthTest !== false && m.depthWrite !== false && !m.map && !m.texture &&
+    m.depthTest !== false && m.depthWrite !== false &&
     !batch.geometry.hasVertexAlpha && !(batch.geometry.lod?.levels.some(level => level.geometry.hasVertexAlpha)) &&
     (batch.geometry.topology ?? 'triangle-list') === 'triangle-list';
 }
@@ -54,29 +54,6 @@ export function packOcclusionBounds(batch: TypeGpuDrawBatch, target: Float32Arra
   }
 }
 
-/** Large projected, inexpensive batches only. Actual triangles provide depth. */
-export function isUsefulOccluder(batch: TypeGpuDrawBatch, matrix: Float32Array): boolean {
-  if (!isOcclusionEligible(batch) || batch.geometry.lod || batch.instanceCount > 32 || batch.instanceCount === 0 ||
-    (batch.geometry.indexCount ?? batch.geometry.vertexCount) / 3 * batch.instanceCount > 4096) return false;
-  const bounds = batch.visibility!.nodes;
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (let i = 0; i < batch.instanceCount; i++) if (!(batch.instances[i * 24 + 7] >= 1)) return false;
-  for (let corner = 0; corner < 8; corner++) {
-    // The bounds tree stores its root at index one.
-    const x = bounds[6 + ((corner & 1) ? 3 : 0)];
-    const y = bounds[7 + ((corner & 2) ? 3 : 0)];
-    const z = bounds[8 + ((corner & 4) ? 3 : 0)];
-    const w = matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15];
-    if (!(w > 0.0001) || !Number.isFinite(w)) return false;
-    const px = (matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12]) / w;
-    const py = (matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13]) / w;
-    minX = Math.min(minX, px); maxX = Math.max(maxX, px);
-    minY = Math.min(minY, py); maxY = Math.max(maxY, py);
-  }
-  return Math.max(0, Math.min(1, maxX) - Math.max(-1, minX)) *
-    Math.max(0, Math.min(1, maxY) - Math.max(-1, minY)) >= 0.2;
-}
-
 interface BatchResource extends OcclusionDraw {
   capacity: number;
   source: GPUBuffer;
@@ -102,7 +79,6 @@ interface BatchResource extends OcclusionDraw {
 /** GPU visibility has no asynchronous CPU feedback and never schedules a frame. */
 export class HiZOcclusion {
   readonly resources = new Map<string, BatchResource>();
-  readonly occluders = new Set<string>();
   readonly draws = new Map<string, OcclusionDraw>();
   readonly #params: GPUBuffer;
   readonly #paramsData = new Float32Array(20);
@@ -268,7 +244,7 @@ export class HiZOcclusion {
   dispose(): void {
     this.#depth?.destroy(); this.#pyramid?.destroy(); this.#params.destroy();
     for (const resource of this.resources.values()) this.#destroyBatch(resource);
-    this.resources.clear(); this.draws.clear(); this.occluders.clear(); this.#reduceGroups = [];
+    this.resources.clear(); this.draws.clear(); this.#reduceGroups = [];
   }
 
   #createBatch(key: string, capacity: number, source: GPUBuffer): BatchResource {

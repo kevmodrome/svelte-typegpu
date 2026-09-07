@@ -32,11 +32,15 @@ and cast shadows. Svelte motion updates the same canonical instance slots.
 ## How It Works
 
 1. Keep the existing CPU frustum and LOD ranges.
-2. Select at most 16 inexpensive, projected-large opaque batches as occluders
-   (at most 32 instances and 4,096 triangles per batch; at least 5% projected
-   viewport area). Large instance batches are candidates, not depth occluders.
+2. Rank inexpensive, projected-large opaque occluders (at least 5% projected
+   viewport area). Small batches can draw together; large shared batches use
+   individual useful instances found through their existing bounds tree.
+   Selection is cached and capped at 2,048 bounds tests, 32 depth draws, and
+   32,768 total depth triangles; each selection uses at most 4,096 triangles.
 3. Rasterize their actual geometry at the current camera and render resolution.
-   These batches draw normally later and bypass self-culling.
+   Fully selected batches draw normally later and bypass self-culling. Partial
+   batches still use Hi-Z, including the selected instances: their widened
+   bounds cannot be hidden behind their own depth.
 4. Build a max-depth pyramid. Uncovered pixels and power-of-two padding retain
    far depth; openings are never filled by enclosing bounding boxes.
 5. Test expanded world AABBs on the GPU. Near-plane, unknown, and uncertain
@@ -50,15 +54,19 @@ bound upload to its existing 96-byte instance upload.
 
 ## Limits and Measurement
 
-The first version excludes textured, transparent, vertex-alpha and custom
-materials. Scenes with shader passes, nonstandard depth writers, or disabled
+Built-in opaque textured materials are supported. Their shader has no alpha
+discard, so even sampled alpha does not change their opaque depth contract.
+Transparent, vertex-alpha and custom materials remain excluded.
+Scenes with shader passes, nonstandard depth writers, or disabled
 depth use the normal path. `indirect-first-instance` is requested as an optional
 device feature; missing features or exceeded buffer limits fall back to direct
 draws. Disable the option to release its retained GPU resources.
 
 `getRenderStats()` reports `occlusion` (`disabled`, `unsupported`,
 `no-occluders`, `no-candidates`, or `active`), `occlusionCandidates`, `occlusionDepthTriangles`,
-and `occlusionCpuMs`. When `colorCountsExact === false`, `submittedInstances`
+`occlusionDepthDraws`, `occlusionOccluderInstances`, `occlusionSelectionTests`,
+and `occlusionCpuMs`. Selection tests are zero on a cached selection.
+When `colorCountsExact === false`, `submittedInstances`
 and `colorTriangles` are **pre-occlusion upper bounds**, not actual GPU counts.
 `colorDraws` counts encoded commands, including zero-instance indirect commands.
 
@@ -72,7 +80,9 @@ variables used by the other browser probes. It requires a WebGPU adapter with
 timestamp queries. It compares rendered pixels, reads actual indirect arguments
 after rendering, validates stable full-record compaction, checks indexed LOD
 ranges, and measures live frame delivery and resource reuse. Readback belongs
-to the diagnostic only; it is never in the renderer's frame path.
+to the diagnostic only; it is never in the renderer's frame path. Add
+`SVELTE_PROBE_SHARED_OCCLUDERS=1 SVELTE_PROBE_TEXTURES=1` to verify textured
+occluders sharing a large batch, including zero sampled alpha with opaque blending.
 
 On the local Apple Metal adapter, the 6,000-sphere wall/opening fixture retained
 1,108 visible instances with identical images, including after camera changes.
