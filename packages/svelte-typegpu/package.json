@@ -1,6 +1,6 @@
 {
   "name": "svelte-typegpu",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Experimental TypeGPU/WebGPU custom renderer for Svelte.",
   "license": "MIT",
   "type": "module",
@@ -65,7 +65,9 @@
     "svelte": ">=5.57.0 <6"
   },
   "peerDependenciesMeta": {
-    "@sveltejs/vite-plugin-svelte": { "optional": true }
+    "@sveltejs/vite-plugin-svelte": {
+      "optional": true
+    }
   },
   "dependencies": {
     "@jridgewell/remapping": "^2.3.5",
