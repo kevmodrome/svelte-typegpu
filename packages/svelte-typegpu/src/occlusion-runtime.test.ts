@@ -26,6 +26,32 @@ vi.mock('./typegpu-pipeline', async () => {
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); captured.bindings.length = captured.counts.length = captured.indirect.length = 0; });
 
 describe('compiled motion with current-frame GPU occlusion', () => {
+  it.each(['feature', 'depth', 'writer', 'transparent', 'limit'])('falls back without losing draws: %s', async reason => {
+    vi.stubGlobal('navigator', { gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
+    const { root: gpu } = createFakeGpuRoot(captured), fake = enableFakeOcclusion(gpu);
+    if (reason === 'feature') fake.device.features.clear();
+    if (reason === 'limit') fake.device.limits.maxStorageBufferBindingSize = 96;
+    vi.mocked(tgpu.init).mockResolvedValue(gpu as never);
+    const canvas = Object.assign(new EventTarget(), { width: 400, height: 400, clientWidth: 400, clientHeight: 400 }) as HTMLCanvasElement;
+    const gpuRenderer = await createTypeGpuRenderer({ canvas, frameloop: 'manual' });
+    const root = createFragment(), runtime = createTypeGpuRuntimeForTest(root, canvas, gpuRenderer); root.runtime = runtime;
+    const Scene = compileViewportSource(`<scene occlusion="hi-z" depth={${reason !== 'depth'}}>
+      <perspectiveCamera position={[0,0,10]} target={[0,0,0]} />
+      <mesh position={[0,0,3]} scale={[8,8,1]}><boxGeometry /><basicMaterial
+        depthTest={${reason !== 'writer'}} transparent={${reason === 'transparent'}} /></mesh>
+      {#each Array(256) as _, i}<mesh position={[i%4,0,-Math.floor(i/4)]}>
+        <sphereGeometry radius={0.1} /><basicMaterial />
+      </mesh>{/each}
+    </scene>`);
+    const instance = mount(Scene, { renderer, target: root });
+    try {
+      await settleComponentUpdates(); gpuRenderer.renderFrame(0);
+      expect(gpuRenderer.getRenderStats!()).toMatchObject({ colorCountsExact: true, submittedInstances: 257 });
+      expect(captured.indirect).toHaveLength(0);
+      expect(fake.dispatches).not.toHaveBeenCalled();
+    } finally { await unmount(instance); runtime.dispose(); gpuRenderer.dispose(); }
+  });
+
   it.each([60,120,144].flatMap(hz => ['Tween','Spring'].flatMap(kind => [
     { hz, kind, mode: 'demand' as const, first: false }, { hz, kind, mode: 'demand' as const, first: true },
     { hz, kind, mode: 'manual' as const, first: false }

@@ -18,9 +18,19 @@ const temporary = await mkdtemp(resolve(tmpdir(), 'typegpu-occlusion-'));
 const output = process.env.SVELTE_PROBE_OUTPUT ?? '/tmp/typegpu-occlusion';
 await mkdir(output, { recursive: true });
 const source = `<script>
+  import { createModelLod } from 'svelte-typegpu';
+  import { createSphereGeometryData } from '../../../packages/svelte-typegpu/src/geometries';
+  import { createMaterialDescriptor } from '../../../packages/svelte-typegpu/src/material-descriptors';
   let { onready } = $props();
-  let enabled = $state(false), camera = $state(0), walls = $state(true);
-  export function configure(e, c, w = true) { enabled = e; camera = c; walls = w; }
+  let enabled = $state(false), camera = $state(0), walls = $state(true), lod = $state(false);
+  const material = createMaterialDescriptor('basic', { color: [0.1,0.7,0.5] });
+  const high = createSphereGeometryData(0.27, 32, 16), low = createSphereGeometryData(0.27, 16, 8);
+  low.indexData = Uint32Array.from({ length: low.vertexCount }, (_, i) => i);
+  low.indexCount = low.vertexCount; low.indexFormat = 'uint32'; low.key += ':indexed';
+  const model = geometry => ({ key: geometry.key, meshes: [{ geometry, material,
+    transform: { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] } }] });
+  const asset = model(high), levels = createModelLod(asset, [{ maxScreenHeight: 14, asset: model(low) }]);
+  export function configure(e, c, w = true, l = false) { enabled = e; camera = c; walls = w; lod = l; }
 </script>
 <canvas frameloop="manual" maxDevicePixelRatio={1} {onready} style="display:block;width:100vw;height:80vh">
   <scene occlusion={enabled ? 'hi-z' : 'none'} clearColor={[0.04,0.06,0.08,1]}>
@@ -31,10 +41,7 @@ const source = `<script>
       <mesh position={[9,5,3]} scale={[15,12,1]}><boxGeometry /><basicMaterial color={[0.6,0.2,0.1]} /></mesh>
     {/if}
     {#each Array(6000) as _, i}
-      <mesh position={[(i%60-30)*0.65, Math.floor(i/1200)*1.1, -Math.floor(i/60)%20*1.3-2]}>
-        <sphereGeometry radius={0.27} widthSegments={32} heightSegments={16} />
-        <basicMaterial color={[0.1,0.7,0.5]} />
-      </mesh>
+      <model asset={lod ? levels : asset} position={[(i%60-30)*0.65, Math.floor(i/1200)*1.1, -Math.floor(i/60)%20*1.3-2]} />
     {/each}
   </scene>
 </canvas>`;
@@ -49,6 +56,7 @@ const server = await createServer({ root: app, configFile: false, logLevel: 'err
         const instance = mount(Viewport, { target: document.body, props: { onready: value => { root = value; window.ready = true; } } });
         window.commands = { configure: (...args) => flushSync(() => instance.configure(...args)),
           draw: () => { flushSync(); root.gpu.renderFrame(performance.now()); return root.gpu.getRenderStats(); },
+          loop: value => root.gpu.setOptions({ frameloop: value ? 'always' : 'demand' }),
           dispose: () => unmount(instance) };`;
     },
     configureServer(server) { server.middlewares.use('/occlusion-probe', async (_req, res) => {
@@ -67,7 +75,9 @@ try {
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   await page.addInitScript(() => {
-    window.probe = { errors: [], buffers: [], groups: 0, pipelines: 0, indirect: [], draws: [], times: [] };
+    window.probe = { errors: [], buffers: [], groups: 0, pipelines: 0, indirect: [], draws: [], times: [], frames: 0, callbacks: 0 };
+    const requestFrame = requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = callback => requestFrame(time => { window.probe.callbacks++; callback(time); });
     const requestAdapter = navigator.gpu.requestAdapter.bind(navigator.gpu);
     navigator.gpu.requestAdapter = async (...args) => {
       const adapter = await requestAdapter(...args);
@@ -96,6 +106,7 @@ try {
               if (slot) { index = slot.count; slot.count += 2; }
               const pass = begin(slot ? { ...descriptor, timestampWrites: { querySet: slot.query, beginningOfPassWriteIndex: index, endOfPassWriteIndex: index + 1 } } : descriptor);
               if (method === 'beginRenderPass' && [...descriptor.colorAttachments].some(Boolean)) {
+                window.probe.frames++;
                 for (const draw of ['drawIndirect', 'drawIndexedIndirect']) {
                   const original = pass[draw].bind(pass);
                   pass[draw] = (buffer, offset) => { window.probe.indirect.push({ buffer, offset, indexed: draw === 'drawIndexedIndirect' }); return original(buffer, offset); };
@@ -117,8 +128,38 @@ try {
       indirect.forEach(({ buffer, offset }, i) => encoder.copyBufferToBuffer(buffer, offset, read, i * 32, 20));
       device.queue.submit([encoder.finish()]); await read.mapAsync(GPUMapMode.READ);
       const values = new Uint32Array(read.getMappedRange());
-      const counts = indirect.map((_, i) => ({ vertices: values[i * 8], instances: values[i * 8 + 1] }));
-      read.unmap(); read.destroy(); window.probe.indirect = []; return counts;
+      const counts = indirect.map((draw, i) => ({ vertices: values[i * 8], instances: values[i * 8 + 1],
+        first: values[i * 8 + (draw.indexed ? 4 : 3)], indexed: draw.indexed }));
+      read.unmap(); read.destroy();
+      for (const args of new Set(indirect.map(draw => draw.buffer))) {
+        const key = args.label.slice('Occlusion indirect '.length);
+        const lookup = label => window.probe.buffers.findLast(entry => entry.label === label).buffer;
+        const source = lookup('TypeGPU ' + key + ' instances'), target = lookup('Occlusion instances ' + key), ranges = lookup('Occlusion ranges ' + key);
+        const read = device.createBuffer({ size: source.size + target.size + ranges.size, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
+        const encoder = device.createCommandEncoder();
+        encoder.copyBufferToBuffer(source, 0, read, 0, source.size);
+        encoder.copyBufferToBuffer(target, 0, read, source.size, target.size);
+        encoder.copyBufferToBuffer(ranges, 0, read, source.size + target.size, ranges.size);
+        device.queue.submit([encoder.finish()]); await read.mapAsync(GPUMapMode.READ);
+        const mapped = read.getMappedRange();
+        const original = new Uint32Array(mapped, 0, source.size / 4);
+        const compacted = new Uint32Array(mapped, source.size, target.size / 4);
+        const metadata = new Uint32Array(mapped, source.size + target.size, ranges.size / 4);
+        const seen = new Set();
+        for (let i = 0; i < indirect.length; i++) {
+          const draw = indirect[i]; if (draw.buffer !== args || seen.has(draw.offset)) continue; seen.add(draw.offset);
+          const range = draw.offset / 4, end = metadata[range + 2] + metadata[range + 3];
+          let cursor = metadata[range + 2];
+          for (let out = counts[i].first; out < counts[i].first + counts[i].instances; out++) {
+            const same = () => { for (let word = 0; word < 24; word++) if (original[cursor*24+word] !== compacted[out*24+word]) return false; return true; };
+            while (cursor < end && !same()) cursor++;
+            if (cursor >= end) throw new Error('GPU compaction must preserve complete records and canonical range order');
+            cursor++;
+          }
+        }
+        read.unmap(); read.destroy();
+      }
+      window.probe.indirect = []; return counts;
     };
     window.measure = async () => {
       const device = window.probe.device;
@@ -139,26 +180,30 @@ try {
   await page.waitForFunction(() => window.ready || window.probe.errors.length);
   assert.deepEqual(await page.evaluate(() => window.probe.errors), []);
   const results = [];
-  for (const walls of [true, false]) for (const camera of [0, 28]) {
+  for (const lod of [false, true]) for (const walls of [true, false]) for (const camera of [0, 28]) {
     const images = [];
     for (const enabled of [false, true]) {
-      await page.evaluate(args => window.commands.configure(...args), [enabled, camera, walls]);
+      await page.evaluate(args => window.commands.configure(...args), [enabled, camera, walls, lod]);
       await page.evaluate(() => { window.commands.draw(); window.probe.indirect = []; });
       await page.waitForTimeout(100);
       const measurements = [];
       for (let i = 0; i < 8; i++) measurements.push(await page.evaluate(() => window.measure()));
       const counts = await page.evaluate(() => window.readCounts());
-      const result = { walls, camera, enabled, gpuMs: measurements.reduce((s, m) => s + m.gpu, 0) / measurements.length,
+      const result = { walls, camera, enabled, lod, gpuMs: measurements.reduce((s, m) => s + m.gpu, 0) / measurements.length,
         cpuMs: measurements.reduce((s, m) => s + m.cpu, 0) / measurements.length, stats: measurements.at(-1).stats,
         indirectInstances: counts.reduce((s, c) => s + c.instances, 0) / measurements.length };
       results.push(result); console.log(JSON.stringify(result));
-      images.push(PNG.sync.read(await page.locator('canvas').screenshot({ path: resolve(output, `${walls}-${camera}-${enabled}.png`) })));
+      images.push(PNG.sync.read(await page.locator('canvas').screenshot({ path: resolve(output, `${walls}-${camera}-${enabled}-${lod}.png`) })));
       assert.deepEqual(await page.evaluate(() => window.probe.errors), []);
       assert.deepEqual(errors, []);
       if (enabled && walls && camera === 0) {
         assert.equal(result.stats.occlusion, 'active');
         assert(result.indirectInstances > 0, 'Opening reveals some spheres');
         assert(result.indirectInstances < result.stats.occlusionCandidates / 2, 'Walls occlude most spheres');
+        if (lod) {
+          assert(counts.some(c => c.indexed), 'Indexed authored LOD is drawn indirectly');
+          assert(counts.some(c => c.first > 0), 'Disjoint ranges use nonzero indirect firstInstance');
+        }
       }
     }
     let changed = 0, colored = 0;
@@ -166,9 +211,31 @@ try {
       if ([0,1,2].some(c => Math.abs(images[0].data[i+c] - images[1].data[i+c]) > 8)) changed++;
       if (Math.abs(images[0].data[i] - images[0].data[i+1]) > 30) colored++;
     }
-    console.log(JSON.stringify({ walls, camera, changed, colored }));
+    console.log(JSON.stringify({ walls, camera, lod, changed, colored }));
     assert(colored > 1000); assert.equal(changed, 0, 'Occlusion preserves all visible pixels');
   }
+  for (const width of [390,1440]) {
+    await page.setViewportSize({ width, height: 751 });
+    const images = [];
+    for (const enabled of [false,true]) {
+      await page.evaluate(enabled => { window.commands.configure(enabled, 0, true, true); window.commands.draw(); }, enabled);
+      images.push(PNG.sync.read(await page.locator('canvas').screenshot()));
+    }
+    assert.equal(images[0].data.some((value, i) => Math.abs(value - images[1].data[i]) > 8), false,
+      'Resizing an existing viewport preserves visible pixels on the next frame');
+    assert.deepEqual(await page.evaluate(() => window.probe.errors), []);
+  }
+  await page.evaluate(() => { window.commands.configure(true, 0, true, true); window.commands.draw(); window.commands.loop(true); });
+  await page.waitForTimeout(300);
+  const snapshot = () => page.evaluate(() => ({ frames: window.probe.frames, callbacks: window.probe.callbacks,
+    buffers: window.probe.buffers.length, groups: window.probe.groups, pipelines: window.probe.pipelines, time: performance.now() }));
+  const before = await snapshot(); await page.waitForTimeout(2500); const after = await snapshot();
+  console.log(JSON.stringify({ adapter: await page.evaluate(() => window.probe.adapter), liveFps: (after.frames-before.frames)*1000/(after.time-before.time),
+    frames: after.frames-before.frames, callbacks: after.callbacks-before.callbacks }));
+  assert(Math.abs((after.frames-before.frames) - (after.callbacks-before.callbacks)) <= 2);
+  for (const key of ['buffers','groups','pipelines']) assert.equal(after[key], before[key], `Steady frames reuse ${key}`);
+  await page.evaluate(() => window.commands.loop(false)); await page.waitForTimeout(150);
+  const settled = await snapshot(); await page.waitForTimeout(150); assert.equal((await snapshot()).frames, settled.frames);
   await writeFile(resolve(output, 'results.json'), JSON.stringify(results, null, 2));
   await page.evaluate(() => window.commands.dispose());
 } finally {

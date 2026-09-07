@@ -9,7 +9,7 @@ import {
 } from './occlusion-shaders';
 
 export const MAX_OCCLUSION_RANGES = 192;
-export type OcclusionState = 'disabled' | 'unsupported' | 'no-occluders' | 'active';
+export type OcclusionState = 'disabled' | 'unsupported' | 'no-occluders' | 'no-candidates' | 'active';
 export interface OcclusionRanges {
   ranges: Uint32Array;
   rangeCount: number;
@@ -60,7 +60,7 @@ export function isUsefulOccluder(batch: TypeGpuDrawBatch, matrix: Float32Array):
     (batch.geometry.indexCount ?? batch.geometry.vertexCount) / 3 * batch.instanceCount > 4096) return false;
   const bounds = batch.visibility!.nodes;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (let i = 0; i < batch.instanceCount; i++) if (batch.instances[i * 24 + 7] < 1) return false;
+  for (let i = 0; i < batch.instanceCount; i++) if (!(batch.instances[i * 24 + 7] >= 1)) return false;
   for (let corner = 0; corner < 8; corner++) {
     // The bounds tree stores its root at index one.
     const x = bounds[6 + ((corner & 1) ? 3 : 0)];

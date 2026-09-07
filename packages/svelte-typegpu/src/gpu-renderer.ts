@@ -824,6 +824,12 @@ class TypeGpuSceneRenderer implements TypeGpuRenderer {
     stats.occlusion = 'no-occluders';
     if (!occluderCount) { stats.occlusionCpuMs = performance.now() - start; return; }
     const occlusion = this.#occlusion!;
+    stats.occlusion = 'no-candidates';
+    if (!this.#drawBatches.some(batch => !occlusion.occluders.has(batch.key) &&
+      isOcclusionEligible(batch) && this.#visibility.get(batch.key)!.instanceCount > 0)) {
+      stats.occlusionCpuMs = performance.now() - start;
+      return;
+    }
     occlusion.begin(width, height, this.#uniformData);
     for (const batch of this.#drawBatches) {
       if (occlusion.occluders.has(batch.key) || !isOcclusionEligible(batch)) continue;
