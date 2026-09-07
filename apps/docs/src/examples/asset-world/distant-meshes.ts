@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry } from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { MeshoptSimplifier } from 'meshoptimizer/simplifier';
-import type { TypeGpuGeometryData, TypeGpuLoadedModelMesh } from 'svelte-typegpu';
+import type { TypeGpuGeometryData, TypeGpuLoadedModel } from 'svelte-typegpu';
 import type { WorldAssets } from './world';
 
 const prepared = new WeakMap<WorldAssets, Promise<WorldAssets>>();
@@ -30,7 +30,7 @@ export function prepareDistantWorldAssets(source: WorldAssets): Promise<WorldAss
   return pending;
 }
 
-function simplifyMesh(mesh: TypeGpuLoadedModelMesh, simplifier: typeof MeshoptSimplifier): TypeGpuGeometryData {
+function simplifyMesh(mesh: TypeGpuLoadedModel['meshes'][number], simplifier: typeof MeshoptSimplifier): TypeGpuGeometryData {
   const source = mesh.geometry, material = mesh.material;
   const count = source.indexCount ?? source.vertexCount;
   if (count < 36 || source.lod || source.vertexFloats !== 12 || source.hasVertexAlpha || !source.bounds ||

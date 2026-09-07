@@ -64,13 +64,16 @@ export function detailWorldAssets(source, level) {
     cached.set(level, result);
     return result;
 }
-export function lodWorldAssets(source, level) {
+export function lodWorldAssets(source, level, distant) {
     const high = detailWorldAssets(source, level);
-    if (!level)
+    if (!level && !distant)
         return high;
-    let cached = lodVariants.get(source);
+    let families = lodVariants.get(source);
+    if (!families)
+        lodVariants.set(source, families = new Map());
+    let cached = families.get(distant);
     if (!cached)
-        lodVariants.set(source, cached = new Map());
+        families.set(distant, cached = new Map());
     const existing = cached.get(level);
     if (existing)
         return existing;
@@ -78,7 +81,8 @@ export function lodWorldAssets(source, level) {
     const result = Object.fromEntries(Object.keys(source).map(key => [key,
         createModelLod(high[key], [
             ...(medium ? [{ maxScreenHeight: 80, asset: medium[key] }] : []),
-            { maxScreenHeight: 28, asset: source[key] }
+            ...(level ? [{ maxScreenHeight: 28, asset: source[key] }] : []),
+            ...(distant && distant[key] !== source[key] ? [{ maxScreenHeight: 12, asset: distant[key] }] : [])
         ])
     ]));
     cached.set(level, result);

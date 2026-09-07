@@ -45,7 +45,7 @@ describe('docs example registry', () => {
       'AssetWorld.svelte', 'WorldViewport.typegpu.svelte', 'Campsite.typegpu.svelte',
       'Canoe.typegpu.svelte', 'Player.typegpu.svelte', 'MovementPad.svelte',
       'player-controller.ts', 'player-input.ts', 'world.ts', 'Landscape.typegpu.svelte',
-      'WorldCamera.typegpu.svelte', 'landscape.ts', 'model-detail.ts', 'world-profile.ts', 'GpuTimings.svelte',
+      'WorldCamera.typegpu.svelte', 'landscape.ts', 'model-detail.ts', 'distant-meshes.ts', 'world-profile.ts', 'GpuTimings.svelte',
       'Tree.typegpu.svelte', 'Rock.typegpu.svelte', 'Log.typegpu.svelte', 'Tent.typegpu.svelte',
       'Campfire.typegpu.svelte', 'Bridge.typegpu.svelte', 'Sign.typegpu.svelte',
       'SelectionMarker.typegpu.svelte', 'Terrain.typegpu.svelte', 'WorldLighting.typegpu.svelte'

@@ -4,6 +4,7 @@ import { loadGlbModel } from '../../../../../packages/svelte-typegpu/src/glb-loa
 import type { TypeGpuLoadedModel } from 'svelte-typegpu';
 import { assetFiles, type WorldAssets } from './world';
 import { detailWorldAssets, lodWorldAssets, refineGeometry } from './model-detail';
+import { prepareDistantWorldAssets } from './distant-meshes';
 
 const assets = Object.fromEntries(Object.entries(assetFiles).map(([key, name]) => {
   const bytes = readFileSync(new URL(`../../../public/assets/asset-world/${name}`, import.meta.url));
@@ -11,6 +12,26 @@ const assets = Object.fromEntries(Object.entries(assetFiles).map(([key, name]) =
 })) as WorldAssets;
 
 describe('shared model triangle density', () => {
+  it.each([0, 1, 2])('composes distant meshes with detail %s without changing base geometry or materials', async detail => {
+    const distant = await prepareDistantWorldAssets(assets), result = lodWorldAssets(assets, detail, distant);
+    expect(lodWorldAssets(assets, detail, distant)).toBe(result);
+    expect(result).not.toBe(lodWorldAssets(assets, detail));
+    for (const key of Object.keys(assets) as (keyof WorldAssets)[]) {
+      result[key].meshes.forEach((mesh, index) => {
+        const base = detailWorldAssets(assets, detail)[key].meshes[index];
+        expect(mesh.geometry.vertexData).toBe(base.geometry.vertexData);
+        expect(mesh.material).toBe(base.material);
+        expect(mesh.transform).toBe(base.transform);
+        const levels = mesh.geometry.lod?.levels ?? [];
+        expect(levels.length).toBe(detail + Number(distant[key] !== assets[key]));
+        expect(levels.length).toBeLessThanOrEqual(3);
+        if (distant[key] !== assets[key]) {
+          expect(levels.at(-1)!.geometry).toBe(distant[key].meshes[index].geometry);
+          expect(levels.at(-1)!.maxScreenHeight).toBe(12);
+        }
+      });
+    }
+  });
   it.each([1, 2])('prepares and caches authored levels for detail %s', detail => {
     const result = lodWorldAssets(assets, detail);
     expect(lodWorldAssets(assets, detail)).toBe(result); expect(lodWorldAssets(assets, 0)).toBe(assets);

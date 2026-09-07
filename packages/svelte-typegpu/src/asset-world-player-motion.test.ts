@@ -17,8 +17,8 @@ import * as controller from '../../../apps/docs/src/examples/asset-world/player-
 import * as input from '../../../apps/docs/src/examples/asset-world/player-input';
 import * as landscape from '../../../apps/docs/src/examples/asset-world/landscape';
 import * as world from '../../../apps/docs/src/examples/asset-world/world';
-import { detailWorldAssets } from '../../../apps/docs/src/examples/asset-world/model-detail';
-import { createModelLod } from './lod';
+import { lodWorldAssets } from '../../../apps/docs/src/examples/asset-world/model-detail';
+import { prepareDistantWorldAssets } from '../../../apps/docs/src/examples/asset-world/distant-meshes';
 import { loadGlbModel } from './glb-loader';
 import * as transforms from './transform';
 import { compileWorldObjects } from './test-fixtures/asset-world-components';
@@ -41,10 +41,7 @@ const originals = Object.fromEntries(Object.entries(world.assetFiles).map(([key,
   const bytes = readFileSync(resolve(process.cwd(), `../../apps/docs/public/assets/asset-world/${name}`));
   return [key, loadGlbModel(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), name)];
 })) as world.WorldAssets;
-const detailed = detailWorldAssets(originals, 1);
-const assets = Object.fromEntries(Object.entries(detailed).map(([key, asset]) => [key,
-  createModelLod(asset, [{ maxScreenHeight: 80, asset: originals[key as keyof world.WorldAssets] }])
-])) as world.WorldAssets;
+const assets = lodWorldAssets(originals, 1, await prepareDistantWorldAssets(originals));
 const largeLandscape = landscape.createLandscape(20000);
 
 describe('compiled camper frame delivery in a 20,000-model dense world', () => {

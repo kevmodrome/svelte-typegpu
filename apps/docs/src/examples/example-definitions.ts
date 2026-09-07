@@ -43,6 +43,7 @@ export const exampleDefinitions = [
       new URL('./asset-world/WorldCamera.typegpu.svelte', import.meta.url),
       new URL('./asset-world/landscape.ts', import.meta.url),
       new URL('./asset-world/model-detail.ts', import.meta.url),
+      new URL('./asset-world/distant-meshes.ts', import.meta.url),
       new URL('./asset-world/world-profile.ts', import.meta.url),
       new URL('./GpuTimings.svelte', import.meta.url),
       new URL('./asset-world/Tree.typegpu.svelte', import.meta.url),

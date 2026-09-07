@@ -44,6 +44,7 @@ import landscapeModels from '../src/examples/asset-world/Landscape.typegpu.svelt
 import worldCamera from '../src/examples/asset-world/WorldCamera.typegpu.svelte' with { type: 'text' };
 import landscape from '../src/examples/asset-world/landscape.ts' with { type: 'text' };
 import modelDetail from '../src/examples/asset-world/model-detail.ts' with { type: 'text' };
+import distantMeshes from '../src/examples/asset-world/distant-meshes.ts' with { type: 'text' };
 import worldProfile from '../src/examples/asset-world/world-profile.ts' with { type: 'text' };
 import tree from '../src/examples/asset-world/Tree.typegpu.svelte' with { type: 'text' };
 import rock from '../src/examples/asset-world/Rock.typegpu.svelte' with { type: 'text' };
@@ -64,7 +65,7 @@ import gpuTimings from '../src/examples/GpuTimings.svelte' with { type: 'text' }
 export const exampleSourceTexts = {
   occlusion: [occlusion, courtyard, wall, sculpture, worldProfile, gpuTimings],
   'asset-world': [assetWorld, worldViewport, campsite, canoe, player, movementPad, playerController, playerInput, world,
-    landscapeModels, worldCamera, landscape, modelDetail, worldProfile, gpuTimings,
+    landscapeModels, worldCamera, landscape, modelDetail, distantMeshes, worldProfile, gpuTimings,
     tree, rock, log, tent, campfire, bridge, sign, selectionMarker, terrain, worldLighting],
   'native-events': [nativeEvents],
   'shared-stores': [sharedStores, storeViewport],

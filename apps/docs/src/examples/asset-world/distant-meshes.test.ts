@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { loadGlbModel } from '../../../../../packages/svelte-typegpu/src/glb-loader';
 import { assetFiles, type WorldAssets } from './world';
 import { prepareDistantWorldAssets } from './distant-meshes';
@@ -10,6 +10,18 @@ const assets = Object.fromEntries(Object.entries(assetFiles).map(([key, name]) =
 })) as WorldAssets;
 
 describe('shared distant landscape representations', () => {
+  it('evicts a failed preparation so the same source can be retried', async () => {
+    const { MeshoptSimplifier } = await import('meshoptimizer/simplifier');
+    const source = { ...assets };
+    const simplify = vi.spyOn(MeshoptSimplifier, 'simplifyWithAttributes').mockImplementationOnce(() => { throw new Error('failed'); });
+    try {
+      const failed = prepareDistantWorldAssets(source);
+      await expect(failed).rejects.toThrow('failed');
+      const retry = prepareDistantWorldAssets(source);
+      expect(retry).not.toBe(failed);
+      expect((await retry).pine).not.toBe(source.pine);
+    } finally { simplify.mockRestore(); }
+  });
   it('deduplicates in-flight preparation and retains non-landscape assets', async () => {
     const pending = prepareDistantWorldAssets(assets);
     expect(prepareDistantWorldAssets(assets)).toBe(pending);

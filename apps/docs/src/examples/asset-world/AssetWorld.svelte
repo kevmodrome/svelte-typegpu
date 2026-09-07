@@ -9,6 +9,7 @@
   import { assetCount, loadWorldAssets, selectable } from './world';
   import { campsiteModelCount, compactLandscape, createLandscape, worldCounts } from './landscape';
   import { detailWorldAssets, lodWorldAssets } from './model-detail';
+  import { prepareDistantWorldAssets } from './distant-meshes';
   import { emptyProfile, profileWorld } from './world-profile';
   import type { TypeGpuRoot } from 'svelte-typegpu';
 
@@ -18,6 +19,7 @@
   let paused = $state(false), forest = $state(true), dusk = $state(false), shadows = $state(false);
   let frustumCulling = $state(false);
   let lod = $state(false);
+  let distantMeshes = $state(false);
   let occlusion = $state(false);
   let gpuTiming = $state(false);
   let count = $state(20000), detail = $state(1), preparing = $state(false);
@@ -30,15 +32,18 @@
   async function rebuild() {
     if (!originals) return;
     const current = ++revision, source = originals, requestedCount = count, requestedDetail = detail, requestedLod = lod;
+    const requestedDistant = requestedLod && distantMeshes;
     preparing = true; failure = '';
     // Let controls paint before the intentionally large, synchronous scene update.
     await new Promise(resolve => setTimeout(resolve, 0));
     if (current !== revision) return;
     try {
-      const detailed = requestedLod ? lodWorldAssets(source, requestedDetail) : detailWorldAssets(source, requestedDetail);
+      const distant = requestedDistant ? await prepareDistantWorldAssets(source) : undefined;
+      if (current !== revision) return;
+      const detailed = requestedLod ? lodWorldAssets(source, requestedDetail, distant) : detailWorldAssets(source, requestedDetail);
       const layout = landscape.placements.length + campsiteModelCount === requestedCount ? landscape : createLandscape(requestedCount);
       assets = detailed; landscape = layout; touch = idleMovement;
-    } catch (error) { failure = error instanceof Error ? error.message : 'Unable to prepare the world'; }
+    } catch (error) { if (current === revision) failure = error instanceof Error ? error.message : 'Unable to prepare the world'; }
     finally { if (current === revision) preparing = false; }
   }
   function ready(root: TypeGpuRoot) {
@@ -96,6 +101,8 @@
     </select></label>
     <label><input type="checkbox" bind:checked={frustumCulling} /> Frustum culling</label>
     <label><input type="checkbox" checked={lod} onchange={event => { lod = event.currentTarget.checked; void rebuild(); }} /> LOD</label>
+    <label><input type="checkbox" checked={distantMeshes} disabled={!lod}
+      onchange={event => { distantMeshes = event.currentTarget.checked; void rebuild(); }} /> Distant meshes</label>
     <label><input type="checkbox" bind:checked={occlusion} /> Hi-Z occlusion</label>
     <label><input type="checkbox" bind:checked={gpuTiming} /> GPU timing</label>
     <div class="view-modes" role="group" aria-label="Camera view">
